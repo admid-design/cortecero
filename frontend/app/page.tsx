@@ -27,7 +27,8 @@ async function api<T>(path: string, token: string, options?: RequestInit): Promi
 }
 
 export default function HomePage() {
-  const [email, setEmail] = useState("logistics@demo.local");
+  const [tenantSlug, setTenantSlug] = useState("demo-cortecero");
+  const [email, setEmail] = useState("logistics@demo.cortecero.app");
   const [password, setPassword] = useState("logistics123");
   const [token, setToken] = useState("");
   const [serviceDate, setServiceDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -52,7 +53,7 @@ export default function HomePage() {
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ tenant_slug: tenantSlug, email, password }),
       });
       if (!res.ok) {
         throw new Error("Credenciales inválidas");
@@ -169,6 +170,7 @@ export default function HomePage() {
 
       {!isAuthenticated && (
         <div className="card grid cols-2">
+          <input placeholder="tenant_slug" value={tenantSlug} onChange={(e) => setTenantSlug(e.target.value)} />
           <input placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           <input placeholder="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
           <button onClick={login}>Entrar</button>

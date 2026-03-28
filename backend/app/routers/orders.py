@@ -83,6 +83,71 @@ def ingest_orders(
     items: list[OrderIngestionItemResult] = []
 
     for in_order in payload.orders:
+        existing = db.scalar(
+            select(Order).where(
+                Order.tenant_id == current.tenant_id,
+                Order.external_ref == in_order.external_ref,
+                Order.service_date == in_order.service_date,
+            )
+        )
+
+        now = datetime.now(UTC)
+        if existing:
+            if existing.customer_id != in_order.customer_id:
+                rejected += 1
+                items.append(
+                    OrderIngestionItemResult(
+                        external_ref=in_order.external_ref,
+                        service_date=in_order.service_date,
+                        result="rejected",
+                        order_id=existing.id,
+                        reason="immutable_customer_id_mismatch",
+                    )
+                )
+                continue
+
+            existing.requested_date = in_order.requested_date
+            existing.source_channel = SourceChannel(in_order.source_channel)
+            existing.updated_at = now
+
+            db.execute(delete(OrderLine).where(OrderLine.order_id == existing.id, OrderLine.tenant_id == current.tenant_id))
+            for line in in_order.lines:
+                db.add(
+                    OrderLine(
+                        tenant_id=current.tenant_id,
+                        order_id=existing.id,
+                        sku=line.sku,
+                        qty=line.qty,
+                        weight_kg=line.weight_kg,
+                        volume_m3=line.volume_m3,
+                        created_at=now,
+                    )
+                )
+
+            write_audit(
+                db,
+                tenant_id=current.tenant_id,
+                entity_type=EntityType.order,
+                entity_id=existing.id,
+                action="order.ingestion_updated",
+                actor_id=current.id,
+                metadata={
+                    "external_ref": existing.external_ref,
+                    "created_at_immutable": True,
+                    "lateness_immutable": True,
+                },
+            )
+            updated += 1
+            items.append(
+                OrderIngestionItemResult(
+                    external_ref=existing.external_ref,
+                    service_date=existing.service_date,
+                    result="updated",
+                    order_id=existing.id,
+                )
+            )
+            continue
+
         customer = db.scalar(
             select(Customer).where(Customer.id == in_order.customer_id, Customer.tenant_id == current.tenant_id)
         )
@@ -115,62 +180,6 @@ def ingest_orders(
         effective_cutoff = build_effective_cutoff_at(in_order.service_date, cutoff_time, timezone)
         created_at = ensure_aware_utc(in_order.created_at)
         is_late, late_reason = compute_lateness(created_at, effective_cutoff)
-
-        existing = db.scalar(
-            select(Order).where(
-                Order.tenant_id == current.tenant_id,
-                Order.external_ref == in_order.external_ref,
-                Order.service_date == in_order.service_date,
-            )
-        )
-
-        now = datetime.now(UTC)
-        if existing:
-            existing.customer_id = customer.id
-            existing.zone_id = zone.id
-            existing.requested_date = in_order.requested_date
-            existing.created_at = created_at
-            existing.is_late = is_late
-            existing.lateness_reason = late_reason
-            existing.effective_cutoff_at = effective_cutoff
-            existing.source_channel = SourceChannel(in_order.source_channel)
-            existing.updated_at = now
-            if existing.status not in (OrderStatus.planned, OrderStatus.exception_rejected):
-                existing.status = initial_order_status(is_late)
-
-            db.execute(delete(OrderLine).where(OrderLine.order_id == existing.id, OrderLine.tenant_id == current.tenant_id))
-            for line in in_order.lines:
-                db.add(
-                    OrderLine(
-                        tenant_id=current.tenant_id,
-                        order_id=existing.id,
-                        sku=line.sku,
-                        qty=line.qty,
-                        weight_kg=line.weight_kg,
-                        volume_m3=line.volume_m3,
-                        created_at=now,
-                    )
-                )
-
-            write_audit(
-                db,
-                tenant_id=current.tenant_id,
-                entity_type=EntityType.order,
-                entity_id=existing.id,
-                action="order.ingestion_updated",
-                actor_id=current.id,
-                metadata={"external_ref": existing.external_ref},
-            )
-            updated += 1
-            items.append(
-                OrderIngestionItemResult(
-                    external_ref=existing.external_ref,
-                    service_date=existing.service_date,
-                    result="updated",
-                    order_id=existing.id,
-                )
-            )
-            continue
 
         order = Order(
             tenant_id=current.tenant_id,

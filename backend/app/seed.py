@@ -13,6 +13,7 @@ from app.models import (
     ExceptionStatus,
     ExceptionType,
     Order,
+    OrderStatus,
     OrderLine,
     Plan,
     PlanOrder,
@@ -51,9 +52,9 @@ def seed() -> None:
 
         users_by_role = {}
         for role, email in [
-            (UserRole.office, "office@demo.local"),
-            (UserRole.logistics, "logistics@demo.local"),
-            (UserRole.admin, "admin@demo.local"),
+            (UserRole.office, "office@demo.cortecero.app"),
+            (UserRole.logistics, "logistics@demo.cortecero.app"),
+            (UserRole.admin, "admin@demo.cortecero.app"),
         ]:
             user = db.scalar(select(User).where(User.tenant_id == tenant.id, User.email == email))
             if not user:
@@ -125,7 +126,7 @@ def seed() -> None:
         if len(existing_orders) < 20:
             for idx in range(20):
                 customer = customers[idx % len(customers)]
-                zone = zone_a if (idx % 2 == 0) else zone_b
+                zone = zone_a if customer.zone_id == zone_a.id else zone_b
                 external_ref = f"DEMO-{service_date.strftime('%Y%m%d')}-{idx + 1:03d}"
 
                 present = db.scalar(
@@ -297,9 +298,9 @@ def seed() -> None:
         db.commit()
         print("Seed OK")
         print("Users:")
-        print(" - office@demo.local / office123")
-        print(" - logistics@demo.local / logistics123")
-        print(" - admin@demo.local / admin123")
+        print(" - office@demo.cortecero.app / office123")
+        print(" - logistics@demo.cortecero.app / logistics123")
+        print(" - admin@demo.cortecero.app / admin123")
     finally:
         db.close()
 

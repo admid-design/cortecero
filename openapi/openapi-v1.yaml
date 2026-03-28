@@ -32,8 +32,10 @@ paths:
           application/json:
             schema:
               type: object
-              required: [email, password]
+              required: [tenant_slug, email, password]
               properties:
+                tenant_slug:
+                  type: string
                 email:
                   type: string
                   format: email

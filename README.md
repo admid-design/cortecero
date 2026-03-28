@@ -38,9 +38,9 @@ El backend arranca con:
 
 ## Credenciales demo
 
-- `office@demo.local / office123`
-- `logistics@demo.local / logistics123`
-- `admin@demo.local / admin123`
+- `office@demo.cortecero.app / office123`
+- `logistics@demo.cortecero.app / logistics123`
+- `admin@demo.cortecero.app / admin123`
 
 ## Smoke test API
 
@@ -48,7 +48,7 @@ El backend arranca con:
 # Login
 TOKEN=$(curl -sS -X POST http://localhost:8000/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"logistics@demo.local","password":"logistics123"}' | jq -r .access_token)
+  -d '{"tenant_slug":"demo-cortecero","email":"logistics@demo.cortecero.app","password":"logistics123"}' | jq -r .access_token)
 
 # Health
 curl -sS http://localhost:8000/health

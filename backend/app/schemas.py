@@ -11,6 +11,7 @@ class APIModel(BaseModel):
 
 
 class LoginRequest(BaseModel):
+    tenant_slug: str
     email: EmailStr
     password: str
 
