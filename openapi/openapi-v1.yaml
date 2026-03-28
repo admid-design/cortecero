@@ -1,0 +1,699 @@
+openapi: 3.1.0
+info:
+  title: CorteCero API
+  version: 1.0.0
+  description: >
+    API MVP para control de cut-off, planes diarios por zona, pedidos tardíos,
+    excepciones y auditoría.
+
+servers:
+  - url: https://api.cortecero.local
+
+tags:
+  - name: Auth
+  - name: Orders
+  - name: Plans
+  - name: Exceptions
+  - name: Dashboard
+  - name: Audit
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login de usuario
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Token JWT emitido
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, token_type]
+                properties:
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+                    example: bearer
+
+  /ingestion/orders:
+    post:
+      tags: [Orders]
+      summary: Ingesta masiva o individual de pedidos
+      description: >
+        Crea o actualiza pedidos por clave lógica tenant + external_ref + service_date.
+        Calcula is_late y effective_cutoff_at al ingresar.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orders]
+              properties:
+                orders:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/OrderIngestionInput'
+      responses:
+        "200":
+          description: Resultado de ingesta
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created:
+                    type: integer
+                  updated:
+                    type: integer
+                  rejected:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        external_ref:
+                          type: string
+                        service_date:
+                          type: string
+                          format: date
+                        result:
+                          type: string
+                          enum: [created, updated, rejected]
+                        order_id:
+                          type: string
+                          format: uuid
+                        reason:
+                          type: string
+
+  /orders:
+    get:
+      tags: [Orders]
+      summary: Listado de pedidos
+      parameters:
+        - in: query
+          name: service_date
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: zone_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [ingested, late_pending_exception, ready_for_planning, planned, exception_rejected]
+        - in: query
+          name: is_late
+          schema:
+            type: boolean
+        - in: query
+          name: external_ref
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pedidos filtrados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Order'
+                  total:
+                    type: integer
+
+  /orders/{order_id}:
+    get:
+      tags: [Orders]
+      summary: Detalle de pedido
+      parameters:
+        - in: path
+          name: order_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Pedido encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  /plans:
+    get:
+      tags: [Plans]
+      summary: Listado de planes por fecha/zona
+      parameters:
+        - in: query
+          name: service_date
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: zone_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [open, locked, dispatched]
+      responses:
+        "200":
+          description: Lista de planes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Plan'
+                  total:
+                    type: integer
+
+    post:
+      tags: [Plans]
+      summary: Crear plan para fecha y zona
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [service_date, zone_id]
+              properties:
+                service_date:
+                  type: string
+                  format: date
+                zone_id:
+                  type: string
+                  format: uuid
+      responses:
+        "201":
+          description: Plan creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+
+  /plans/{plan_id}:
+    get:
+      tags: [Plans]
+      summary: Detalle de plan
+      parameters:
+        - in: path
+          name: plan_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Plan encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+
+  /plans/{plan_id}/lock:
+    post:
+      tags: [Plans]
+      summary: Bloquear un plan
+      description: >
+        Cambia el plan a locked. A partir de ese momento solo admite inclusión
+        por excepción aprobada.
+      parameters:
+        - in: path
+          name: plan_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Plan bloqueado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+
+  /plans/{plan_id}/orders:
+    post:
+      tags: [Plans]
+      summary: Incluir pedido en plan
+      description: >
+        Si el plan está open, admite pedidos ready_for_planning.
+        Si el plan está locked, solo admite pedidos con excepción approved.
+      parameters:
+        - in: path
+          name: plan_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order_id]
+              properties:
+                order_id:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Pedido incluido en plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanOrder'
+        "409":
+          description: Regla funcional impide inclusión
+
+  /exceptions:
+    post:
+      tags: [Exceptions]
+      summary: Crear solicitud de excepción
+      description: Crea excepción late_order para un pedido.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order_id, type, note]
+              properties:
+                order_id:
+                  type: string
+                  format: uuid
+                type:
+                  type: string
+                  enum: [late_order]
+                note:
+                  type: string
+      responses:
+        "201":
+          description: Excepción creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exception'
+
+    get:
+      tags: [Exceptions]
+      summary: Listado de excepciones
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+        - in: query
+          name: order_id
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Excepciones filtradas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Exception'
+                  total:
+                    type: integer
+
+  /exceptions/{exception_id}/approve:
+    post:
+      tags: [Exceptions]
+      summary: Aprobar excepción
+      parameters:
+        - in: path
+          name: exception_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Excepción aprobada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exception'
+
+  /exceptions/{exception_id}/reject:
+    post:
+      tags: [Exceptions]
+      summary: Rechazar excepción
+      parameters:
+        - in: path
+          name: exception_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [note]
+              properties:
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Excepción rechazada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exception'
+
+  /dashboard/daily-summary:
+    get:
+      tags: [Dashboard]
+      summary: Resumen operativo diario
+      parameters:
+        - in: query
+          name: service_date
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: KPIs del día
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service_date:
+                    type: string
+                    format: date
+                  total_orders:
+                    type: integer
+                  late_orders:
+                    type: integer
+                  plans_open:
+                    type: integer
+                  plans_locked:
+                    type: integer
+                  pending_exceptions:
+                    type: integer
+                  approved_exceptions:
+                    type: integer
+                  rejected_exceptions:
+                    type: integer
+
+  /audit:
+    get:
+      tags: [Audit]
+      summary: Auditoría por entidad
+      parameters:
+        - in: query
+          name: entity_type
+          required: true
+          schema:
+            type: string
+            enum: [order, exception, plan, plan_order]
+        - in: query
+          name: entity_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Eventos de auditoría
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLog'
+                  total:
+                    type: integer
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    OrderIngestionInput:
+      type: object
+      required: [customer_id, external_ref, service_date, created_at, lines]
+      properties:
+        customer_id:
+          type: string
+          format: uuid
+        external_ref:
+          type: string
+        requested_date:
+          type: string
+          format: date
+          nullable: true
+        service_date:
+          type: string
+          format: date
+        created_at:
+          type: string
+          format: date-time
+        source_channel:
+          type: string
+          enum: [sales, office, direct_customer, hotel_direct, other]
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderLineInput'
+
+    OrderLineInput:
+      type: object
+      required: [sku, qty]
+      properties:
+        sku:
+          type: string
+        qty:
+          type: number
+        weight_kg:
+          type: number
+          nullable: true
+        volume_m3:
+          type: number
+          nullable: true
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+        zone_id:
+          type: string
+          format: uuid
+        external_ref:
+          type: string
+        requested_date:
+          type: string
+          format: date
+          nullable: true
+        service_date:
+          type: string
+          format: date
+        created_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [ingested, late_pending_exception, ready_for_planning, planned, exception_rejected]
+        is_late:
+          type: boolean
+        lateness_reason:
+          type: string
+          nullable: true
+        effective_cutoff_at:
+          type: string
+          format: date-time
+        source_channel:
+          type: string
+          enum: [sales, office, direct_customer, hotel_direct, other]
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderLine'
+
+    OrderLine:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        qty:
+          type: number
+        weight_kg:
+          type: number
+          nullable: true
+        volume_m3:
+          type: number
+          nullable: true
+
+    Plan:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        service_date:
+          type: string
+          format: date
+        zone_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [open, locked, dispatched]
+        version:
+          type: integer
+        locked_at:
+          type: string
+          format: date-time
+          nullable: true
+        locked_by:
+          type: string
+          format: uuid
+          nullable: true
+        orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanOrder'
+
+    PlanOrder:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        plan_id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+          format: uuid
+        inclusion_type:
+          type: string
+          enum: [normal, exception]
+        added_at:
+          type: string
+          format: date-time
+        added_by:
+          type: string
+          format: uuid
+
+    Exception:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [late_order]
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        requested_by:
+          type: string
+          format: uuid
+        resolved_by:
+          type: string
+          format: uuid
+          nullable: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        entity_type:
+          type: string
+          enum: [order, exception, plan, plan_order]
+        entity_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+        ts:
+          type: string
+          format: date-time
+        metadata_json:
+          type: object
+          additionalProperties: true

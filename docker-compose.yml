@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cortecero-postgres
+    environment:
+      POSTGRES_DB: cortecero
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - cortecero_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cortecero"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+    container_name: cortecero-backend
+    working_dir: /app
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/cortecero
+      JWT_SECRET_KEY: change-me-in-production
+      JWT_ALGORITHM: HS256
+      JWT_ACCESS_TOKEN_MINUTES: "720"
+      CORS_ORIGINS: http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["sh", "scripts/start.sh"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./db:/app/db
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: cortecero-frontend
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  cortecero_postgres_data:
