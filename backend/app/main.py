@@ -2,7 +2,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import admin_customers, admin_users, admin_zones, audit, auth, dashboard, exceptions, orders, plans
+from app.routers import (
+    admin_customers,
+    admin_tenant_settings,
+    admin_users,
+    admin_zones,
+    audit,
+    auth,
+    dashboard,
+    exceptions,
+    orders,
+    plans,
+)
 
 
 app = FastAPI(title=settings.app_name, version="1.0.0")
@@ -30,3 +41,4 @@ app.include_router(audit.router)
 app.include_router(admin_zones.router)
 app.include_router(admin_customers.router)
 app.include_router(admin_users.router)
+app.include_router(admin_tenant_settings.router)

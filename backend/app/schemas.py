@@ -256,3 +256,18 @@ class UserOut(APIModel):
 class UsersListResponse(BaseModel):
     items: list[UserOut]
     total: int
+
+
+class TenantSettingsOut(APIModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    default_cutoff_time: time
+    default_timezone: str
+    auto_lock_enabled: bool
+
+
+class TenantSettingsUpdateRequest(BaseModel):
+    default_cutoff_time: time | None = None
+    default_timezone: str | None = Field(default=None, min_length=1, max_length=120)
+    auto_lock_enabled: bool | None = None

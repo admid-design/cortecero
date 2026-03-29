@@ -40,6 +40,17 @@ def test_login_is_tenant_aware(client, db_session):
     )
     assert token_a
 
+    upper_case_email = client.post(
+        "/auth/login",
+        json={
+            "tenant_slug": "demo-cortecero",
+            "email": same_email.upper(),
+            "password": "logistics123",
+        },
+    )
+    assert upper_case_email.status_code == 200
+    assert upper_case_email.json()["access_token"]
+
     token_b = login_as(
         client,
         tenant_slug="tenant-b",

@@ -85,7 +85,7 @@ def test_create_user_hashes_password_and_enforces_unique_per_tenant(client, db_s
     duplicate = client.post(
         "/admin/users",
         json={
-            "email": "new-office@demo.cortecero.app",
+            "email": "NEW-OFFICE@DEMO.CORTECERO.APP",
             "full_name": "Duplicate",
             "role": "logistics",
             "password": "dup-pass-123",

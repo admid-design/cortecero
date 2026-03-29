@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -18,7 +18,13 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     if not tenant:
         raise unauthorized("INVALID_CREDENTIALS", "Credenciales inválidas")
 
-    user = db.scalar(select(User).where(User.tenant_id == tenant.id, User.email == payload.email))
+    normalized_email = payload.email.strip().lower()
+    user = db.scalar(
+        select(User).where(
+            User.tenant_id == tenant.id,
+            func.lower(User.email) == normalized_email,
+        )
+    )
     if not user or not user.is_active or not verify_password(payload.password, user.password_hash):
         raise unauthorized("INVALID_CREDENTIALS", "Credenciales inválidas")
 

@@ -65,6 +65,7 @@ class EntityType(str, enum.Enum):
     exception = "exception"
     plan = "plan"
     plan_order = "plan_order"
+    tenant = "tenant"
 
 
 class SourceChannel(str, enum.Enum):

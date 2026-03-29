@@ -19,6 +19,7 @@ tags:
   - name: Admin Zones
   - name: Admin Customers
   - name: Admin Users
+  - name: Admin Tenant Settings
 
 security:
   - bearerAuth: []
@@ -464,7 +465,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [order, exception, plan, plan_order]
+            enum: [order, exception, plan, plan_order, tenant]
         - in: query
           name: entity_id
           required: true
@@ -750,6 +751,40 @@ paths:
         "422":
           description: Transición inválida
 
+  /admin/tenant-settings:
+    get:
+      tags: [Admin Tenant Settings]
+      summary: Leer configuración del tenant
+      responses:
+        "200":
+          description: Configuración actual del tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSettings'
+        "403":
+          description: Rol sin permisos de lectura
+    patch:
+      tags: [Admin Tenant Settings]
+      summary: Actualizar configuración del tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantSettingsUpdateRequest'
+      responses:
+        "200":
+          description: Configuración actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSettings'
+        "403":
+          description: Rol sin permisos de escritura
+        "422":
+          description: Transición inválida
+
 components:
   securitySchemes:
     bearerAuth:
@@ -952,7 +987,7 @@ components:
           format: uuid
         entity_type:
           type: string
-          enum: [order, exception, plan, plan_order]
+          enum: [order, exception, plan, plan_order, tenant]
         entity_id:
           type: string
           format: uuid
@@ -1151,3 +1186,32 @@ components:
             $ref: '#/components/schemas/User'
         total:
           type: integer
+
+    TenantSettingsUpdateRequest:
+      type: object
+      properties:
+        default_cutoff_time:
+          type: string
+          format: time
+        default_timezone:
+          type: string
+        auto_lock_enabled:
+          type: boolean
+
+    TenantSettings:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        default_cutoff_time:
+          type: string
+          format: time
+        default_timezone:
+          type: string
+        auto_lock_enabled:
+          type: boolean

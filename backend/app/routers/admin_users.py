@@ -53,10 +53,11 @@ def create_user(
     db: Session = Depends(get_db),
     current: CurrentUser = Depends(require_roles(UserRole.admin)),
 ) -> UserOut:
+    normalized_email = payload.email.strip().lower()
     existing = db.scalar(
         select(User).where(
             User.tenant_id == current.tenant_id,
-            User.email == payload.email,
+            func.lower(User.email) == normalized_email,
         )
     )
     if existing:
@@ -64,7 +65,7 @@ def create_user(
 
     row = User(
         tenant_id=current.tenant_id,
-        email=payload.email,
+        email=normalized_email,
         full_name=payload.full_name,
         password_hash=hash_password(payload.password),
         role=UserRole(payload.role),
@@ -120,17 +121,18 @@ def update_user(
     if "email" in payload.model_fields_set:
         if payload.email is None:
             raise unprocessable("INVALID_STATE_TRANSITION", "El email no puede ser null")
-        if payload.email != row.email:
+        normalized_email = payload.email.strip().lower()
+        if normalized_email != row.email:
             existing = db.scalar(
                 select(User).where(
                     User.tenant_id == current.tenant_id,
-                    User.email == payload.email,
+                    func.lower(User.email) == normalized_email,
                     User.id != row.id,
                 )
             )
             if existing:
                 raise conflict("RESOURCE_CONFLICT", "Ya existe un usuario con ese email")
-            row.email = payload.email
+            row.email = normalized_email
 
     if "full_name" in payload.model_fields_set:
         if payload.full_name is None:
