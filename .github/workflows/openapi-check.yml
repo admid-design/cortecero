@@ -1,0 +1,42 @@
+name: openapi-check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - r1-fixes
+  workflow_dispatch:
+
+jobs:
+  openapi-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install OpenAPI validator deps
+        run: pip install openapi-spec-validator PyYAML
+
+      - name: Validate OpenAPI spec
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+          from openapi_spec_validator import validate_spec
+
+          spec_path = Path("openapi/openapi-v1.yaml")
+          if not spec_path.exists():
+              raise SystemExit(f"OpenAPI file not found: {spec_path}")
+
+          with spec_path.open("r", encoding="utf-8") as f:
+              spec = yaml.safe_load(f)
+
+          validate_spec(spec)
+          print("OpenAPI spec is valid")
+          PY

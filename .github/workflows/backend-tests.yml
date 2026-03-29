@@ -1,0 +1,68 @@
+name: backend-tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - r1-fixes
+  workflow_dispatch:
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cortecero
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cortecero"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/cortecero
+      JWT_SECRET_KEY: ci-secret
+      JWT_ALGORITHM: HS256
+      JWT_ACCESS_TOKEN_MINUTES: "720"
+      CORS_ORIGINS: http://localhost:3000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend deps
+        run: pip install -r backend/requirements.txt
+
+      - name: Wait for Postgres
+        run: |
+          python - <<'PY'
+          import time
+          import psycopg
+
+          dsn = "postgresql://postgres:postgres@localhost:5432/cortecero"
+          for attempt in range(60):
+              try:
+                  with psycopg.connect(dsn):
+                      print("Postgres ready")
+                      break
+              except Exception:
+                  time.sleep(1)
+          else:
+              raise SystemExit("Postgres did not become ready in time")
+          PY
+
+      - name: Run backend tests
+        working-directory: backend
+        run: pytest -q
