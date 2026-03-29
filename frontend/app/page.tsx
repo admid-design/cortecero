@@ -5,12 +5,15 @@ import { useCallback, useMemo, useState } from "react";
 import {
   APIError,
   approveException,
+  createAdminCustomer,
   createAdminZone,
   createException,
   createPlan,
+  deactivateAdminCustomer,
   deactivateAdminZone,
   getDailySummary,
   includeOrderInPlan,
+  listAdminCustomers,
   listAdminZones,
   listExceptions,
   listOrders,
@@ -18,7 +21,9 @@ import {
   lockPlan,
   login,
   rejectException,
+  updateAdminCustomer,
   updateAdminZone,
+  type Customer,
   type DashboardSummary,
   type ExceptionItem,
   type Order,
@@ -90,6 +95,19 @@ export default function HomePage() {
   const [editZoneCutoff, setEditZoneCutoff] = useState("10:00:00");
   const [editZoneTimezone, setEditZoneTimezone] = useState("Europe/Madrid");
 
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerFilter, setCustomerFilter] = useState<"all" | "active" | "inactive">("all");
+  const [customerZoneFilter, setCustomerZoneFilter] = useState("all");
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerZoneId, setNewCustomerZoneId] = useState("");
+  const [newCustomerPriority, setNewCustomerPriority] = useState("0");
+  const [newCustomerCutoff, setNewCustomerCutoff] = useState("");
+  const [editingCustomerId, setEditingCustomerId] = useState("");
+  const [editCustomerName, setEditCustomerName] = useState("");
+  const [editCustomerZoneId, setEditCustomerZoneId] = useState("");
+  const [editCustomerPriority, setEditCustomerPriority] = useState("0");
+  const [editCustomerCutoff, setEditCustomerCutoff] = useState("");
+
   const isAuthenticated = useMemo(() => token.length > 0, [token]);
   const isAdmin = useMemo(() => role === "admin", [role]);
 
@@ -126,6 +144,20 @@ export default function HomePage() {
     }
   }, [token, zoneFilter]);
 
+  const refreshCustomers = useCallback(async (authToken?: string) => {
+    const activeToken = authToken ?? token;
+    if (!activeToken) return;
+    setError("");
+    try {
+      const active = customerFilter === "all" ? undefined : customerFilter === "active";
+      const zone_id = customerZoneFilter === "all" ? undefined : customerZoneFilter;
+      const res = await listAdminCustomers(activeToken, { active, zone_id });
+      setCustomers(res.items ?? []);
+    } catch (e) {
+      setError(formatError(e));
+    }
+  }, [customerFilter, customerZoneFilter, token]);
+
   async function onLogin() {
     setError("");
     try {
@@ -141,8 +173,10 @@ export default function HomePage() {
       await refreshOps(auth.access_token);
       if (nextRole === "admin") {
         await refreshZones(auth.access_token);
+        await refreshCustomers(auth.access_token);
       } else {
         setZones([]);
+        setCustomers([]);
       }
     } catch (e) {
       setError(formatError(e));
@@ -157,6 +191,7 @@ export default function HomePage() {
     setPlans([]);
     setExceptions([]);
     setZones([]);
+    setCustomers([]);
     setViewMode("ops");
   }
 
@@ -286,6 +321,83 @@ export default function HomePage() {
         setEditingZoneId("");
       }
       await refreshZones();
+    } catch (e) {
+      setError(formatError(e));
+    }
+  }
+
+  async function onCreateCustomer() {
+    if (!token || !isAdmin) return;
+    if (!newCustomerName.trim()) {
+      setError("El nombre de cliente es obligatorio");
+      return;
+    }
+    if (!newCustomerZoneId) {
+      setError("Debes seleccionar una zona");
+      return;
+    }
+    try {
+      await createAdminCustomer(token, {
+        zone_id: newCustomerZoneId,
+        name: newCustomerName.trim(),
+        priority: Number.parseInt(newCustomerPriority, 10) || 0,
+        cutoff_override_time: newCustomerCutoff.trim() || null,
+      });
+      setNewCustomerName("");
+      setNewCustomerPriority("0");
+      setNewCustomerCutoff("");
+      await refreshCustomers();
+    } catch (e) {
+      setError(formatError(e));
+    }
+  }
+
+  function startEditCustomer(customer: Customer) {
+    setEditingCustomerId(customer.id);
+    setEditCustomerName(customer.name);
+    setEditCustomerZoneId(customer.zone_id);
+    setEditCustomerPriority(String(customer.priority));
+    setEditCustomerCutoff(customer.cutoff_override_time ?? "");
+  }
+
+  function cancelEditCustomer() {
+    setEditingCustomerId("");
+  }
+
+  async function onSaveCustomerEdit() {
+    if (!token || !isAdmin || !editingCustomerId) return;
+    if (!editCustomerName.trim()) {
+      setError("El nombre de cliente es obligatorio");
+      return;
+    }
+    if (!editCustomerZoneId) {
+      setError("Debes seleccionar una zona");
+      return;
+    }
+    try {
+      await updateAdminCustomer(token, editingCustomerId, {
+        zone_id: editCustomerZoneId,
+        name: editCustomerName.trim(),
+        priority: Number.parseInt(editCustomerPriority, 10) || 0,
+        cutoff_override_time: editCustomerCutoff.trim() || null,
+      });
+      setEditingCustomerId("");
+      await refreshCustomers();
+    } catch (e) {
+      setError(formatError(e));
+    }
+  }
+
+  async function onDeactivateCustomer(customerId: string) {
+    if (!token || !isAdmin) return;
+    const confirmed = window.confirm("¿Desactivar este cliente?");
+    if (!confirmed) return;
+    try {
+      await deactivateAdminCustomer(token, customerId);
+      if (editingCustomerId === customerId) {
+        setEditingCustomerId("");
+      }
+      await refreshCustomers();
     } catch (e) {
       setError(formatError(e));
     }
@@ -516,17 +628,33 @@ export default function HomePage() {
               <div className="card row">
                 <button
                   className={adminSection === "zones" ? "tab active" : "tab"}
-                  onClick={() => setAdminSection("zones")}
+                  onClick={() => {
+                    setAdminSection("zones");
+                    void refreshZones();
+                  }}
                 >
                   Zonas
                 </button>
-                <button className="tab muted" onClick={() => setAdminSection("customers")}>
+                <button
+                  className={adminSection === "customers" ? "tab active" : "tab muted"}
+                  onClick={() => {
+                    setAdminSection("customers");
+                    void refreshZones();
+                    void refreshCustomers();
+                  }}
+                >
                   Clientes
                 </button>
-                <button className="tab muted" onClick={() => setAdminSection("users")}>
+                <button
+                  className={adminSection === "users" ? "tab active" : "tab muted"}
+                  onClick={() => setAdminSection("users")}
+                >
                   Usuarios
                 </button>
-                <button className="tab muted" onClick={() => setAdminSection("tenant")}>
+                <button
+                  className={adminSection === "tenant" ? "tab active" : "tab muted"}
+                  onClick={() => setAdminSection("tenant")}
+                >
                   Tenant
                 </button>
               </div>
@@ -620,7 +748,134 @@ export default function HomePage() {
                 </div>
               )}
 
-              {adminSection !== "zones" && (
+              {adminSection === "customers" && (
+                <div className="admin-layout">
+                  <div className="card">
+                    <div className="row" style={{ marginBottom: 10 }}>
+                      <h2 style={{ marginRight: 12 }}>Listado de Clientes</h2>
+                      <select
+                        value={customerFilter}
+                        onChange={(e) => setCustomerFilter(e.target.value as "all" | "active" | "inactive")}
+                      >
+                        <option value="all">Todos</option>
+                        <option value="active">Activos</option>
+                        <option value="inactive">Inactivos</option>
+                      </select>
+                      <select value={customerZoneFilter} onChange={(e) => setCustomerZoneFilter(e.target.value)}>
+                        <option value="all">Todas las zonas</option>
+                        {zones.map((zone) => (
+                          <option key={zone.id} value={zone.id}>
+                            {zone.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button className="secondary" onClick={refreshCustomers}>
+                        Refrescar
+                      </button>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>id</th>
+                          <th>nombre</th>
+                          <th>zona</th>
+                          <th>prioridad</th>
+                          <th>cutoff override</th>
+                          <th>estado</th>
+                          <th>acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {customers.map((customer) => {
+                          const zoneName = zones.find((zone) => zone.id === customer.zone_id)?.name ?? shortId(customer.zone_id);
+                          return (
+                            <tr key={customer.id}>
+                              <td>{shortId(customer.id)}</td>
+                              <td>{customer.name}</td>
+                              <td>{zoneName}</td>
+                              <td>{customer.priority}</td>
+                              <td>{customer.cutoff_override_time ?? "-"}</td>
+                              <td>
+                                <span className={customer.active ? "badge ok" : "badge rejected"}>
+                                  {customer.active ? "active" : "inactive"}
+                                </span>
+                              </td>
+                              <td className="row">
+                                <button className="secondary" onClick={() => startEditCustomer(customer)}>
+                                  Editar
+                                </button>
+                                {customer.active && (
+                                  <button className="danger" onClick={() => onDeactivateCustomer(customer.id)}>
+                                    Desactivar
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="grid" style={{ gap: 12 }}>
+                    <div className="card grid">
+                      <h2>Crear Cliente</h2>
+                      <input
+                        placeholder="Nombre cliente"
+                        value={newCustomerName}
+                        onChange={(e) => setNewCustomerName(e.target.value)}
+                      />
+                      <select value={newCustomerZoneId} onChange={(e) => setNewCustomerZoneId(e.target.value)}>
+                        <option value="">Selecciona zona</option>
+                        {zones.map((zone) => (
+                          <option key={zone.id} value={zone.id}>
+                            {zone.name}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        placeholder="Prioridad (int)"
+                        value={newCustomerPriority}
+                        onChange={(e) => setNewCustomerPriority(e.target.value)}
+                      />
+                      <input
+                        placeholder="cutoff_override_time HH:MM:SS (opcional)"
+                        value={newCustomerCutoff}
+                        onChange={(e) => setNewCustomerCutoff(e.target.value)}
+                      />
+                      <button onClick={onCreateCustomer}>Crear</button>
+                    </div>
+
+                    <div className="card grid">
+                      <h2>Editar Cliente</h2>
+                      {!editingCustomerId && <p style={{ margin: 0, color: "#6b7280" }}>Selecciona un cliente para editar.</p>}
+                      {editingCustomerId && (
+                        <>
+                          <input value={editCustomerName} onChange={(e) => setEditCustomerName(e.target.value)} />
+                          <select value={editCustomerZoneId} onChange={(e) => setEditCustomerZoneId(e.target.value)}>
+                            <option value="">Selecciona zona</option>
+                            {zones.map((zone) => (
+                              <option key={zone.id} value={zone.id}>
+                                {zone.name}
+                              </option>
+                            ))}
+                          </select>
+                          <input value={editCustomerPriority} onChange={(e) => setEditCustomerPriority(e.target.value)} />
+                          <input value={editCustomerCutoff} onChange={(e) => setEditCustomerCutoff(e.target.value)} />
+                          <div className="row">
+                            <button onClick={onSaveCustomerEdit}>Guardar</button>
+                            <button className="secondary" onClick={cancelEditCustomer}>
+                              Cancelar
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {(adminSection === "users" || adminSection === "tenant") && (
                 <div className="card">
                   <h2>Próximo bloque</h2>
                   <p style={{ margin: 0, color: "#6b7280" }}>

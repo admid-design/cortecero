@@ -14,12 +14,14 @@ type RequestOptions = {
 export class APIError extends Error {
   status: number;
   code?: string;
+  detailMessage: string;
 
   constructor(message: string, status: number, code?: string) {
     super(message);
     this.name = "APIError";
     this.status = status;
     this.code = code;
+    this.detailMessage = message;
   }
 }
 
@@ -48,10 +50,17 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as
-      | { detail?: { code?: string; message?: string } }
+      | { detail?: { code?: string; message?: string } | string }
       | null;
-    const code = payload?.detail?.code;
-    const message = payload?.detail?.message || code || `HTTP ${response.status}`;
+    const detail = payload?.detail;
+    const code = typeof detail === "object" && detail ? detail.code : undefined;
+    const detailMessage =
+      typeof detail === "object" && detail
+        ? detail.message || "Error API"
+        : typeof detail === "string"
+          ? detail
+          : `HTTP ${response.status}`;
+    const message = code ? `${code}: ${detailMessage}` : detailMessage;
     throw new APIError(message, response.status, code);
   }
 
@@ -145,6 +154,25 @@ export type ZoneCreateRequest = {
 
 export type ZoneUpdateRequest = Partial<ZoneCreateRequest>;
 
+export type Customer = {
+  id: string;
+  zone_id: string;
+  name: string;
+  priority: number;
+  cutoff_override_time: string | null;
+  active: boolean;
+  created_at: string;
+};
+
+export type CustomerCreateRequest = {
+  zone_id: string;
+  name: string;
+  priority: number;
+  cutoff_override_time: string | null;
+};
+
+export type CustomerUpdateRequest = Partial<CustomerCreateRequest>;
+
 export async function login(payload: LoginRequest): Promise<TokenResponse> {
   return request<TokenResponse>("/auth/login", {
     method: "POST",
@@ -220,4 +248,27 @@ export async function updateAdminZone(token: string, zoneId: string, payload: Zo
 
 export async function deactivateAdminZone(token: string, zoneId: string): Promise<Zone> {
   return request<Zone>(`/admin/zones/${zoneId}/deactivate`, { token, method: "POST" });
+}
+
+export async function listAdminCustomers(
+  token: string,
+  params: { active?: boolean; zone_id?: string } = {},
+): Promise<ListResponse<Customer>> {
+  return request<ListResponse<Customer>>(`/admin/customers${buildQuery(params)}`, { token });
+}
+
+export async function createAdminCustomer(token: string, payload: CustomerCreateRequest): Promise<Customer> {
+  return request<Customer>("/admin/customers", { token, method: "POST", body: payload });
+}
+
+export async function updateAdminCustomer(
+  token: string,
+  customerId: string,
+  payload: CustomerUpdateRequest,
+): Promise<Customer> {
+  return request<Customer>(`/admin/customers/${customerId}`, { token, method: "PATCH", body: payload });
+}
+
+export async function deactivateAdminCustomer(token: string, customerId: string): Promise<Customer> {
+  return request<Customer>(`/admin/customers/${customerId}/deactivate`, { token, method: "POST" });
 }
