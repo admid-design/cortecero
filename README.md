@@ -62,6 +62,15 @@ curl -sS "http://localhost:8000/orders?service_date=$(date +%F)" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
+## Test suite crítica (R1)
+
+```bash
+# Con backend y postgres levantados
+docker compose exec -T backend pytest -q
+```
+
+La suite crea y resetea una base `*_test` automáticamente en PostgreSQL para cada test.
+
 ## Notas de alcance
 
 - MVP cubre `cut-off`, `late`, `plan lock`, excepciones y auditoría.
