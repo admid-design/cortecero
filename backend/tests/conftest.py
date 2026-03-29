@@ -27,15 +27,17 @@ TEST_DB_URL = os.getenv("TEST_DATABASE_URL") or _with_db_name(BASE_DB_URL, f"{_d
 os.environ["DATABASE_URL"] = TEST_DB_URL
 
 THIS_FILE = Path(__file__).resolve()
-MIGRATION_FILE = None
+MIGRATIONS_DIR = None
 for root in (THIS_FILE.parents[1], THIS_FILE.parents[2]):
-    candidate = root / "db" / "migrations" / "001_init.sql"
+    candidate = root / "db" / "migrations"
     if candidate.exists():
-        MIGRATION_FILE = candidate
+        MIGRATIONS_DIR = candidate
         break
-if MIGRATION_FILE is None:
-    raise RuntimeError("Migration file db/migrations/001_init.sql not found for test bootstrap")
-MIGRATION_SQL = MIGRATION_FILE.read_text(encoding="utf-8")
+if MIGRATIONS_DIR is None:
+    raise RuntimeError("Migrations directory db/migrations not found for test bootstrap")
+MIGRATION_FILES = sorted(MIGRATIONS_DIR.glob("*.sql"))
+if not MIGRATION_FILES:
+    raise RuntimeError(f"No migration files found in {MIGRATIONS_DIR}")
 TEST_DB_NAME = _db_name(TEST_DB_URL)
 ADMIN_DB_URL = _with_db_name(TEST_DB_URL, "postgres")
 
@@ -56,7 +58,8 @@ def _reset_schema() -> None:
         conn.execute("DROP SCHEMA IF EXISTS public CASCADE;")
         conn.execute("CREATE SCHEMA public;")
         conn.execute("GRANT ALL ON SCHEMA public TO CURRENT_USER;")
-        conn.execute(MIGRATION_SQL)
+        for migration_file in MIGRATION_FILES:
+            conn.execute(migration_file.read_text(encoding="utf-8"))
 
 
 @pytest.fixture(scope="session", autouse=True)
