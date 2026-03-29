@@ -17,6 +17,8 @@ from app.models import (
     ExceptionType,
     Order,
     OrderStatus,
+    Plan,
+    PlanStatus,
     UserRole,
 )
 from app.schemas import ExceptionCreateRequest, ExceptionOut, ExceptionRejectRequest, ExceptionsListResponse
@@ -37,6 +39,26 @@ def create_exception(
 
     if payload.type != "late_order":
         raise unprocessable("INVALID_EXCEPTION_TYPE", "Solo se admite late_order")
+
+    if order.status == OrderStatus.planned:
+        raise conflict("ORDER_ALREADY_PLANNED", "El pedido ya está incluido en un plan")
+
+    if order.status == OrderStatus.exception_rejected:
+        raise conflict("ORDER_EXCEPTION_REJECTED", "Pedido rechazado para este service_date")
+
+    locked_plan = db.scalar(
+        select(Plan).where(
+            Plan.tenant_id == current.tenant_id,
+            Plan.service_date == order.service_date,
+            Plan.zone_id == order.zone_id,
+            Plan.status == PlanStatus.locked,
+        )
+    )
+    if not order.is_late and not locked_plan:
+        raise unprocessable(
+            "INVALID_EXCEPTION_SCOPE",
+            "late_order solo aplica a pedidos tardíos o cuando el plan está locked",
+        )
 
     pending = db.scalar(
         select(ExceptionItem).where(
@@ -64,6 +86,8 @@ def create_exception(
 
     if order.status != OrderStatus.planned:
         order.status = OrderStatus.late_pending_exception
+
+    db.flush()
 
     write_audit(
         db,

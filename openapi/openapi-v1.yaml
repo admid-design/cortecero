@@ -310,7 +310,9 @@ paths:
     post:
       tags: [Exceptions]
       summary: Crear solicitud de excepción
-      description: Crea excepción late_order para un pedido.
+      description: >
+        Crea excepción late_order para un pedido.
+        Solo aplica si el pedido es tardío o si existe plan locked para su service_date y zona.
       requestBody:
         required: true
         content:

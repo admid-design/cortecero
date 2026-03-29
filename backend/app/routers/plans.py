@@ -225,6 +225,7 @@ def include_order(
     db.add(row)
 
     order.status = OrderStatus.planned
+    db.flush()
 
     write_audit(
         db,

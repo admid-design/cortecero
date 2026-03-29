@@ -320,6 +320,26 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_entity
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action
     ON audit_logs (tenant_id, action, ts DESC);
 
+-- audit_logs append-only guard
+CREATE OR REPLACE FUNCTION prevent_audit_logs_mutation()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE EXCEPTION 'audit_logs is append-only';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_audit_logs_no_update ON audit_logs;
+CREATE TRIGGER trg_audit_logs_no_update
+BEFORE UPDATE ON audit_logs
+FOR EACH ROW
+EXECUTE FUNCTION prevent_audit_logs_mutation();
+
+DROP TRIGGER IF EXISTS trg_audit_logs_no_delete ON audit_logs;
+CREATE TRIGGER trg_audit_logs_no_delete
+BEFORE DELETE ON audit_logs
+FOR EACH ROW
+EXECUTE FUNCTION prevent_audit_logs_mutation();
+
 -- =========================
 -- updated_at trigger
 -- =========================
