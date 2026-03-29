@@ -16,6 +16,7 @@ tags:
   - name: Exceptions
   - name: Dashboard
   - name: Audit
+  - name: Admin Zones
 
 security:
   - bearerAuth: []
@@ -483,6 +484,97 @@ paths:
                   total:
                     type: integer
 
+  /admin/zones:
+    get:
+      tags: [Admin Zones]
+      summary: Listado de zonas del tenant
+      parameters:
+        - in: query
+          name: active
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Zonas filtradas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZonesListResponse'
+    post:
+      tags: [Admin Zones]
+      summary: Crear zona
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneCreateRequest'
+      responses:
+        "201":
+          description: Zona creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+        "403":
+          description: Rol sin permisos de escritura
+        "409":
+          description: Conflicto de nombre
+
+  /admin/zones/{zone_id}:
+    patch:
+      tags: [Admin Zones]
+      summary: Actualizar zona
+      parameters:
+        - in: path
+          name: zone_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneUpdateRequest'
+      responses:
+        "200":
+          description: Zona actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+        "404":
+          description: Zona no encontrada
+        "409":
+          description: Conflicto de nombre
+        "422":
+          description: Transición inválida
+
+  /admin/zones/{zone_id}/deactivate:
+    post:
+      tags: [Admin Zones]
+      summary: Desactivar zona
+      parameters:
+        - in: path
+          name: zone_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Zona desactivada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+        "404":
+          description: Zona no encontrada
+        "422":
+          description: No se puede desactivar por estado/regla de negocio
+
 components:
   securitySchemes:
     bearerAuth:
@@ -701,3 +793,55 @@ components:
         metadata_json:
           type: object
           additionalProperties: true
+
+    ZoneCreateRequest:
+      type: object
+      required: [name, default_cutoff_time, timezone]
+      properties:
+        name:
+          type: string
+        default_cutoff_time:
+          type: string
+          format: time
+        timezone:
+          type: string
+
+    ZoneUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        default_cutoff_time:
+          type: string
+          format: time
+        timezone:
+          type: string
+
+    Zone:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        default_cutoff_time:
+          type: string
+          format: time
+        timezone:
+          type: string
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    ZonesListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Zone'
+        total:
+          type: integer

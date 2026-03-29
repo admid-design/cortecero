@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -170,4 +170,30 @@ class AuditLogOut(APIModel):
 
 class AuditListResponse(BaseModel):
     items: list[AuditLogOut]
+    total: int
+
+
+class ZoneCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    default_cutoff_time: time
+    timezone: str = Field(min_length=1, max_length=120)
+
+
+class ZoneUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    default_cutoff_time: time | None = None
+    timezone: str | None = Field(default=None, min_length=1, max_length=120)
+
+
+class ZoneOut(APIModel):
+    id: uuid.UUID
+    name: str
+    default_cutoff_time: time
+    timezone: str
+    active: bool
+    created_at: datetime
+
+
+class ZonesListResponse(BaseModel):
+    items: list[ZoneOut]
     total: int

@@ -83,7 +83,7 @@ Objetivo R2: habilitar administración de maestros (`zones`, `customers`, `users
   - índices:
     - `zones(tenant_id, active)`
     - `customers(tenant_id, active, zone_id)`
-    - `users(tenant_id, active, role)`
+    - `users(tenant_id, is_active, role)`
 - Aceptación:
   - migración idempotente en entorno limpio.
   - migración compatible con datos seed actuales.
@@ -223,4 +223,3 @@ Objetivo R2: habilitar administración de maestros (`zones`, `customers`, `users
 - No features de R3/R4/R5.
 - No soft-delete complejo: `active` es suficiente.
 - No cambiar semántica `late / lock / exception`.
-
