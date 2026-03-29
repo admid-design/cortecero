@@ -1,29 +1,60 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
-type Dict = Record<string, unknown>;
+import {
+  APIError,
+  approveException,
+  createAdminZone,
+  createException,
+  createPlan,
+  deactivateAdminZone,
+  getDailySummary,
+  includeOrderInPlan,
+  listAdminZones,
+  listExceptions,
+  listOrders,
+  listPlans,
+  lockPlan,
+  login,
+  rejectException,
+  updateAdminZone,
+  type DashboardSummary,
+  type ExceptionItem,
+  type Order,
+  type Plan,
+  type UserRole,
+  type Zone,
+} from "../lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+type ViewMode = "ops" | "admin";
+type AdminSection = "zones" | "customers" | "users" | "tenant";
 
-async function api<T>(path: string, token: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...(options?.headers ?? {}),
-    },
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const detail = body?.detail?.code ? `${body.detail.code}: ${body.detail.message}` : `HTTP ${res.status}`;
-    throw new Error(detail);
+function decodeRoleFromToken(token: string): UserRole | null {
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) return null;
+    const decoded = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const parsed = JSON.parse(decoded) as { role?: string };
+    if (parsed.role === "office" || parsed.role === "logistics" || parsed.role === "admin") {
+      return parsed.role;
+    }
+    return null;
+  } catch {
+    return null;
   }
+}
 
-  return res.json() as Promise<T>;
+function formatError(error: unknown): string {
+  if (error instanceof APIError) {
+    return error.code ? `${error.code}: ${error.message}` : error.message;
+  }
+  if (error instanceof Error) return error.message;
+  return "Error inesperado";
+}
+
+function shortId(value: string): string {
+  return value.slice(0, 8);
 }
 
 export default function HomePage() {
@@ -31,13 +62,17 @@ export default function HomePage() {
   const [email, setEmail] = useState("logistics@demo.cortecero.app");
   const [password, setPassword] = useState("logistics123");
   const [token, setToken] = useState("");
+  const [role, setRole] = useState<UserRole | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("ops");
+  const [adminSection, setAdminSection] = useState<AdminSection>("zones");
+
   const [serviceDate, setServiceDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [error, setError] = useState("");
 
-  const [summary, setSummary] = useState<Dict | null>(null);
-  const [orders, setOrders] = useState<Dict[]>([]);
-  const [plans, setPlans] = useState<Dict[]>([]);
-  const [exceptions, setExceptions] = useState<Dict[]>([]);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [exceptions, setExceptions] = useState<ExceptionItem[]>([]);
 
   const [newPlanZoneId, setNewPlanZoneId] = useState("");
   const [includePlanId, setIncludePlanId] = useState("");
@@ -45,127 +80,232 @@ export default function HomePage() {
   const [exceptionOrderId, setExceptionOrderId] = useState("");
   const [exceptionNote, setExceptionNote] = useState("Pedido fuera de corte");
 
+  const [zoneFilter, setZoneFilter] = useState<"all" | "active" | "inactive">("all");
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [newZoneName, setNewZoneName] = useState("");
+  const [newZoneCutoff, setNewZoneCutoff] = useState("10:00:00");
+  const [newZoneTimezone, setNewZoneTimezone] = useState("Europe/Madrid");
+  const [editingZoneId, setEditingZoneId] = useState("");
+  const [editZoneName, setEditZoneName] = useState("");
+  const [editZoneCutoff, setEditZoneCutoff] = useState("10:00:00");
+  const [editZoneTimezone, setEditZoneTimezone] = useState("Europe/Madrid");
+
   const isAuthenticated = useMemo(() => token.length > 0, [token]);
+  const isAdmin = useMemo(() => role === "admin", [role]);
 
-  async function login() {
-    setError("");
-    try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenant_slug: tenantSlug, email, password }),
-      });
-      if (!res.ok) {
-        throw new Error("Credenciales inválidas");
-      }
-      const body = (await res.json()) as { access_token: string };
-      setToken(body.access_token);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error de login");
-    }
-  }
-
-  async function refresh() {
-    if (!token) return;
+  const refreshOps = useCallback(async (authToken?: string) => {
+    const activeToken = authToken ?? token;
+    if (!activeToken) return;
     setError("");
     try {
       const [summaryRes, ordersRes, plansRes, exceptionsRes] = await Promise.all([
-        api<Dict>(`/dashboard/daily-summary?service_date=${serviceDate}`, token),
-        api<{ items: Dict[] }>(`/orders?service_date=${serviceDate}`, token),
-        api<{ items: Dict[] }>(`/plans?service_date=${serviceDate}`, token),
-        api<{ items: Dict[] }>(`/exceptions`, token),
+        getDailySummary(activeToken, serviceDate),
+        listOrders(activeToken, serviceDate),
+        listPlans(activeToken, serviceDate),
+        listExceptions(activeToken),
       ]);
       setSummary(summaryRes);
       setOrders(ordersRes.items ?? []);
       setPlans(plansRes.items ?? []);
       setExceptions(exceptionsRes.items ?? []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error cargando datos");
+      setError(formatError(e));
+    }
+  }, [serviceDate, token]);
+
+  const refreshZones = useCallback(async (authToken?: string) => {
+    const activeToken = authToken ?? token;
+    if (!activeToken) return;
+    setError("");
+    try {
+      const active = zoneFilter === "all" ? undefined : zoneFilter === "active";
+      const res = await listAdminZones(activeToken, { active });
+      setZones(res.items ?? []);
+    } catch (e) {
+      setError(formatError(e));
+    }
+  }, [token, zoneFilter]);
+
+  async function onLogin() {
+    setError("");
+    try {
+      const auth = await login({
+        tenant_slug: tenantSlug,
+        email,
+        password,
+      });
+      const nextRole = decodeRoleFromToken(auth.access_token);
+      setToken(auth.access_token);
+      setRole(nextRole);
+      setViewMode("ops");
+      await refreshOps(auth.access_token);
+      if (nextRole === "admin") {
+        await refreshZones(auth.access_token);
+      } else {
+        setZones([]);
+      }
+    } catch (e) {
+      setError(formatError(e));
     }
   }
 
-  async function createPlan() {
+  function onLogout() {
+    setToken("");
+    setRole(null);
+    setSummary(null);
+    setOrders([]);
+    setPlans([]);
+    setExceptions([]);
+    setZones([]);
+    setViewMode("ops");
+  }
+
+  async function onCreatePlan() {
+    if (!token || !newPlanZoneId) return;
     try {
-      await api("/plans", token, {
-        method: "POST",
-        body: JSON.stringify({ service_date: serviceDate, zone_id: newPlanZoneId }),
-      });
+      await createPlan(token, { service_date: serviceDate, zone_id: newPlanZoneId });
       setNewPlanZoneId("");
-      await refresh();
+      await refreshOps();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error creando plan");
+      setError(formatError(e));
     }
   }
 
-  async function lockPlan(planId: string) {
+  async function onLockPlan(planId: string) {
+    if (!token) return;
     try {
-      await api(`/plans/${planId}/lock`, token, { method: "POST" });
-      await refresh();
+      await lockPlan(token, planId);
+      await refreshOps();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error bloqueando plan");
+      setError(formatError(e));
     }
   }
 
-  async function includeOrder() {
+  async function onIncludeOrder() {
+    if (!token || !includePlanId || !includeOrderId) return;
     try {
-      await api(`/plans/${includePlanId}/orders`, token, {
-        method: "POST",
-        body: JSON.stringify({ order_id: includeOrderId }),
-      });
+      await includeOrderInPlan(token, includePlanId, includeOrderId);
       setIncludeOrderId("");
-      await refresh();
+      await refreshOps();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error incluyendo pedido");
+      setError(formatError(e));
     }
   }
 
-  async function createException() {
+  async function onCreateException() {
+    if (!token || !exceptionOrderId || !exceptionNote) return;
     try {
-      await api(`/exceptions`, token, {
-        method: "POST",
-        body: JSON.stringify({ order_id: exceptionOrderId, type: "late_order", note: exceptionNote }),
+      await createException(token, {
+        order_id: exceptionOrderId,
+        type: "late_order",
+        note: exceptionNote,
       });
       setExceptionOrderId("");
-      await refresh();
+      await refreshOps();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error creando excepción");
+      setError(formatError(e));
     }
   }
 
-  async function approveException(exceptionId: string) {
+  async function onApproveException(exceptionId: string) {
+    if (!token) return;
     try {
-      await api(`/exceptions/${exceptionId}/approve`, token, { method: "POST" });
-      await refresh();
+      await approveException(token, exceptionId);
+      await refreshOps();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error aprobando excepción");
+      setError(formatError(e));
     }
   }
 
-  async function rejectException(exceptionId: string) {
+  async function onRejectException(exceptionId: string) {
+    if (!token) return;
     try {
-      await api(`/exceptions/${exceptionId}/reject`, token, {
-        method: "POST",
-        body: JSON.stringify({ note: "No aplica para este service_date" }),
+      await rejectException(token, exceptionId, "No aplica para este service_date");
+      await refreshOps();
+    } catch (e) {
+      setError(formatError(e));
+    }
+  }
+
+  async function onCreateZone() {
+    if (!token || !isAdmin) return;
+    if (!newZoneName.trim()) {
+      setError("El nombre de zona es obligatorio");
+      return;
+    }
+    try {
+      await createAdminZone(token, {
+        name: newZoneName.trim(),
+        default_cutoff_time: newZoneCutoff,
+        timezone: newZoneTimezone.trim(),
       });
-      await refresh();
+      setNewZoneName("");
+      await refreshZones();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error rechazando excepción");
+      setError(formatError(e));
+    }
+  }
+
+  function startEditZone(zone: Zone) {
+    setEditingZoneId(zone.id);
+    setEditZoneName(zone.name);
+    setEditZoneCutoff(zone.default_cutoff_time);
+    setEditZoneTimezone(zone.timezone);
+  }
+
+  function cancelEditZone() {
+    setEditingZoneId("");
+  }
+
+  async function onSaveZoneEdit() {
+    if (!token || !isAdmin || !editingZoneId) return;
+    if (!editZoneName.trim()) {
+      setError("El nombre de zona es obligatorio");
+      return;
+    }
+    try {
+      await updateAdminZone(token, editingZoneId, {
+        name: editZoneName.trim(),
+        default_cutoff_time: editZoneCutoff,
+        timezone: editZoneTimezone.trim(),
+      });
+      setEditingZoneId("");
+      await refreshZones();
+    } catch (e) {
+      setError(formatError(e));
+    }
+  }
+
+  async function onDeactivateZone(zoneId: string) {
+    if (!token || !isAdmin) return;
+    const confirmed = window.confirm("¿Desactivar esta zona?");
+    if (!confirmed) return;
+    try {
+      await deactivateAdminZone(token, zoneId);
+      if (editingZoneId === zoneId) {
+        setEditingZoneId("");
+      }
+      await refreshZones();
+    } catch (e) {
+      setError(formatError(e));
     }
   }
 
   return (
     <main className="grid" style={{ gap: 16 }}>
-      <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div className="card topbar">
         <div>
           <h1>CorteCero Ops</h1>
-          <p style={{ margin: 0, color: "#6b7280" }}>Cut-off, planes bloqueados y excepciones auditadas</p>
+          <p style={{ margin: 0, color: "#6b7280" }}>Cut-off, lock y excepciones con trazabilidad operativa</p>
         </div>
-        <div className="row">
-          <input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} />
-          <button className="secondary" onClick={refresh} disabled={!isAuthenticated}>
-            Refrescar
-          </button>
-        </div>
+        {isAuthenticated && (
+          <div className="row">
+            <span className="pill">Rol: {role ?? "desconocido"}</span>
+            <button className="secondary" onClick={onLogout}>
+              Cerrar sesión
+            </button>
+          </div>
+        )}
       </div>
 
       {!isAuthenticated && (
@@ -173,7 +313,7 @@ export default function HomePage() {
           <input placeholder="tenant_slug" value={tenantSlug} onChange={(e) => setTenantSlug(e.target.value)} />
           <input placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           <input placeholder="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <button onClick={login}>Entrar</button>
+          <button onClick={onLogin}>Entrar</button>
         </div>
       )}
 
@@ -183,150 +323,314 @@ export default function HomePage() {
         </div>
       )}
 
-      {summary && (
-        <div className="card grid cols-2">
-          {Object.entries(summary).map(([k, v]) => (
-            <div key={k}>
-              <strong>{k}</strong>: {String(v)}
-            </div>
-          ))}
+      {isAuthenticated && (
+        <div className="card row">
+          <button className={viewMode === "ops" ? "tab active" : "tab"} onClick={() => setViewMode("ops")}>
+            Operación
+          </button>
+          {isAdmin && (
+            <button
+              className={viewMode === "admin" ? "tab active" : "tab"}
+              onClick={() => {
+                setViewMode("admin");
+                void refreshZones();
+              }}
+            >
+              Admin
+            </button>
+          )}
         </div>
       )}
 
-      {isAuthenticated && (
-        <div className="grid cols-2">
-          <div className="card grid">
-            <h2>Planes</h2>
-            <div className="row">
-              <input
-                placeholder="zone_id para crear plan"
-                value={newPlanZoneId}
-                onChange={(e) => setNewPlanZoneId(e.target.value)}
-              />
-              <button onClick={createPlan}>Crear plan</button>
-            </div>
-            <div className="row">
-              <input placeholder="plan_id" value={includePlanId} onChange={(e) => setIncludePlanId(e.target.value)} />
-              <input placeholder="order_id" value={includeOrderId} onChange={(e) => setIncludeOrderId(e.target.value)} />
-              <button className="secondary" onClick={includeOrder}>
-                Incluir pedido
-              </button>
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>id</th>
-                  <th>zona</th>
-                  <th>estado</th>
-                  <th>pedidos</th>
-                  <th>acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {plans.map((p) => {
-                  const id = String(p.id);
-                  const status = String(p.status);
-                  return (
-                    <tr key={id}>
-                      <td>{id.slice(0, 8)}</td>
-                      <td>{String(p.zone_id).slice(0, 8)}</td>
-                      <td>{status}</td>
-                      <td>{Array.isArray(p.orders) ? p.orders.length : 0}</td>
-                      <td>
-                        {status === "open" && <button onClick={() => lockPlan(id)}>Lock</button>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {isAuthenticated && viewMode === "ops" && (
+        <>
+          <div className="card row">
+            <input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} />
+            <button className="secondary" onClick={refreshOps}>
+              Refrescar operación
+            </button>
           </div>
 
-          <div className="card grid">
-            <h2>Excepciones</h2>
-            <div className="row">
-              <input
-                placeholder="order_id"
-                value={exceptionOrderId}
-                onChange={(e) => setExceptionOrderId(e.target.value)}
-              />
-              <input placeholder="nota" value={exceptionNote} onChange={(e) => setExceptionNote(e.target.value)} />
-              <button className="warn" onClick={createException}>
-                Solicitar excepción
-              </button>
+          {summary && (
+            <div className="card metric-grid">
+              <div>
+                <strong>Total pedidos</strong>
+                <p>{summary.total_orders}</p>
+              </div>
+              <div>
+                <strong>Tardíos</strong>
+                <p>{summary.late_orders}</p>
+              </div>
+              <div>
+                <strong>Planes open</strong>
+                <p>{summary.plans_open}</p>
+              </div>
+              <div>
+                <strong>Planes locked</strong>
+                <p>{summary.plans_locked}</p>
+              </div>
+              <div>
+                <strong>Excepciones pending</strong>
+                <p>{summary.pending_exceptions}</p>
+              </div>
+              <div>
+                <strong>Excepciones approved</strong>
+                <p>{summary.approved_exceptions}</p>
+              </div>
             </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>id</th>
-                  <th>order</th>
-                  <th>estado</th>
-                  <th>acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {exceptions.map((ex) => {
-                  const id = String(ex.id);
-                  const status = String(ex.status);
-                  return (
-                    <tr key={id}>
-                      <td>{id.slice(0, 8)}</td>
-                      <td>{String(ex.order_id).slice(0, 8)}</td>
-                      <td>{status}</td>
+          )}
+
+          <div className="grid cols-2">
+            <div className="card grid">
+              <h2>Planes</h2>
+              <div className="row">
+                <input
+                  placeholder="zone_id para crear plan"
+                  value={newPlanZoneId}
+                  onChange={(e) => setNewPlanZoneId(e.target.value)}
+                />
+                <button onClick={onCreatePlan}>Crear plan</button>
+              </div>
+              <div className="row">
+                <input placeholder="plan_id" value={includePlanId} onChange={(e) => setIncludePlanId(e.target.value)} />
+                <input placeholder="order_id" value={includeOrderId} onChange={(e) => setIncludeOrderId(e.target.value)} />
+                <button className="secondary" onClick={onIncludeOrder}>
+                  Incluir pedido
+                </button>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>id</th>
+                    <th>zona</th>
+                    <th>estado</th>
+                    <th>pedidos</th>
+                    <th>acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plans.map((plan) => (
+                    <tr key={plan.id}>
+                      <td>{shortId(plan.id)}</td>
+                      <td>{shortId(plan.zone_id)}</td>
+                      <td>{plan.status}</td>
+                      <td>{Array.isArray(plan.orders) ? plan.orders.length : 0}</td>
+                      <td>{plan.status === "open" && <button onClick={() => onLockPlan(plan.id)}>Lock</button>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="card grid">
+              <h2>Excepciones</h2>
+              <div className="row">
+                <input
+                  placeholder="order_id"
+                  value={exceptionOrderId}
+                  onChange={(e) => setExceptionOrderId(e.target.value)}
+                />
+                <input placeholder="nota" value={exceptionNote} onChange={(e) => setExceptionNote(e.target.value)} />
+                <button className="warn" onClick={onCreateException}>
+                  Solicitar excepción
+                </button>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>id</th>
+                    <th>order</th>
+                    <th>estado</th>
+                    <th>acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exceptions.map((item) => (
+                    <tr key={item.id}>
+                      <td>{shortId(item.id)}</td>
+                      <td>{shortId(item.order_id)}</td>
+                      <td>{item.status}</td>
                       <td className="row">
-                        {status === "pending" && (
+                        {item.status === "pending" && (
                           <>
-                            <button onClick={() => approveException(id)}>Aprobar</button>
-                            <button className="danger" onClick={() => rejectException(id)}>
+                            <button onClick={() => onApproveException(item.id)}>Aprobar</button>
+                            <button className="danger" onClick={() => onRejectException(item.id)}>
                               Rechazar
                             </button>
                           </>
                         )}
                       </td>
                     </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>Pedidos</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>ref</th>
+                  <th>cliente</th>
+                  <th>zona</th>
+                  <th>estado</th>
+                  <th>late</th>
+                  <th>cutoff</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((order) => {
+                  const badgeClass =
+                    order.status === "exception_rejected" ? "badge rejected" : order.is_late ? "badge late" : "badge ok";
+                  return (
+                    <tr key={order.id}>
+                      <td>{order.external_ref}</td>
+                      <td>{shortId(order.customer_id)}</td>
+                      <td>{shortId(order.zone_id)}</td>
+                      <td>{order.status}</td>
+                      <td>
+                        <span className={badgeClass}>{order.is_late ? "late" : "on_time"}</span>
+                      </td>
+                      <td>{new Date(order.effective_cutoff_at).toLocaleString("es-ES")}</td>
+                    </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
-        </div>
+        </>
       )}
 
-      {isAuthenticated && (
-        <div className="card">
-          <h2>Pedidos</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>ref</th>
-                <th>cliente</th>
-                <th>zona</th>
-                <th>estado</th>
-                <th>late</th>
-                <th>cutoff</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((o) => {
-                const status = String(o.status);
-                const isLate = Boolean(o.is_late);
-                const badgeClass = status === "exception_rejected" ? "badge rejected" : isLate ? "badge late" : "badge ok";
-                return (
-                  <tr key={String(o.id)}>
-                    <td>{String(o.external_ref)}</td>
-                    <td>{String(o.customer_id).slice(0, 8)}</td>
-                    <td>{String(o.zone_id).slice(0, 8)}</td>
-                    <td>{status}</td>
-                    <td>
-                      <span className={badgeClass}>{isLate ? "late" : "on_time"}</span>
-                    </td>
-                    <td>{String(o.effective_cutoff_at)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      {isAuthenticated && viewMode === "admin" && (
+        <>
+          {!isAdmin && (
+            <div className="card" style={{ borderColor: "#fca5a5", color: "#991b1b" }}>
+              RBAC_FORBIDDEN: Solo `admin` puede acceder a esta sección.
+            </div>
+          )}
+
+          {isAdmin && (
+            <>
+              <div className="card row">
+                <button
+                  className={adminSection === "zones" ? "tab active" : "tab"}
+                  onClick={() => setAdminSection("zones")}
+                >
+                  Zonas
+                </button>
+                <button className="tab muted" onClick={() => setAdminSection("customers")}>
+                  Clientes
+                </button>
+                <button className="tab muted" onClick={() => setAdminSection("users")}>
+                  Usuarios
+                </button>
+                <button className="tab muted" onClick={() => setAdminSection("tenant")}>
+                  Tenant
+                </button>
+              </div>
+
+              {adminSection === "zones" && (
+                <div className="grid cols-2">
+                  <div className="card grid">
+                    <h2>Crear Zona</h2>
+                    <input placeholder="Nombre" value={newZoneName} onChange={(e) => setNewZoneName(e.target.value)} />
+                    <input
+                      placeholder="default_cutoff_time HH:MM:SS"
+                      value={newZoneCutoff}
+                      onChange={(e) => setNewZoneCutoff(e.target.value)}
+                    />
+                    <input
+                      placeholder="Timezone IANA"
+                      value={newZoneTimezone}
+                      onChange={(e) => setNewZoneTimezone(e.target.value)}
+                    />
+                    <button onClick={onCreateZone}>Crear</button>
+                  </div>
+
+                  <div className="card grid">
+                    <h2>Editar Zona</h2>
+                    {!editingZoneId && <p style={{ margin: 0, color: "#6b7280" }}>Selecciona una zona para editar.</p>}
+                    {editingZoneId && (
+                      <>
+                        <input value={editZoneName} onChange={(e) => setEditZoneName(e.target.value)} />
+                        <input value={editZoneCutoff} onChange={(e) => setEditZoneCutoff(e.target.value)} />
+                        <input value={editZoneTimezone} onChange={(e) => setEditZoneTimezone(e.target.value)} />
+                        <div className="row">
+                          <button onClick={onSaveZoneEdit}>Guardar</button>
+                          <button className="secondary" onClick={cancelEditZone}>
+                            Cancelar
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="card" style={{ gridColumn: "1 / -1" }}>
+                    <div className="row" style={{ marginBottom: 10 }}>
+                      <h2 style={{ marginRight: 12 }}>Listado de Zonas</h2>
+                      <select value={zoneFilter} onChange={(e) => setZoneFilter(e.target.value as "all" | "active" | "inactive")}>
+                        <option value="all">Todas</option>
+                        <option value="active">Activas</option>
+                        <option value="inactive">Inactivas</option>
+                      </select>
+                      <button className="secondary" onClick={refreshZones}>
+                        Refrescar
+                      </button>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>id</th>
+                          <th>nombre</th>
+                          <th>cutoff</th>
+                          <th>timezone</th>
+                          <th>estado</th>
+                          <th>acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {zones.map((zone) => (
+                          <tr key={zone.id}>
+                            <td>{shortId(zone.id)}</td>
+                            <td>{zone.name}</td>
+                            <td>{zone.default_cutoff_time}</td>
+                            <td>{zone.timezone}</td>
+                            <td>
+                              <span className={zone.active ? "badge ok" : "badge rejected"}>
+                                {zone.active ? "active" : "inactive"}
+                              </span>
+                            </td>
+                            <td className="row">
+                              <button className="secondary" onClick={() => startEditZone(zone)}>
+                                Editar
+                              </button>
+                              {zone.active && (
+                                <button className="danger" onClick={() => onDeactivateZone(zone.id)}>
+                                  Desactivar
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {adminSection !== "zones" && (
+                <div className="card">
+                  <h2>Próximo bloque</h2>
+                  <p style={{ margin: 0, color: "#6b7280" }}>
+                    Esta sección se habilitará en los siguientes tickets (`customers`, `users`, `tenant-settings` UI).
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </>
       )}
     </main>
   );
