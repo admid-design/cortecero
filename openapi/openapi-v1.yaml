@@ -18,6 +18,7 @@ tags:
   - name: Audit
   - name: Admin Zones
   - name: Admin Customers
+  - name: Admin Users
 
 security:
   - bearerAuth: []
@@ -674,6 +675,81 @@ paths:
         "422":
           description: No se puede desactivar por estado/regla de negocio
 
+  /admin/users:
+    get:
+      tags: [Admin Users]
+      summary: Listado de usuarios del tenant
+      parameters:
+        - in: query
+          name: is_active
+          schema:
+            type: boolean
+        - in: query
+          name: role
+          schema:
+            type: string
+            enum: [office, logistics, admin]
+      responses:
+        "200":
+          description: Usuarios filtrados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsersListResponse'
+        "403":
+          description: Rol sin permisos de lectura
+    post:
+      tags: [Admin Users]
+      summary: Crear usuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreateRequest'
+      responses:
+        "201":
+          description: Usuario creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        "403":
+          description: Rol sin permisos de escritura
+        "409":
+          description: Conflicto de email
+
+  /admin/users/{user_id}:
+    patch:
+      tags: [Admin Users]
+      summary: Actualizar usuario
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdateRequest'
+      responses:
+        "200":
+          description: Usuario actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        "404":
+          description: Usuario no encontrado
+        "409":
+          description: Conflicto de email
+        "422":
+          description: Transición inválida
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1007,5 +1083,71 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Customer'
+        total:
+          type: integer
+
+    UserCreateRequest:
+      type: object
+      required: [email, full_name, role, password]
+      properties:
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [office, logistics, admin]
+        password:
+          type: string
+          minLength: 8
+        is_active:
+          type: boolean
+          default: true
+
+    UserUpdateRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [office, logistics, admin]
+        password:
+          type: string
+          minLength: 8
+        is_active:
+          type: boolean
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [office, logistics, admin]
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    UsersListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
         total:
           type: integer
