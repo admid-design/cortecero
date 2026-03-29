@@ -197,3 +197,32 @@ class ZoneOut(APIModel):
 class ZonesListResponse(BaseModel):
     items: list[ZoneOut]
     total: int
+
+
+class CustomerCreateRequest(BaseModel):
+    zone_id: uuid.UUID
+    name: str = Field(min_length=1, max_length=160)
+    priority: int = 0
+    cutoff_override_time: time | None = None
+
+
+class CustomerUpdateRequest(BaseModel):
+    zone_id: uuid.UUID | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    priority: int | None = None
+    cutoff_override_time: time | None = None
+
+
+class CustomerOut(APIModel):
+    id: uuid.UUID
+    zone_id: uuid.UUID
+    name: str
+    priority: int
+    cutoff_override_time: time | None
+    active: bool
+    created_at: datetime
+
+
+class CustomersListResponse(BaseModel):
+    items: list[CustomerOut]
+    total: int

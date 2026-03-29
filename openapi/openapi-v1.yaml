@@ -17,6 +17,7 @@ tags:
   - name: Dashboard
   - name: Audit
   - name: Admin Zones
+  - name: Admin Customers
 
 security:
   - bearerAuth: []
@@ -575,6 +576,104 @@ paths:
         "422":
           description: No se puede desactivar por estado/regla de negocio
 
+  /admin/customers:
+    get:
+      tags: [Admin Customers]
+      summary: Listado de clientes del tenant
+      parameters:
+        - in: query
+          name: active
+          schema:
+            type: boolean
+        - in: query
+          name: zone_id
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Clientes filtrados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomersListResponse'
+    post:
+      tags: [Admin Customers]
+      summary: Crear cliente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerCreateRequest'
+      responses:
+        "201":
+          description: Cliente creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        "403":
+          description: Rol sin permisos de escritura
+        "404":
+          description: Zona no encontrada
+        "409":
+          description: Conflicto de nombre
+
+  /admin/customers/{customer_id}:
+    patch:
+      tags: [Admin Customers]
+      summary: Actualizar cliente
+      parameters:
+        - in: path
+          name: customer_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerUpdateRequest'
+      responses:
+        "200":
+          description: Cliente actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        "404":
+          description: Cliente o zona no encontrados
+        "409":
+          description: Conflicto de nombre
+        "422":
+          description: Transición inválida
+
+  /admin/customers/{customer_id}/deactivate:
+    post:
+      tags: [Admin Customers]
+      summary: Desactivar cliente
+      parameters:
+        - in: path
+          name: customer_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Cliente desactivado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        "404":
+          description: Cliente no encontrado
+        "422":
+          description: No se puede desactivar por estado/regla de negocio
+
 components:
   securitySchemes:
     bearerAuth:
@@ -843,5 +942,70 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Zone'
+        total:
+          type: integer
+
+    CustomerCreateRequest:
+      type: object
+      required: [zone_id, name]
+      properties:
+        zone_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        priority:
+          type: integer
+          default: 0
+        cutoff_override_time:
+          type: string
+          format: time
+          nullable: true
+
+    CustomerUpdateRequest:
+      type: object
+      properties:
+        zone_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        priority:
+          type: integer
+        cutoff_override_time:
+          type: string
+          format: time
+          nullable: true
+
+    Customer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        zone_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        priority:
+          type: integer
+        cutoff_override_time:
+          type: string
+          format: time
+          nullable: true
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    CustomersListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Customer'
         total:
           type: integer
