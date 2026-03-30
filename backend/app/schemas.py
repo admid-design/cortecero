@@ -87,6 +87,24 @@ class OrdersListResponse(BaseModel):
     total: int
 
 
+PendingQueueReason = Literal["LATE_PENDING_EXCEPTION", "LOCKED_PLAN_EXCEPTION_REQUIRED", "EXCEPTION_REJECTED"]
+
+
+class PendingQueueItemOut(APIModel):
+    order_id: uuid.UUID
+    external_ref: str
+    status: str
+    reason: PendingQueueReason
+    service_date: date
+    zone_id: uuid.UUID
+    created_at: datetime
+
+
+class PendingQueueListResponse(BaseModel):
+    items: list[PendingQueueItemOut]
+    total: int
+
+
 class PlanCreateRequest(BaseModel):
     service_date: date
     zone_id: uuid.UUID

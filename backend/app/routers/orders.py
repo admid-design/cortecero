@@ -19,10 +19,14 @@ from app.errors import not_found
 from app.models import (
     Customer,
     EntityType,
+    ExceptionItem,
+    ExceptionStatus,
     Order,
     OrderIntakeType,
     OrderLine,
     OrderStatus,
+    Plan,
+    PlanStatus,
     SourceChannel,
     Tenant,
     UserRole,
@@ -35,10 +39,19 @@ from app.schemas import (
     OrderLineOut,
     OrderOut,
     OrdersListResponse,
+    PendingQueueListResponse,
+    PendingQueueReason,
+    PendingQueueItemOut,
 )
 
 
 router = APIRouter(tags=["Orders"])
+
+_PENDING_QUEUE_REASON_PRIORITY: dict[str, int] = {
+    "LOCKED_PLAN_EXCEPTION_REQUIRED": 0,
+    "LATE_PENDING_EXCEPTION": 1,
+    "EXCEPTION_REJECTED": 2,
+}
 
 
 def _serialize_order(order: Order, lines: list[OrderLine]) -> OrderOut:
@@ -296,6 +309,105 @@ def list_orders(
 
     serialized = [_serialize_order(order, lines_by_order.get(order.id, [])) for order in orders]
     return OrdersListResponse(items=serialized, total=len(serialized))
+
+
+@router.get("/orders/pending-queue", response_model=PendingQueueListResponse)
+def list_pending_queue(
+    service_date: date,
+    zone_id: uuid.UUID | None = None,
+    reason: PendingQueueReason | None = None,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.office, UserRole.logistics, UserRole.admin)),
+) -> PendingQueueListResponse:
+    candidate_statuses = (
+        OrderStatus.late_pending_exception,
+        OrderStatus.ready_for_planning,
+        OrderStatus.exception_rejected,
+    )
+
+    query = select(Order).where(
+        Order.tenant_id == current.tenant_id,
+        Order.service_date == service_date,
+        Order.status.in_(candidate_statuses),
+    )
+    if zone_id:
+        query = query.where(Order.zone_id == zone_id)
+
+    candidates = list(db.scalars(query))
+    if not candidates:
+        return PendingQueueListResponse(items=[], total=0)
+
+    candidate_ids = [order.id for order in candidates]
+    locked_plans_query = select(Plan.zone_id).where(
+        Plan.tenant_id == current.tenant_id,
+        Plan.service_date == service_date,
+        Plan.status == PlanStatus.locked,
+    )
+    if zone_id:
+        locked_plans_query = locked_plans_query.where(Plan.zone_id == zone_id)
+    locked_zone_ids = set(db.scalars(locked_plans_query))
+
+    approved_exception_order_ids = set(
+        db.scalars(
+            select(ExceptionItem.order_id).where(
+                ExceptionItem.tenant_id == current.tenant_id,
+                ExceptionItem.status == ExceptionStatus.approved,
+                ExceptionItem.order_id.in_(candidate_ids),
+            )
+        )
+    )
+    pending_exception_order_ids = set(
+        db.scalars(
+            select(ExceptionItem.order_id).where(
+                ExceptionItem.tenant_id == current.tenant_id,
+                ExceptionItem.status == ExceptionStatus.pending,
+                ExceptionItem.order_id.in_(candidate_ids),
+            )
+        )
+    )
+
+    items: list[PendingQueueItemOut] = []
+    for order in candidates:
+        queue_reason: PendingQueueReason | None = None
+        if (
+            order.status == OrderStatus.late_pending_exception
+            and (order.id in pending_exception_order_ids or order.id not in approved_exception_order_ids)
+        ):
+            queue_reason = "LATE_PENDING_EXCEPTION"
+        elif order.status == OrderStatus.exception_rejected:
+            queue_reason = "EXCEPTION_REJECTED"
+        elif (
+            order.status == OrderStatus.ready_for_planning
+            and order.zone_id in locked_zone_ids
+            and order.id not in approved_exception_order_ids
+        ):
+            queue_reason = "LOCKED_PLAN_EXCEPTION_REQUIRED"
+
+        if queue_reason is None:
+            continue
+        if reason and queue_reason != reason:
+            continue
+
+        items.append(
+            PendingQueueItemOut(
+                order_id=order.id,
+                external_ref=order.external_ref,
+                status=order.status.value,
+                reason=queue_reason,
+                service_date=order.service_date,
+                zone_id=order.zone_id,
+                created_at=order.created_at,
+            )
+        )
+
+    items.sort(
+        key=lambda item: (
+            _PENDING_QUEUE_REASON_PRIORITY[item.reason],
+            item.created_at,
+            str(item.order_id),
+        )
+    )
+    return PendingQueueListResponse(items=items, total=len(items))
 
 
 @router.get("/orders/{order_id}", response_model=OrderOut)

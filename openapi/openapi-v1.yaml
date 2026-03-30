@@ -155,6 +155,45 @@ paths:
                   total:
                     type: integer
 
+  /orders/pending-queue:
+    get:
+      tags: [Orders]
+      summary: Cola operativa de pendientes
+      description: >
+        Lista pedidos no elegibles para inclusión normal en plan para un service_date.
+        Es una lectura derivada sin side effects.
+      parameters:
+        - in: query
+          name: service_date
+          required: true
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: zone_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: reason
+          schema:
+            type: string
+            enum: [LATE_PENDING_EXCEPTION, LOCKED_PLAN_EXCEPTION_REQUIRED, EXCEPTION_REJECTED]
+      responses:
+        "200":
+          description: Pedidos pendientes operativos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PendingQueueItem'
+                  total:
+                    type: integer
+
   /orders/{order_id}:
     get:
       tags: [Orders]
@@ -897,6 +936,30 @@ components:
         volume_m3:
           type: number
           nullable: true
+
+    PendingQueueItem:
+      type: object
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        external_ref:
+          type: string
+        status:
+          type: string
+          enum: [ingested, late_pending_exception, ready_for_planning, planned, exception_rejected]
+        reason:
+          type: string
+          enum: [LATE_PENDING_EXCEPTION, LOCKED_PLAN_EXCEPTION_REQUIRED, EXCEPTION_REJECTED]
+        service_date:
+          type: string
+          format: date
+        zone_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
 
     Plan:
       type: object
