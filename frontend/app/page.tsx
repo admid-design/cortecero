@@ -28,6 +28,7 @@ import {
   login,
   rejectException,
   runAutoLock,
+  updateOrderWeight,
   updateAdminCustomer,
   updateAdminTenantSettings,
   updateAdminUser,
@@ -115,6 +116,8 @@ export default function HomePage() {
   const [includeOrderId, setIncludeOrderId] = useState("");
   const [autoLockRunning, setAutoLockRunning] = useState(false);
   const [autoLockResult, setAutoLockResult] = useState<AutoLockRunResponse | null>(null);
+  const [weightDrafts, setWeightDrafts] = useState<Record<string, string>>({});
+  const [savingWeightOrderId, setSavingWeightOrderId] = useState<string | null>(null);
   const [exceptionOrderId, setExceptionOrderId] = useState("");
   const [exceptionNote, setExceptionNote] = useState("Pedido fuera de corte");
 
@@ -163,6 +166,7 @@ export default function HomePage() {
 
   const isAuthenticated = useMemo(() => token.length > 0, [token]);
   const isAdmin = useMemo(() => role === "admin", [role]);
+  const canEditOrderWeight = useMemo(() => role === "logistics" || role === "admin", [role]);
   const canRunAutoLock = useMemo(() => role === "logistics" || role === "admin", [role]);
   const pendingQueueZoneOptions = useMemo(() => {
     const values = new Set<string>();
@@ -279,6 +283,8 @@ export default function HomePage() {
       setRole(nextRole);
       setViewMode("ops");
       setAutoLockResult(null);
+      setWeightDrafts({});
+      setSavingWeightOrderId(null);
       await refreshOps(auth.access_token);
       if (nextRole === "admin") {
         await refreshZones(auth.access_token);
@@ -312,6 +318,8 @@ export default function HomePage() {
     setViewMode("ops");
     setAutoLockResult(null);
     setAutoLockRunning(false);
+    setWeightDrafts({});
+    setSavingWeightOrderId(null);
   }
 
   async function onCreatePlan() {
@@ -347,6 +355,37 @@ export default function HomePage() {
       setError(formatError(e));
     } finally {
       setAutoLockRunning(false);
+    }
+  }
+
+  async function onSaveOrderWeight(order: Order) {
+    if (!token || !canEditOrderWeight) return;
+
+    const rawValue = (weightDrafts[order.id] ?? "").trim();
+    let nextWeight: number | null = null;
+    if (rawValue.length > 0) {
+      const parsed = Number(rawValue.replace(",", "."));
+      if (Number.isNaN(parsed)) {
+        setError("Peso inválido. Usa formato numérico (ejemplo: 12.5)");
+        return;
+      }
+      nextWeight = parsed;
+    }
+
+    setError("");
+    setSavingWeightOrderId(order.id);
+    try {
+      await updateOrderWeight(token, order.id, { total_weight_kg: nextWeight });
+      setWeightDrafts((current) => {
+        const next = { ...current };
+        delete next[order.id];
+        return next;
+      });
+      await refreshOps();
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setSavingWeightOrderId(null);
     }
   }
 
@@ -971,6 +1010,8 @@ export default function HomePage() {
                   <th>tipo</th>
                   <th>estado</th>
                   <th>late</th>
+                  <th>peso_kg</th>
+                  <th>editar_peso</th>
                   <th>cutoff</th>
                 </tr>
               </thead>
@@ -979,6 +1020,7 @@ export default function HomePage() {
                   const badgeClass =
                     order.status === "exception_rejected" ? "badge rejected" : order.is_late ? "badge late" : "badge ok";
                   const intakeMeta = intakeBadgeMeta(order.intake_type);
+                  const weightValue = weightDrafts[order.id] ?? (order.total_weight_kg == null ? "" : String(order.total_weight_kg));
                   return (
                     <tr key={order.id}>
                       <td>{order.external_ref}</td>
@@ -990,6 +1032,33 @@ export default function HomePage() {
                       <td>{order.status}</td>
                       <td>
                         <span className={badgeClass}>{order.is_late ? "late" : "on_time"}</span>
+                      </td>
+                      <td>{order.total_weight_kg == null ? "—" : order.total_weight_kg}</td>
+                      <td>
+                        {canEditOrderWeight ? (
+                          <div className="row" style={{ gap: 6 }}>
+                            <input
+                              placeholder="kg"
+                              value={weightValue}
+                              onChange={(e) =>
+                                setWeightDrafts((current) => ({
+                                  ...current,
+                                  [order.id]: e.target.value,
+                                }))
+                              }
+                              style={{ width: 96 }}
+                            />
+                            <button
+                              className="secondary"
+                              onClick={() => void onSaveOrderWeight(order)}
+                              disabled={savingWeightOrderId === order.id}
+                            >
+                              {savingWeightOrderId === order.id ? "Guardando..." : "Guardar"}
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ color: "#6b7280" }}>solo lectura</span>
+                        )}
                       </td>
                       <td>{new Date(order.effective_cutoff_at).toLocaleString("es-ES")}</td>
                     </tr>

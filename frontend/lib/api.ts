@@ -115,6 +115,7 @@ export type Order = {
   is_late: boolean;
   effective_cutoff_at: string;
   intake_type: "new_order" | "same_customer_addon" | string;
+  total_weight_kg: number | null;
 };
 
 export type PendingQueueReason =
@@ -303,6 +304,18 @@ export async function includeOrderInPlan(token: string, planId: string, orderId:
     token,
     method: "POST",
     body: { order_id: orderId },
+  });
+}
+
+export async function updateOrderWeight(
+  token: string,
+  orderId: string,
+  payload: { total_weight_kg: number | null },
+): Promise<Order> {
+  return request<Order>(`/orders/${orderId}/weight`, {
+    token,
+    method: "PATCH",
+    body: payload,
   });
 }
 
