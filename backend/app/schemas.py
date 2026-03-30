@@ -79,6 +79,16 @@ class OrderOut(APIModel):
     effective_cutoff_at: datetime
     source_channel: str
     intake_type: Literal["new_order", "same_customer_addon"]
+    operational_state: Literal["eligible", "restricted"]
+    operational_reason: (
+        Literal[
+            "CUSTOMER_DATE_BLOCKED",
+            "CUSTOMER_NOT_ACCEPTING_ORDERS",
+            "OUTSIDE_CUSTOMER_WINDOW",
+            "INSUFFICIENT_LEAD_TIME",
+        ]
+        | None
+    )
     total_weight_kg: Decimal | None
     lines: list[OrderLineOut]
 

@@ -1,5 +1,6 @@
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import delete, select
@@ -19,6 +20,9 @@ from app.errors import not_found
 from app.errors import unprocessable
 from app.models import (
     Customer,
+    CustomerOperationalException,
+    CustomerOperationalExceptionType,
+    CustomerOperationalProfile,
     EntityType,
     ExceptionItem,
     ExceptionStatus,
@@ -56,7 +60,77 @@ _PENDING_QUEUE_REASON_PRIORITY: dict[str, int] = {
 }
 
 
-def _serialize_order(order: Order, lines: list[OrderLine]) -> OrderOut:
+_OPERATIONAL_REASON_PRECEDENCE: tuple[str, ...] = (
+    "CUSTOMER_DATE_BLOCKED",
+    "CUSTOMER_NOT_ACCEPTING_ORDERS",
+    "OUTSIDE_CUSTOMER_WINDOW",
+    "INSUFFICIENT_LEAD_TIME",
+)
+_OPERATIONAL_REASON_PRIORITY: dict[str, int] = {
+    reason: idx for idx, reason in enumerate(_OPERATIONAL_REASON_PRECEDENCE)
+}
+
+
+def _resolve_zoneinfo(tenant_default_timezone: str, zone_timezone: str | None) -> ZoneInfo:
+    timezone_candidates = []
+    if zone_timezone:
+        timezone_candidates.append(zone_timezone)
+    if tenant_default_timezone:
+        timezone_candidates.append(tenant_default_timezone)
+    timezone_candidates.append("UTC")
+
+    for candidate in timezone_candidates:
+        try:
+            return ZoneInfo(candidate)
+        except ZoneInfoNotFoundError:
+            continue
+    return ZoneInfo("UTC")
+
+
+def _is_within_window(created_local_time: time, window_start: time | None, window_end: time | None) -> bool:
+    if window_start is None or window_end is None:
+        return True
+    if window_start == window_end:
+        return False
+    if window_start < window_end:
+        return window_start <= created_local_time <= window_end
+    return created_local_time >= window_start or created_local_time <= window_end
+
+
+def _resolve_operational_reason(
+    order: Order,
+    *,
+    profile: CustomerOperationalProfile | None,
+    has_date_restriction: bool,
+    tzinfo: ZoneInfo,
+) -> str | None:
+    reasons: list[str] = []
+
+    if has_date_restriction:
+        reasons.append("CUSTOMER_DATE_BLOCKED")
+
+    if profile is not None:
+        if not profile.accept_orders:
+            reasons.append("CUSTOMER_NOT_ACCEPTING_ORDERS")
+
+        created_local = ensure_aware_utc(order.created_at).astimezone(tzinfo)
+        if not _is_within_window(created_local.time(), profile.window_start, profile.window_end):
+            reasons.append("OUTSIDE_CUSTOMER_WINDOW")
+
+        if profile.min_lead_hours > 0:
+            service_start_local = datetime.combine(order.service_date, time.min, tzinfo=tzinfo)
+            min_lead_delta = timedelta(hours=profile.min_lead_hours)
+            if service_start_local - created_local < min_lead_delta:
+                reasons.append("INSUFFICIENT_LEAD_TIME")
+
+    if not reasons:
+        return None
+
+    reasons.sort(key=lambda item: _OPERATIONAL_REASON_PRIORITY[item])
+    return reasons[0]
+
+
+def _serialize_order(order: Order, lines: list[OrderLine], *, operational_reason: str | None) -> OrderOut:
     return OrderOut(
         id=order.id,
         customer_id=order.customer_id,
@@ -71,6 +145,8 @@ def _serialize_order(order: Order, lines: list[OrderLine]) -> OrderOut:
         effective_cutoff_at=order.effective_cutoff_at,
         source_channel=order.source_channel.value,
         intake_type=order.intake_type.value,
+        operational_state="restricted" if operational_reason else "eligible",
+        operational_reason=operational_reason,
         total_weight_kg=order.total_weight_kg,
         lines=[
             OrderLineOut(
@@ -83,6 +159,76 @@ def _serialize_order(order: Order, lines: list[OrderLine]) -> OrderOut:
             for line in lines
         ],
     )
+
+
+def _build_operational_reason_map(
+    db: Session,
+    *,
+    tenant: Tenant,
+    orders: list[Order],
+) -> dict[uuid.UUID, str | None]:
+    if not orders:
+        return {}
+
+    customer_ids = {order.customer_id for order in orders}
+    service_dates = {order.service_date for order in orders}
+    zone_ids = {order.zone_id for order in orders}
+
+    profiles = list(
+        db.scalars(
+            select(CustomerOperationalProfile).where(
+                CustomerOperationalProfile.tenant_id == tenant.id,
+                CustomerOperationalProfile.customer_id.in_(customer_ids),
+            )
+        )
+    )
+    profiles_by_customer: dict[uuid.UUID, CustomerOperationalProfile] = {
+        profile.customer_id: profile for profile in profiles
+    }
+
+    date_restriction_keys = {
+        (customer_id, restriction_date)
+        for customer_id, restriction_date in db.execute(
+            select(
+                CustomerOperationalException.customer_id,
+                CustomerOperationalException.date,
+            ).where(
+                CustomerOperationalException.tenant_id == tenant.id,
+                CustomerOperationalException.customer_id.in_(customer_ids),
+                CustomerOperationalException.date.in_(service_dates),
+                CustomerOperationalException.type.in_(
+                    [
+                        CustomerOperationalExceptionType.blocked,
+                        CustomerOperationalExceptionType.restricted,
+                    ]
+                ),
+            )
+        ).all()
+    }
+
+    zones = list(
+        db.scalars(
+            select(Zone).where(
+                Zone.tenant_id == tenant.id,
+                Zone.id.in_(zone_ids),
+            )
+        )
+    )
+    zones_by_id: dict[uuid.UUID, Zone] = {zone.id: zone for zone in zones}
+
+    reason_by_order_id: dict[uuid.UUID, str | None] = {}
+    for order in orders:
+        zone = zones_by_id.get(order.zone_id)
+        zone_tz = zone.timezone if zone else None
+        tzinfo = _resolve_zoneinfo(tenant.default_timezone, zone_tz)
+        reason_by_order_id[order.id] = _resolve_operational_reason(
+            order,
+            profile=profiles_by_customer.get(order.customer_id),
+            has_date_restriction=(order.customer_id, order.service_date) in date_restriction_keys,
+            tzinfo=tzinfo,
+        )
+
+    return reason_by_order_id
 
 
 def _resolve_intake_type(db: Session, tenant_id: uuid.UUID, customer_id: uuid.UUID, service_date: date) -> OrderIntakeType:
@@ -284,6 +430,10 @@ def list_orders(
     db: Session = Depends(get_db),
     current: CurrentUser = Depends(require_roles(UserRole.office, UserRole.logistics, UserRole.admin)),
 ) -> OrdersListResponse:
+    tenant = db.scalar(select(Tenant).where(Tenant.id == current.tenant_id))
+    if not tenant:
+        raise not_found("TENANT_NOT_FOUND", "Tenant no encontrado")
+
     query = select(Order).where(Order.tenant_id == current.tenant_id)
 
     if service_date:
@@ -310,7 +460,15 @@ def list_orders(
         for line in lines:
             lines_by_order.setdefault(line.order_id, []).append(line)
 
-    serialized = [_serialize_order(order, lines_by_order.get(order.id, [])) for order in orders]
+    operational_reason_by_order = _build_operational_reason_map(db, tenant=tenant, orders=orders)
+    serialized = [
+        _serialize_order(
+            order,
+            lines_by_order.get(order.id, []),
+            operational_reason=operational_reason_by_order.get(order.id),
+        )
+        for order in orders
+    ]
     return OrdersListResponse(items=serialized, total=len(serialized))
 
 
@@ -419,12 +577,17 @@ def get_order(
     db: Session = Depends(get_db),
     current: CurrentUser = Depends(require_roles(UserRole.office, UserRole.logistics, UserRole.admin)),
 ) -> OrderOut:
+    tenant = db.scalar(select(Tenant).where(Tenant.id == current.tenant_id))
+    if not tenant:
+        raise not_found("TENANT_NOT_FOUND", "Tenant no encontrado")
+
     order = db.scalar(select(Order).where(Order.id == order_id, Order.tenant_id == current.tenant_id))
     if not order:
         raise not_found("ORDER_NOT_FOUND", "Pedido no encontrado")
 
     lines = list(db.scalars(select(OrderLine).where(OrderLine.order_id == order.id, OrderLine.tenant_id == current.tenant_id)))
-    return _serialize_order(order, lines)
+    operational_reason_by_order = _build_operational_reason_map(db, tenant=tenant, orders=[order])
+    return _serialize_order(order, lines, operational_reason=operational_reason_by_order.get(order.id))
 
 
 @router.patch("/orders/{order_id}/weight", response_model=OrderOut)
@@ -434,6 +597,10 @@ def update_order_weight(
     db: Session = Depends(get_db),
     current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
 ) -> OrderOut:
+    tenant = db.scalar(select(Tenant).where(Tenant.id == current.tenant_id))
+    if not tenant:
+        raise not_found("TENANT_NOT_FOUND", "Tenant no encontrado")
+
     order = db.scalar(select(Order).where(Order.id == order_id, Order.tenant_id == current.tenant_id))
     if not order:
         raise not_found("ORDER_NOT_FOUND", "Pedido no encontrado")
@@ -461,4 +628,5 @@ def update_order_weight(
     db.commit()
     db.refresh(order)
     lines = list(db.scalars(select(OrderLine).where(OrderLine.order_id == order.id, OrderLine.tenant_id == current.tenant_id)))
-    return _serialize_order(order, lines)
+    operational_reason_by_order = _build_operational_reason_map(db, tenant=tenant, orders=[order])
+    return _serialize_order(order, lines, operational_reason=operational_reason_by_order.get(order.id))

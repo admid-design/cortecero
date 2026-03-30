@@ -1192,6 +1192,17 @@ components:
         intake_type:
           type: string
           enum: [new_order, same_customer_addon]
+        operational_state:
+          type: string
+          enum: [eligible, restricted]
+        operational_reason:
+          type: string
+          nullable: true
+          enum:
+            - CUSTOMER_DATE_BLOCKED
+            - CUSTOMER_NOT_ACCEPTING_ORDERS
+            - OUTSIDE_CUSTOMER_WINDOW
+            - INSUFFICIENT_LEAD_TIME
         total_weight_kg:
           type: number
           nullable: true
