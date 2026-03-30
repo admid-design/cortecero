@@ -15,6 +15,7 @@ import {
   deactivateAdminZone,
   getDailySummary,
   getPlanCapacityAlerts,
+  getAdminCustomerOperationalProfile,
   getSourceMetrics,
   getAdminTenantSettings,
   includeOrderInPlan,
@@ -32,12 +33,14 @@ import {
   updatePlanVehicle,
   updateOrderWeight,
   updateAdminCustomer,
+  putAdminCustomerOperationalProfile,
   updateAdminTenantSettings,
   updateAdminUser,
   updateAdminZone,
   type AutoLockRunResponse,
   type CapacityAlertLevel,
   type Customer,
+  type CustomerOperationalProfile,
   type DashboardSummary,
   type DashboardSourceMetricsItem,
   type ExceptionItem,
@@ -152,6 +155,15 @@ export default function HomePage() {
   const [editCustomerZoneId, setEditCustomerZoneId] = useState("");
   const [editCustomerPriority, setEditCustomerPriority] = useState("0");
   const [editCustomerCutoff, setEditCustomerCutoff] = useState("");
+  const [operationalProfile, setOperationalProfile] = useState<CustomerOperationalProfile | null>(null);
+  const [operationalProfileLoading, setOperationalProfileLoading] = useState(false);
+  const [operationalProfileSaving, setOperationalProfileSaving] = useState(false);
+  const [opAcceptOrders, setOpAcceptOrders] = useState(true);
+  const [opWindowStart, setOpWindowStart] = useState("");
+  const [opWindowEnd, setOpWindowEnd] = useState("");
+  const [opMinLeadHours, setOpMinLeadHours] = useState("0");
+  const [opConsolidateByDefault, setOpConsolidateByDefault] = useState(false);
+  const [opOpsNote, setOpOpsNote] = useState("");
 
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [userFilter, setUserFilter] = useState<"all" | "active" | "inactive">("all");
@@ -255,6 +267,40 @@ export default function HomePage() {
     }
   }, [customerFilter, customerZoneFilter, token]);
 
+  const fillOperationalProfileForm = useCallback((profile: CustomerOperationalProfile) => {
+    setOperationalProfile(profile);
+    setOpAcceptOrders(profile.accept_orders);
+    setOpWindowStart(profile.window_start ?? "");
+    setOpWindowEnd(profile.window_end ?? "");
+    setOpMinLeadHours(String(profile.min_lead_hours));
+    setOpConsolidateByDefault(profile.consolidate_by_default);
+    setOpOpsNote(profile.ops_note ?? "");
+  }, []);
+
+  const resetOperationalProfileForm = useCallback(() => {
+    setOperationalProfile(null);
+    setOpAcceptOrders(true);
+    setOpWindowStart("");
+    setOpWindowEnd("");
+    setOpMinLeadHours("0");
+    setOpConsolidateByDefault(false);
+    setOpOpsNote("");
+  }, []);
+
+  const loadCustomerOperationalProfile = useCallback(async (customerId: string, authToken?: string) => {
+    const activeToken = authToken ?? token;
+    if (!activeToken || !customerId) return;
+    setOperationalProfileLoading(true);
+    try {
+      const profile = await getAdminCustomerOperationalProfile(activeToken, customerId);
+      fillOperationalProfileForm(profile);
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setOperationalProfileLoading(false);
+    }
+  }, [fillOperationalProfileForm, token]);
+
   const refreshUsers = useCallback(async (authToken?: string) => {
     const activeToken = authToken ?? token;
     if (!activeToken) return;
@@ -301,6 +347,7 @@ export default function HomePage() {
       setSavingWeightOrderId(null);
       setVehicleDrafts({});
       setSavingVehiclePlanId(null);
+      resetOperationalProfileForm();
       await refreshOps(auth.access_token);
       if (nextRole === "admin") {
         await refreshZones(auth.access_token);
@@ -312,6 +359,7 @@ export default function HomePage() {
         setCustomers([]);
         setUsers([]);
         setTenantSettings(null);
+        resetOperationalProfileForm();
       }
     } catch (e) {
       setError(formatError(e));
@@ -332,6 +380,7 @@ export default function HomePage() {
     setCustomers([]);
     setUsers([]);
     setTenantSettings(null);
+    resetOperationalProfileForm();
     setViewMode("ops");
     setAutoLockResult(null);
     setAutoLockRunning(false);
@@ -573,10 +622,12 @@ export default function HomePage() {
     setEditCustomerZoneId(customer.zone_id);
     setEditCustomerPriority(String(customer.priority));
     setEditCustomerCutoff(customer.cutoff_override_time ?? "");
+    void loadCustomerOperationalProfile(customer.id);
   }
 
   function cancelEditCustomer() {
     setEditingCustomerId("");
+    resetOperationalProfileForm();
   }
 
   async function onSaveCustomerEdit() {
@@ -596,7 +647,7 @@ export default function HomePage() {
         priority: Number.parseInt(editCustomerPriority, 10) || 0,
         cutoff_override_time: editCustomerCutoff.trim() || null,
       });
-      setEditingCustomerId("");
+      await loadCustomerOperationalProfile(editingCustomerId);
       await refreshCustomers();
     } catch (e) {
       setError(formatError(e));
@@ -611,10 +662,36 @@ export default function HomePage() {
       await deactivateAdminCustomer(token, customerId);
       if (editingCustomerId === customerId) {
         setEditingCustomerId("");
+        resetOperationalProfileForm();
       }
       await refreshCustomers();
     } catch (e) {
       setError(formatError(e));
+    }
+  }
+
+  async function onSaveOperationalProfile() {
+    if (!token || !isAdmin || !editingCustomerId) return;
+    const parsedMinLead = Number.parseInt(opMinLeadHours, 10);
+    if (Number.isNaN(parsedMinLead)) {
+      setError("min_lead_hours debe ser un entero");
+      return;
+    }
+    setOperationalProfileSaving(true);
+    try {
+      const updated = await putAdminCustomerOperationalProfile(token, editingCustomerId, {
+        accept_orders: opAcceptOrders,
+        window_start: opWindowStart.trim() || null,
+        window_end: opWindowEnd.trim() || null,
+        min_lead_hours: parsedMinLead,
+        consolidate_by_default: opConsolidateByDefault,
+        ops_note: opOpsNote.trim() || null,
+      });
+      fillOperationalProfileForm(updated);
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setOperationalProfileSaving(false);
     }
   }
 
@@ -1494,6 +1571,83 @@ export default function HomePage() {
                             <button onClick={onSaveCustomerEdit}>Guardar</button>
                             <button className="secondary" onClick={cancelEditCustomer}>
                               Cancelar
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="card grid">
+                      <h2>Perfil Operativo</h2>
+                      {!editingCustomerId && (
+                        <p style={{ margin: 0, color: "#6b7280" }}>
+                          Selecciona un cliente (Editar) para ver y actualizar su perfil operativo.
+                        </p>
+                      )}
+                      {editingCustomerId && (
+                        <>
+                          {operationalProfileLoading && <p style={{ margin: 0, color: "#6b7280" }}>Cargando perfil...</p>}
+                          {operationalProfile && (
+                            <div className="row" style={{ gap: 6 }}>
+                              <span className="pill">window_mode: {operationalProfile.window_mode}</span>
+                              <span className="pill">tz: {operationalProfile.evaluation_timezone}</span>
+                              <span className="pill">customized: {operationalProfile.is_customized ? "true" : "false"}</span>
+                            </div>
+                          )}
+
+                          <label className="row" style={{ gap: 6 }}>
+                            <input
+                              type="checkbox"
+                              checked={opAcceptOrders}
+                              onChange={(e) => setOpAcceptOrders(e.target.checked)}
+                            />
+                            accept_orders
+                          </label>
+
+                          <input
+                            placeholder="window_start HH:MM:SS (opcional)"
+                            value={opWindowStart}
+                            onChange={(e) => setOpWindowStart(e.target.value)}
+                          />
+                          <input
+                            placeholder="window_end HH:MM:SS (opcional)"
+                            value={opWindowEnd}
+                            onChange={(e) => setOpWindowEnd(e.target.value)}
+                          />
+                          <input
+                            placeholder="min_lead_hours (entero >= 0)"
+                            value={opMinLeadHours}
+                            onChange={(e) => setOpMinLeadHours(e.target.value)}
+                          />
+
+                          <label className="row" style={{ gap: 6 }}>
+                            <input
+                              type="checkbox"
+                              checked={opConsolidateByDefault}
+                              onChange={(e) => setOpConsolidateByDefault(e.target.checked)}
+                            />
+                            consolidate_by_default
+                          </label>
+
+                          <textarea
+                            placeholder="ops_note (opcional)"
+                            value={opOpsNote}
+                            onChange={(e) => setOpOpsNote(e.target.value)}
+                            rows={4}
+                          />
+
+                          <div className="row">
+                            <button onClick={onSaveOperationalProfile} disabled={operationalProfileSaving}>
+                              {operationalProfileSaving ? "Guardando..." : "Guardar perfil"}
+                            </button>
+                            <button
+                              className="secondary"
+                              onClick={() => {
+                                void loadCustomerOperationalProfile(editingCustomerId);
+                              }}
+                              disabled={operationalProfileLoading || operationalProfileSaving}
+                            >
+                              Recargar perfil
                             </button>
                           </div>
                         </>

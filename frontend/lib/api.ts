@@ -6,7 +6,7 @@ type QueryValue = string | number | boolean | null | undefined;
 
 type RequestOptions = {
   token?: string;
-  method?: "GET" | "POST" | "PATCH";
+  method?: "GET" | "POST" | "PATCH" | "PUT";
   body?: unknown;
   headers?: Record<string, string>;
 };
@@ -247,6 +247,30 @@ export type CustomerCreateRequest = {
 
 export type CustomerUpdateRequest = Partial<CustomerCreateRequest>;
 
+export type CustomerOperationalProfileWindowMode = "none" | "same_day" | "cross_midnight";
+
+export type CustomerOperationalProfile = {
+  customer_id: string;
+  accept_orders: boolean;
+  window_start: string | null;
+  window_end: string | null;
+  min_lead_hours: number;
+  consolidate_by_default: boolean;
+  ops_note: string | null;
+  evaluation_timezone: string;
+  window_mode: CustomerOperationalProfileWindowMode;
+  is_customized: boolean;
+};
+
+export type CustomerOperationalProfilePutRequest = {
+  accept_orders: boolean;
+  window_start: string | null;
+  window_end: string | null;
+  min_lead_hours: number;
+  consolidate_by_default: boolean;
+  ops_note: string | null;
+};
+
 export type AdminUser = {
   id: string;
   email: string;
@@ -428,6 +452,25 @@ export async function updateAdminCustomer(
 
 export async function deactivateAdminCustomer(token: string, customerId: string): Promise<Customer> {
   return request<Customer>(`/admin/customers/${customerId}/deactivate`, { token, method: "POST" });
+}
+
+export async function getAdminCustomerOperationalProfile(
+  token: string,
+  customerId: string,
+): Promise<CustomerOperationalProfile> {
+  return request<CustomerOperationalProfile>(`/admin/customers/${customerId}/operational-profile`, { token });
+}
+
+export async function putAdminCustomerOperationalProfile(
+  token: string,
+  customerId: string,
+  payload: CustomerOperationalProfilePutRequest,
+): Promise<CustomerOperationalProfile> {
+  return request<CustomerOperationalProfile>(`/admin/customers/${customerId}/operational-profile`, {
+    token,
+    method: "PUT",
+    body: payload,
+  });
 }
 
 export async function listAdminUsers(
