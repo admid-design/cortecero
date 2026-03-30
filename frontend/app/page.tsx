@@ -14,6 +14,7 @@ import {
   deactivateAdminCustomer,
   deactivateAdminZone,
   getDailySummary,
+  getAdminTenantSettings,
   includeOrderInPlan,
   listAdminCustomers,
   listAdminUsers,
@@ -25,6 +26,7 @@ import {
   login,
   rejectException,
   updateAdminCustomer,
+  updateAdminTenantSettings,
   updateAdminUser,
   updateAdminZone,
   type Customer,
@@ -32,6 +34,7 @@ import {
   type ExceptionItem,
   type Order,
   type Plan,
+  type TenantSettings,
   type UserRole,
   type Zone,
 } from "../lib/api";
@@ -127,6 +130,11 @@ export default function HomePage() {
   const [editUserPassword, setEditUserPassword] = useState("");
   const [editUserActive, setEditUserActive] = useState(true);
 
+  const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(null);
+  const [tenantCutoff, setTenantCutoff] = useState("10:00:00");
+  const [tenantTimezone, setTenantTimezone] = useState("Europe/Madrid");
+  const [tenantAutoLock, setTenantAutoLock] = useState(false);
+
   const isAuthenticated = useMemo(() => token.length > 0, [token]);
   const isAdmin = useMemo(() => role === "admin", [role]);
 
@@ -191,6 +199,21 @@ export default function HomePage() {
     }
   }, [token, userFilter, userRoleFilter]);
 
+  const refreshTenantSettings = useCallback(async (authToken?: string) => {
+    const activeToken = authToken ?? token;
+    if (!activeToken) return;
+    setError("");
+    try {
+      const data = await getAdminTenantSettings(activeToken);
+      setTenantSettings(data);
+      setTenantCutoff(data.default_cutoff_time);
+      setTenantTimezone(data.default_timezone);
+      setTenantAutoLock(data.auto_lock_enabled);
+    } catch (e) {
+      setError(formatError(e));
+    }
+  }, [token]);
+
   async function onLogin() {
     setError("");
     try {
@@ -208,10 +231,12 @@ export default function HomePage() {
         await refreshZones(auth.access_token);
         await refreshCustomers(auth.access_token);
         await refreshUsers(auth.access_token);
+        await refreshTenantSettings(auth.access_token);
       } else {
         setZones([]);
         setCustomers([]);
         setUsers([]);
+        setTenantSettings(null);
       }
     } catch (e) {
       setError(formatError(e));
@@ -228,6 +253,7 @@ export default function HomePage() {
     setZones([]);
     setCustomers([]);
     setUsers([]);
+    setTenantSettings(null);
     setViewMode("ops");
   }
 
@@ -521,6 +547,31 @@ export default function HomePage() {
     }
   }
 
+  async function onSaveTenantSettings() {
+    if (!token || !isAdmin) return;
+    if (!tenantCutoff.trim()) {
+      setError("default_cutoff_time es obligatorio");
+      return;
+    }
+    if (!tenantTimezone.trim()) {
+      setError("default_timezone es obligatorio");
+      return;
+    }
+    try {
+      const updated = await updateAdminTenantSettings(token, {
+        default_cutoff_time: tenantCutoff.trim(),
+        default_timezone: tenantTimezone.trim(),
+        auto_lock_enabled: tenantAutoLock,
+      });
+      setTenantSettings(updated);
+      setTenantCutoff(updated.default_cutoff_time);
+      setTenantTimezone(updated.default_timezone);
+      setTenantAutoLock(updated.auto_lock_enabled);
+    } catch (e) {
+      setError(formatError(e));
+    }
+  }
+
   return (
     <main className="grid" style={{ gap: 16 }}>
       <div className="card topbar">
@@ -774,7 +825,10 @@ export default function HomePage() {
                 </button>
                 <button
                   className={adminSection === "tenant" ? "tab active" : "tab muted"}
-                  onClick={() => setAdminSection("tenant")}
+                  onClick={() => {
+                    setAdminSection("tenant");
+                    void refreshTenantSettings();
+                  }}
                 >
                   Tenant
                 </button>
@@ -1122,11 +1176,47 @@ export default function HomePage() {
               )}
 
               {adminSection === "tenant" && (
-                <div className="card">
-                  <h2>Próximo bloque</h2>
-                  <p style={{ margin: 0, color: "#6b7280" }}>
-                    Esta sección se habilitará en el siguiente ticket (`tenant-settings` UI).
-                  </p>
+                <div className="grid cols-2">
+                  <div className="card grid">
+                    <h2>Tenant Settings</h2>
+                    <div>
+                      <strong>Tenant:</strong> {tenantSettings?.name ?? "-"}
+                    </div>
+                    <div>
+                      <strong>Slug:</strong> {tenantSettings?.slug ?? "-"}
+                    </div>
+                    <input
+                      placeholder="default_cutoff_time HH:MM:SS"
+                      value={tenantCutoff}
+                      onChange={(e) => setTenantCutoff(e.target.value)}
+                    />
+                    <input
+                      placeholder="default_timezone"
+                      value={tenantTimezone}
+                      onChange={(e) => setTenantTimezone(e.target.value)}
+                    />
+                    <label className="row" style={{ gap: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={tenantAutoLock}
+                        onChange={(e) => setTenantAutoLock(e.target.checked)}
+                      />
+                      auto_lock_enabled
+                    </label>
+                    <div className="row">
+                      <button onClick={onSaveTenantSettings}>Guardar</button>
+                      <button className="secondary" onClick={() => refreshTenantSettings()}>
+                        Recargar
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="card">
+                    <h2>Contexto</h2>
+                    <p style={{ margin: 0, color: "#6b7280" }}>
+                      Cambios aquí impactan la configuración base del tenant para reglas de cut-off y lock automático.
+                    </p>
+                  </div>
                 </div>
               )}
             </>

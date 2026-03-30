@@ -192,6 +192,21 @@ export type AdminUserCreateRequest = {
 
 export type AdminUserUpdateRequest = Partial<AdminUserCreateRequest>;
 
+export type TenantSettings = {
+  id: string;
+  name: string;
+  slug: string;
+  default_cutoff_time: string;
+  default_timezone: string;
+  auto_lock_enabled: boolean;
+};
+
+export type TenantSettingsUpdateRequest = Partial<{
+  default_cutoff_time: string;
+  default_timezone: string;
+  auto_lock_enabled: boolean;
+}>;
+
 export async function login(payload: LoginRequest): Promise<TokenResponse> {
   return request<TokenResponse>("/auth/login", {
     method: "POST",
@@ -309,4 +324,15 @@ export async function updateAdminUser(
   payload: AdminUserUpdateRequest,
 ): Promise<AdminUser> {
   return request<AdminUser>(`/admin/users/${userId}`, { token, method: "PATCH", body: payload });
+}
+
+export async function getAdminTenantSettings(token: string): Promise<TenantSettings> {
+  return request<TenantSettings>("/admin/tenant-settings", { token });
+}
+
+export async function updateAdminTenantSettings(
+  token: string,
+  payload: TenantSettingsUpdateRequest,
+): Promise<TenantSettings> {
+  return request<TenantSettings>("/admin/tenant-settings", { token, method: "PATCH", body: payload });
 }
