@@ -627,7 +627,7 @@ export default function HomePage() {
         <>
           <div className="card row">
             <input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} />
-            <button className="secondary" onClick={refreshOps}>
+            <button className="secondary" onClick={() => void refreshOps()}>
               Refrescar operación
             </button>
           </div>
@@ -756,6 +756,7 @@ export default function HomePage() {
                   <th>ref</th>
                   <th>cliente</th>
                   <th>zona</th>
+                  <th>tipo</th>
                   <th>estado</th>
                   <th>late</th>
                   <th>cutoff</th>
@@ -765,11 +766,17 @@ export default function HomePage() {
                 {orders.map((order) => {
                   const badgeClass =
                     order.status === "exception_rejected" ? "badge rejected" : order.is_late ? "badge late" : "badge ok";
+                  const intakeBadgeClass =
+                    order.intake_type === "same_customer_addon" ? "badge intake-addon" : "badge intake-new";
+                  const intakeLabel = order.intake_type === "same_customer_addon" ? "añadido" : "nuevo";
                   return (
                     <tr key={order.id}>
                       <td>{order.external_ref}</td>
                       <td>{shortId(order.customer_id)}</td>
                       <td>{shortId(order.zone_id)}</td>
+                      <td>
+                        <span className={intakeBadgeClass}>{intakeLabel}</span>
+                      </td>
                       <td>{order.status}</td>
                       <td>
                         <span className={badgeClass}>{order.is_late ? "late" : "on_time"}</span>
@@ -878,7 +885,7 @@ export default function HomePage() {
                         <option value="active">Activas</option>
                         <option value="inactive">Inactivas</option>
                       </select>
-                      <button className="secondary" onClick={refreshZones}>
+                      <button className="secondary" onClick={() => void refreshZones()}>
                         Refrescar
                       </button>
                     </div>
@@ -944,7 +951,7 @@ export default function HomePage() {
                           </option>
                         ))}
                       </select>
-                      <button className="secondary" onClick={refreshCustomers}>
+                      <button className="secondary" onClick={() => void refreshCustomers()}>
                         Refrescar
                       </button>
                     </div>
@@ -1066,7 +1073,7 @@ export default function HomePage() {
                         <option value="logistics">logistics</option>
                         <option value="admin">admin</option>
                       </select>
-                      <button className="secondary" onClick={refreshUsers}>
+                      <button className="secondary" onClick={() => void refreshUsers()}>
                         Refrescar
                       </button>
                     </div>

@@ -199,6 +199,16 @@ th {
   color: #991b1b;
 }
 
+.badge.intake-new {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.badge.intake-addon {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
 @media (max-width: 980px) {
   .grid.cols-2 {
     grid-template-columns: 1fr;
