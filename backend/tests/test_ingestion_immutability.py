@@ -55,3 +55,4 @@ def test_reingestion_keeps_created_at_and_lateness(client):
     assert after["created_at"] == before["created_at"]
     assert after["is_late"] == before["is_late"]
     assert after["effective_cutoff_at"] == before["effective_cutoff_at"]
+    assert after["intake_type"] == before["intake_type"]

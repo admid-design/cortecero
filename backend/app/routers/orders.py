@@ -20,6 +20,7 @@ from app.models import (
     Customer,
     EntityType,
     Order,
+    OrderIntakeType,
     OrderLine,
     OrderStatus,
     SourceChannel,
@@ -54,6 +55,7 @@ def _serialize_order(order: Order, lines: list[OrderLine]) -> OrderOut:
         lateness_reason=order.lateness_reason,
         effective_cutoff_at=order.effective_cutoff_at,
         source_channel=order.source_channel.value,
+        intake_type=order.intake_type.value,
         lines=[
             OrderLineOut(
                 id=line.id,
@@ -65,6 +67,21 @@ def _serialize_order(order: Order, lines: list[OrderLine]) -> OrderOut:
             for line in lines
         ],
     )
+
+
+def _resolve_intake_type(db: Session, tenant_id: uuid.UUID, customer_id: uuid.UUID, service_date: date) -> OrderIntakeType:
+    has_existing = db.scalar(
+        select(Order.id)
+        .where(
+            Order.tenant_id == tenant_id,
+            Order.customer_id == customer_id,
+            Order.service_date == service_date,
+        )
+        .limit(1)
+    )
+    if has_existing:
+        return OrderIntakeType.same_customer_addon
+    return OrderIntakeType.new_order
 
 
 @router.post("/ingestion/orders", response_model=OrderIngestionResult)
@@ -135,6 +152,8 @@ def ingest_orders(
                     "external_ref": existing.external_ref,
                     "created_at_immutable": True,
                     "lateness_immutable": True,
+                    "intake_type_immutable": True,
+                    "intake_type": existing.intake_type.value,
                 },
             )
             updated += 1
@@ -180,6 +199,7 @@ def ingest_orders(
         effective_cutoff = build_effective_cutoff_at(in_order.service_date, cutoff_time, timezone)
         created_at = ensure_aware_utc(in_order.created_at)
         is_late, late_reason = compute_lateness(created_at, effective_cutoff)
+        intake_type = _resolve_intake_type(db, current.tenant_id, customer.id, in_order.service_date)
 
         order = Order(
             tenant_id=current.tenant_id,
@@ -194,6 +214,7 @@ def ingest_orders(
             lateness_reason=late_reason,
             effective_cutoff_at=effective_cutoff,
             source_channel=SourceChannel(in_order.source_channel),
+            intake_type=intake_type,
             ingested_at=now,
             updated_at=now,
         )
@@ -220,7 +241,7 @@ def ingest_orders(
             entity_id=order.id,
             action="order.ingestion_created",
             actor_id=current.id,
-            metadata={"external_ref": order.external_ref},
+            metadata={"external_ref": order.external_ref, "intake_type": order.intake_type.value},
         )
 
         created += 1

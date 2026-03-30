@@ -873,6 +873,9 @@ components:
         source_channel:
           type: string
           enum: [sales, office, direct_customer, hotel_direct, other]
+        intake_type:
+          type: string
+          enum: [new_order, same_customer_addon]
         lines:
           type: array
           items:

@@ -45,6 +45,11 @@ class OrderStatus(str, enum.Enum):
     exception_rejected = "exception_rejected"
 
 
+class OrderIntakeType(str, enum.Enum):
+    new_order = "new_order"
+    same_customer_addon = "same_customer_addon"
+
+
 class ExceptionType(str, enum.Enum):
     late_order = "late_order"
 
@@ -146,6 +151,11 @@ class Order(Base):
     lateness_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     effective_cutoff_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     source_channel: Mapped[SourceChannel] = mapped_column(Enum(SourceChannel, name="source_channel"), nullable=False)
+    intake_type: Mapped[OrderIntakeType] = mapped_column(
+        Enum(OrderIntakeType, name="order_intake_type"),
+        nullable=False,
+        default=OrderIntakeType.new_order,
+    )
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

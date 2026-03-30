@@ -78,6 +78,7 @@ class OrderOut(APIModel):
     lateness_reason: str | None
     effective_cutoff_at: datetime
     source_channel: str
+    intake_type: Literal["new_order", "same_customer_addon"]
     lines: list[OrderLineOut]
 
 
