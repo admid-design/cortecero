@@ -6,7 +6,7 @@ type QueryValue = string | number | boolean | null | undefined;
 
 type RequestOptions = {
   token?: string;
-  method?: "GET" | "POST" | "PATCH" | "PUT";
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
   headers?: Record<string, string>;
 };
@@ -271,6 +271,23 @@ export type CustomerOperationalProfilePutRequest = {
   ops_note: string | null;
 };
 
+export type CustomerOperationalExceptionType = "blocked" | "restricted";
+
+export type CustomerOperationalException = {
+  id: string;
+  customer_id: string;
+  date: string;
+  type: CustomerOperationalExceptionType;
+  note: string;
+  created_at: string;
+};
+
+export type CustomerOperationalExceptionCreateRequest = {
+  date: string;
+  type: CustomerOperationalExceptionType;
+  note: string;
+};
+
 export type AdminUser = {
   id: string;
   email: string;
@@ -471,6 +488,45 @@ export async function putAdminCustomerOperationalProfile(
     method: "PUT",
     body: payload,
   });
+}
+
+export async function listAdminCustomerOperationalExceptions(
+  token: string,
+  customerId: string,
+): Promise<ListResponse<CustomerOperationalException>> {
+  return request<ListResponse<CustomerOperationalException>>(
+    `/admin/customers/${customerId}/operational-exceptions`,
+    { token },
+  );
+}
+
+export async function createAdminCustomerOperationalException(
+  token: string,
+  customerId: string,
+  payload: CustomerOperationalExceptionCreateRequest,
+): Promise<CustomerOperationalException> {
+  return request<CustomerOperationalException>(
+    `/admin/customers/${customerId}/operational-exceptions`,
+    {
+      token,
+      method: "POST",
+      body: payload,
+    },
+  );
+}
+
+export async function deleteAdminCustomerOperationalException(
+  token: string,
+  customerId: string,
+  exceptionId: string,
+): Promise<CustomerOperationalException> {
+  return request<CustomerOperationalException>(
+    `/admin/customers/${customerId}/operational-exceptions/${exceptionId}`,
+    {
+      token,
+      method: "DELETE",
+    },
+  );
 }
 
 export async function listAdminUsers(

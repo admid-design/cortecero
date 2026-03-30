@@ -7,11 +7,13 @@ import {
   APIError,
   approveException,
   createAdminCustomer,
+  createAdminCustomerOperationalException,
   createAdminUser,
   createAdminZone,
   createException,
   createPlan,
   deactivateAdminCustomer,
+  deleteAdminCustomerOperationalException,
   deactivateAdminZone,
   getDailySummary,
   getPlanCapacityAlerts,
@@ -21,6 +23,7 @@ import {
   includeOrderInPlan,
   listPendingQueue,
   listAdminCustomers,
+  listAdminCustomerOperationalExceptions,
   listAdminUsers,
   listAdminZones,
   listExceptions,
@@ -40,6 +43,8 @@ import {
   type AutoLockRunResponse,
   type CapacityAlertLevel,
   type Customer,
+  type CustomerOperationalException,
+  type CustomerOperationalExceptionType,
   type CustomerOperationalProfile,
   type DashboardSummary,
   type DashboardSourceMetricsItem,
@@ -164,6 +169,13 @@ export default function HomePage() {
   const [opMinLeadHours, setOpMinLeadHours] = useState("0");
   const [opConsolidateByDefault, setOpConsolidateByDefault] = useState(false);
   const [opOpsNote, setOpOpsNote] = useState("");
+  const [operationalExceptions, setOperationalExceptions] = useState<CustomerOperationalException[]>([]);
+  const [operationalExceptionsLoading, setOperationalExceptionsLoading] = useState(false);
+  const [operationalExceptionCreating, setOperationalExceptionCreating] = useState(false);
+  const [operationalExceptionDeletingId, setOperationalExceptionDeletingId] = useState<string | null>(null);
+  const [opExceptionDate, setOpExceptionDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [opExceptionType, setOpExceptionType] = useState<CustomerOperationalExceptionType>("blocked");
+  const [opExceptionNote, setOpExceptionNote] = useState("");
 
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [userFilter, setUserFilter] = useState<"all" | "active" | "inactive">("all");
@@ -301,6 +313,30 @@ export default function HomePage() {
     }
   }, [fillOperationalProfileForm, token]);
 
+  const resetOperationalExceptionsState = useCallback(() => {
+    setOperationalExceptions([]);
+    setOperationalExceptionsLoading(false);
+    setOperationalExceptionCreating(false);
+    setOperationalExceptionDeletingId(null);
+    setOpExceptionDate(new Date().toISOString().slice(0, 10));
+    setOpExceptionType("blocked");
+    setOpExceptionNote("");
+  }, []);
+
+  const loadCustomerOperationalExceptions = useCallback(async (customerId: string, authToken?: string) => {
+    const activeToken = authToken ?? token;
+    if (!activeToken || !customerId) return;
+    setOperationalExceptionsLoading(true);
+    try {
+      const data = await listAdminCustomerOperationalExceptions(activeToken, customerId);
+      setOperationalExceptions(data.items ?? []);
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setOperationalExceptionsLoading(false);
+    }
+  }, [token]);
+
   const refreshUsers = useCallback(async (authToken?: string) => {
     const activeToken = authToken ?? token;
     if (!activeToken) return;
@@ -348,6 +384,7 @@ export default function HomePage() {
       setVehicleDrafts({});
       setSavingVehiclePlanId(null);
       resetOperationalProfileForm();
+      resetOperationalExceptionsState();
       await refreshOps(auth.access_token);
       if (nextRole === "admin") {
         await refreshZones(auth.access_token);
@@ -360,6 +397,7 @@ export default function HomePage() {
         setUsers([]);
         setTenantSettings(null);
         resetOperationalProfileForm();
+        resetOperationalExceptionsState();
       }
     } catch (e) {
       setError(formatError(e));
@@ -381,6 +419,7 @@ export default function HomePage() {
     setUsers([]);
     setTenantSettings(null);
     resetOperationalProfileForm();
+    resetOperationalExceptionsState();
     setViewMode("ops");
     setAutoLockResult(null);
     setAutoLockRunning(false);
@@ -623,11 +662,13 @@ export default function HomePage() {
     setEditCustomerPriority(String(customer.priority));
     setEditCustomerCutoff(customer.cutoff_override_time ?? "");
     void loadCustomerOperationalProfile(customer.id);
+    void loadCustomerOperationalExceptions(customer.id);
   }
 
   function cancelEditCustomer() {
     setEditingCustomerId("");
     resetOperationalProfileForm();
+    resetOperationalExceptionsState();
   }
 
   async function onSaveCustomerEdit() {
@@ -648,6 +689,7 @@ export default function HomePage() {
         cutoff_override_time: editCustomerCutoff.trim() || null,
       });
       await loadCustomerOperationalProfile(editingCustomerId);
+      await loadCustomerOperationalExceptions(editingCustomerId);
       await refreshCustomers();
     } catch (e) {
       setError(formatError(e));
@@ -663,6 +705,7 @@ export default function HomePage() {
       if (editingCustomerId === customerId) {
         setEditingCustomerId("");
         resetOperationalProfileForm();
+        resetOperationalExceptionsState();
       }
       await refreshCustomers();
     } catch (e) {
@@ -692,6 +735,49 @@ export default function HomePage() {
       setError(formatError(e));
     } finally {
       setOperationalProfileSaving(false);
+    }
+  }
+
+  async function onCreateOperationalException() {
+    if (!token || !isAdmin || !editingCustomerId) return;
+    if (!opExceptionDate.trim()) {
+      setError("date es obligatoria");
+      return;
+    }
+    if (!opExceptionNote.trim()) {
+      setError("note es obligatoria");
+      return;
+    }
+
+    setOperationalExceptionCreating(true);
+    try {
+      await createAdminCustomerOperationalException(token, editingCustomerId, {
+        date: opExceptionDate,
+        type: opExceptionType,
+        note: opExceptionNote.trim(),
+      });
+      setOpExceptionNote("");
+      await loadCustomerOperationalExceptions(editingCustomerId);
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setOperationalExceptionCreating(false);
+    }
+  }
+
+  async function onDeleteOperationalException(exceptionId: string) {
+    if (!token || !isAdmin || !editingCustomerId) return;
+    const confirmed = window.confirm("¿Eliminar esta excepción operativa?");
+    if (!confirmed) return;
+
+    setOperationalExceptionDeletingId(exceptionId);
+    try {
+      await deleteAdminCustomerOperationalException(token, editingCustomerId, exceptionId);
+      await loadCustomerOperationalExceptions(editingCustomerId);
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setOperationalExceptionDeletingId(null);
     }
   }
 
@@ -1650,6 +1736,92 @@ export default function HomePage() {
                               Recargar perfil
                             </button>
                           </div>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="card grid">
+                      <h2>Excepciones Operativas</h2>
+                      {!editingCustomerId && (
+                        <p style={{ margin: 0, color: "#6b7280" }}>
+                          Selecciona un cliente (Editar) para gestionar excepciones por fecha.
+                        </p>
+                      )}
+                      {editingCustomerId && (
+                        <>
+                          <div className="row">
+                            <input type="date" value={opExceptionDate} onChange={(e) => setOpExceptionDate(e.target.value)} />
+                            <select
+                              value={opExceptionType}
+                              onChange={(e) => setOpExceptionType(e.target.value as CustomerOperationalExceptionType)}
+                            >
+                              <option value="blocked">blocked</option>
+                              <option value="restricted">restricted</option>
+                            </select>
+                          </div>
+                          <input
+                            placeholder="note (obligatoria)"
+                            value={opExceptionNote}
+                            onChange={(e) => setOpExceptionNote(e.target.value)}
+                          />
+                          <div className="row">
+                            <button onClick={onCreateOperationalException} disabled={operationalExceptionCreating}>
+                              {operationalExceptionCreating ? "Creando..." : "Crear excepción"}
+                            </button>
+                            <button
+                              className="secondary"
+                              onClick={() => {
+                                void loadCustomerOperationalExceptions(editingCustomerId);
+                              }}
+                              disabled={operationalExceptionsLoading || operationalExceptionCreating}
+                            >
+                              Recargar excepciones
+                            </button>
+                          </div>
+
+                          {operationalExceptionsLoading && (
+                            <p style={{ margin: 0, color: "#6b7280" }}>Cargando excepciones...</p>
+                          )}
+
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>date</th>
+                                <th>type</th>
+                                <th>note</th>
+                                <th>created_at</th>
+                                <th>acción</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {operationalExceptions.length === 0 && (
+                                <tr>
+                                  <td colSpan={5} style={{ color: "#6b7280" }}>
+                                    Sin excepciones operativas para este cliente.
+                                  </td>
+                                </tr>
+                              )}
+                              {operationalExceptions.map((item) => (
+                                <tr key={item.id}>
+                                  <td>{item.date}</td>
+                                  <td>{item.type}</td>
+                                  <td>{item.note}</td>
+                                  <td>{new Date(item.created_at).toLocaleString("es-ES")}</td>
+                                  <td>
+                                    <button
+                                      className="danger"
+                                      onClick={() => {
+                                        void onDeleteOperationalException(item.id);
+                                      }}
+                                      disabled={operationalExceptionDeletingId === item.id}
+                                    >
+                                      {operationalExceptionDeletingId === item.id ? "Eliminando..." : "Eliminar"}
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </>
                       )}
                     </div>
