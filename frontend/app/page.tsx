@@ -3,9 +3,11 @@
 import { useCallback, useMemo, useState } from "react";
 
 import {
+  type AdminUser,
   APIError,
   approveException,
   createAdminCustomer,
+  createAdminUser,
   createAdminZone,
   createException,
   createPlan,
@@ -14,6 +16,7 @@ import {
   getDailySummary,
   includeOrderInPlan,
   listAdminCustomers,
+  listAdminUsers,
   listAdminZones,
   listExceptions,
   listOrders,
@@ -22,6 +25,7 @@ import {
   login,
   rejectException,
   updateAdminCustomer,
+  updateAdminUser,
   updateAdminZone,
   type Customer,
   type DashboardSummary,
@@ -52,7 +56,7 @@ function decodeRoleFromToken(token: string): UserRole | null {
 
 function formatError(error: unknown): string {
   if (error instanceof APIError) {
-    return error.code ? `${error.code}: ${error.message}` : error.message;
+    return error.message;
   }
   if (error instanceof Error) return error.message;
   return "Error inesperado";
@@ -108,6 +112,21 @@ export default function HomePage() {
   const [editCustomerPriority, setEditCustomerPriority] = useState("0");
   const [editCustomerCutoff, setEditCustomerCutoff] = useState("");
 
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [userFilter, setUserFilter] = useState<"all" | "active" | "inactive">("all");
+  const [userRoleFilter, setUserRoleFilter] = useState<"all" | UserRole>("all");
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserRole, setNewUserRole] = useState<UserRole>("office");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserActive, setNewUserActive] = useState(true);
+  const [editingUserId, setEditingUserId] = useState("");
+  const [editUserEmail, setEditUserEmail] = useState("");
+  const [editUserName, setEditUserName] = useState("");
+  const [editUserRole, setEditUserRole] = useState<UserRole>("office");
+  const [editUserPassword, setEditUserPassword] = useState("");
+  const [editUserActive, setEditUserActive] = useState(true);
+
   const isAuthenticated = useMemo(() => token.length > 0, [token]);
   const isAdmin = useMemo(() => role === "admin", [role]);
 
@@ -158,6 +177,20 @@ export default function HomePage() {
     }
   }, [customerFilter, customerZoneFilter, token]);
 
+  const refreshUsers = useCallback(async (authToken?: string) => {
+    const activeToken = authToken ?? token;
+    if (!activeToken) return;
+    setError("");
+    try {
+      const is_active = userFilter === "all" ? undefined : userFilter === "active";
+      const role = userRoleFilter === "all" ? undefined : userRoleFilter;
+      const res = await listAdminUsers(activeToken, { is_active, role });
+      setUsers(res.items ?? []);
+    } catch (e) {
+      setError(formatError(e));
+    }
+  }, [token, userFilter, userRoleFilter]);
+
   async function onLogin() {
     setError("");
     try {
@@ -174,9 +207,11 @@ export default function HomePage() {
       if (nextRole === "admin") {
         await refreshZones(auth.access_token);
         await refreshCustomers(auth.access_token);
+        await refreshUsers(auth.access_token);
       } else {
         setZones([]);
         setCustomers([]);
+        setUsers([]);
       }
     } catch (e) {
       setError(formatError(e));
@@ -192,6 +227,7 @@ export default function HomePage() {
     setExceptions([]);
     setZones([]);
     setCustomers([]);
+    setUsers([]);
     setViewMode("ops");
   }
 
@@ -398,6 +434,88 @@ export default function HomePage() {
         setEditingCustomerId("");
       }
       await refreshCustomers();
+    } catch (e) {
+      setError(formatError(e));
+    }
+  }
+
+  async function onCreateUser() {
+    if (!token || !isAdmin) return;
+    if (!newUserEmail.trim() || !newUserName.trim()) {
+      setError("Email y nombre son obligatorios");
+      return;
+    }
+    if (newUserPassword.trim().length < 8) {
+      setError("La password debe tener al menos 8 caracteres");
+      return;
+    }
+    try {
+      await createAdminUser(token, {
+        email: newUserEmail.trim(),
+        full_name: newUserName.trim(),
+        role: newUserRole,
+        password: newUserPassword,
+        is_active: newUserActive,
+      });
+      setNewUserEmail("");
+      setNewUserName("");
+      setNewUserPassword("");
+      setNewUserRole("office");
+      setNewUserActive(true);
+      await refreshUsers();
+    } catch (e) {
+      setError(formatError(e));
+    }
+  }
+
+  function startEditUser(user: AdminUser) {
+    setEditingUserId(user.id);
+    setEditUserEmail(user.email);
+    setEditUserName(user.full_name);
+    setEditUserRole(user.role);
+    setEditUserActive(user.is_active);
+    setEditUserPassword("");
+  }
+
+  function cancelEditUser() {
+    setEditingUserId("");
+  }
+
+  async function onSaveUserEdit() {
+    if (!token || !isAdmin || !editingUserId) return;
+    if (!editUserEmail.trim() || !editUserName.trim()) {
+      setError("Email y nombre son obligatorios");
+      return;
+    }
+    if (editUserPassword.trim().length > 0 && editUserPassword.trim().length < 8) {
+      setError("La nueva password debe tener al menos 8 caracteres");
+      return;
+    }
+    try {
+      await updateAdminUser(token, editingUserId, {
+        email: editUserEmail.trim(),
+        full_name: editUserName.trim(),
+        role: editUserRole,
+        is_active: editUserActive,
+        ...(editUserPassword.trim().length > 0 ? { password: editUserPassword } : {}),
+      });
+      setEditingUserId("");
+      await refreshUsers();
+    } catch (e) {
+      setError(formatError(e));
+    }
+  }
+
+  async function onDeactivateUser(userId: string) {
+    if (!token || !isAdmin) return;
+    const confirmed = window.confirm("¿Desactivar este usuario?");
+    if (!confirmed) return;
+    try {
+      await updateAdminUser(token, userId, { is_active: false });
+      if (editingUserId === userId) {
+        setEditingUserId("");
+      }
+      await refreshUsers();
     } catch (e) {
       setError(formatError(e));
     }
@@ -647,7 +765,10 @@ export default function HomePage() {
                 </button>
                 <button
                   className={adminSection === "users" ? "tab active" : "tab muted"}
-                  onClick={() => setAdminSection("users")}
+                  onClick={() => {
+                    setAdminSection("users");
+                    void refreshUsers();
+                  }}
                 >
                   Usuarios
                 </button>
@@ -875,11 +996,136 @@ export default function HomePage() {
                 </div>
               )}
 
-              {(adminSection === "users" || adminSection === "tenant") && (
+              {adminSection === "users" && (
+                <div className="admin-layout">
+                  <div className="card">
+                    <div className="row" style={{ marginBottom: 10 }}>
+                      <h2 style={{ marginRight: 12 }}>Listado de Usuarios</h2>
+                      <select value={userFilter} onChange={(e) => setUserFilter(e.target.value as "all" | "active" | "inactive")}>
+                        <option value="all">Todos</option>
+                        <option value="active">Activos</option>
+                        <option value="inactive">Inactivos</option>
+                      </select>
+                      <select value={userRoleFilter} onChange={(e) => setUserRoleFilter(e.target.value as "all" | UserRole)}>
+                        <option value="all">Todos los roles</option>
+                        <option value="office">office</option>
+                        <option value="logistics">logistics</option>
+                        <option value="admin">admin</option>
+                      </select>
+                      <button className="secondary" onClick={refreshUsers}>
+                        Refrescar
+                      </button>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>id</th>
+                          <th>email</th>
+                          <th>nombre</th>
+                          <th>rol</th>
+                          <th>estado</th>
+                          <th>acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users.map((user) => (
+                          <tr key={user.id}>
+                            <td>{shortId(user.id)}</td>
+                            <td>{user.email}</td>
+                            <td>{user.full_name}</td>
+                            <td>{user.role}</td>
+                            <td>
+                              <span className={user.is_active ? "badge ok" : "badge rejected"}>
+                                {user.is_active ? "active" : "inactive"}
+                              </span>
+                            </td>
+                            <td className="row">
+                              <button className="secondary" onClick={() => startEditUser(user)}>
+                                Editar
+                              </button>
+                              {user.is_active && (
+                                <button className="danger" onClick={() => onDeactivateUser(user.id)}>
+                                  Desactivar
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="grid" style={{ gap: 12 }}>
+                    <div className="card grid">
+                      <h2>Crear Usuario</h2>
+                      <input placeholder="Email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} />
+                      <input placeholder="Nombre" value={newUserName} onChange={(e) => setNewUserName(e.target.value)} />
+                      <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as UserRole)}>
+                        <option value="office">office</option>
+                        <option value="logistics">logistics</option>
+                        <option value="admin">admin</option>
+                      </select>
+                      <input
+                        placeholder="Password (mín. 8)"
+                        type="password"
+                        value={newUserPassword}
+                        onChange={(e) => setNewUserPassword(e.target.value)}
+                      />
+                      <label className="row" style={{ gap: 6 }}>
+                        <input
+                          type="checkbox"
+                          checked={newUserActive}
+                          onChange={(e) => setNewUserActive(e.target.checked)}
+                        />
+                        Activo
+                      </label>
+                      <button onClick={onCreateUser}>Crear</button>
+                    </div>
+
+                    <div className="card grid">
+                      <h2>Editar Usuario</h2>
+                      {!editingUserId && <p style={{ margin: 0, color: "#6b7280" }}>Selecciona un usuario para editar.</p>}
+                      {editingUserId && (
+                        <>
+                          <input value={editUserEmail} onChange={(e) => setEditUserEmail(e.target.value)} />
+                          <input value={editUserName} onChange={(e) => setEditUserName(e.target.value)} />
+                          <select value={editUserRole} onChange={(e) => setEditUserRole(e.target.value as UserRole)}>
+                            <option value="office">office</option>
+                            <option value="logistics">logistics</option>
+                            <option value="admin">admin</option>
+                          </select>
+                          <input
+                            placeholder="Nueva password (opcional)"
+                            type="password"
+                            value={editUserPassword}
+                            onChange={(e) => setEditUserPassword(e.target.value)}
+                          />
+                          <label className="row" style={{ gap: 6 }}>
+                            <input
+                              type="checkbox"
+                              checked={editUserActive}
+                              onChange={(e) => setEditUserActive(e.target.checked)}
+                            />
+                            Activo
+                          </label>
+                          <div className="row">
+                            <button onClick={onSaveUserEdit}>Guardar</button>
+                            <button className="secondary" onClick={cancelEditUser}>
+                              Cancelar
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {adminSection === "tenant" && (
                 <div className="card">
                   <h2>Próximo bloque</h2>
                   <p style={{ margin: 0, color: "#6b7280" }}>
-                    Esta sección se habilitará en los siguientes tickets (`customers`, `users`, `tenant-settings` UI).
+                    Esta sección se habilitará en el siguiente ticket (`tenant-settings` UI).
                   </p>
                 </div>
               )}

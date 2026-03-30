@@ -173,6 +173,25 @@ export type CustomerCreateRequest = {
 
 export type CustomerUpdateRequest = Partial<CustomerCreateRequest>;
 
+export type AdminUser = {
+  id: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type AdminUserCreateRequest = {
+  email: string;
+  full_name: string;
+  role: UserRole;
+  password: string;
+  is_active: boolean;
+};
+
+export type AdminUserUpdateRequest = Partial<AdminUserCreateRequest>;
+
 export async function login(payload: LoginRequest): Promise<TokenResponse> {
   return request<TokenResponse>("/auth/login", {
     method: "POST",
@@ -271,4 +290,23 @@ export async function updateAdminCustomer(
 
 export async function deactivateAdminCustomer(token: string, customerId: string): Promise<Customer> {
   return request<Customer>(`/admin/customers/${customerId}/deactivate`, { token, method: "POST" });
+}
+
+export async function listAdminUsers(
+  token: string,
+  params: { is_active?: boolean; role?: UserRole } = {},
+): Promise<ListResponse<AdminUser>> {
+  return request<ListResponse<AdminUser>>(`/admin/users${buildQuery(params)}`, { token });
+}
+
+export async function createAdminUser(token: string, payload: AdminUserCreateRequest): Promise<AdminUser> {
+  return request<AdminUser>("/admin/users", { token, method: "POST", body: payload });
+}
+
+export async function updateAdminUser(
+  token: string,
+  userId: string,
+  payload: AdminUserUpdateRequest,
+): Promise<AdminUser> {
+  return request<AdminUser>(`/admin/users/${userId}`, { token, method: "PATCH", body: payload });
 }
