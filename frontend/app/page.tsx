@@ -14,6 +14,7 @@ import {
   deactivateAdminCustomer,
   deactivateAdminZone,
   getDailySummary,
+  getSourceMetrics,
   getAdminTenantSettings,
   includeOrderInPlan,
   listPendingQueue,
@@ -32,6 +33,7 @@ import {
   updateAdminZone,
   type Customer,
   type DashboardSummary,
+  type DashboardSourceMetricsItem,
   type ExceptionItem,
   type Order,
   type PendingQueueItem,
@@ -95,12 +97,16 @@ export default function HomePage() {
   const [error, setError] = useState("");
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [sourceMetrics, setSourceMetrics] = useState<DashboardSourceMetricsItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [pendingQueue, setPendingQueue] = useState<PendingQueueItem[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [exceptions, setExceptions] = useState<ExceptionItem[]>([]);
   const [pendingQueueZoneId, setPendingQueueZoneId] = useState("all");
   const [pendingQueueReason, setPendingQueueReason] = useState<"all" | PendingQueueReason>("all");
+  const [sourceDateFrom, setSourceDateFrom] = useState(() => new Date().toISOString().slice(0, 10));
+  const [sourceDateTo, setSourceDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [sourceZoneId, setSourceZoneId] = useState("all");
 
   const [newPlanZoneId, setNewPlanZoneId] = useState("");
   const [includePlanId, setIncludePlanId] = useState("");
@@ -160,6 +166,13 @@ export default function HomePage() {
     for (const item of pendingQueue) values.add(item.zone_id);
     return [...values];
   }, [orders, plans, pendingQueue]);
+  const sourceMetricsZoneOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const order of orders) values.add(order.zone_id);
+    for (const plan of plans) values.add(plan.zone_id);
+    for (const item of pendingQueue) values.add(item.zone_id);
+    return [...values];
+  }, [orders, plans, pendingQueue]);
 
   const refreshOps = useCallback(async (authToken?: string) => {
     const activeToken = authToken ?? token;
@@ -168,14 +181,21 @@ export default function HomePage() {
     try {
       const zone_id = pendingQueueZoneId === "all" ? undefined : pendingQueueZoneId;
       const reason = pendingQueueReason === "all" ? undefined : pendingQueueReason;
-      const [summaryRes, ordersRes, plansRes, exceptionsRes, pendingQueueRes] = await Promise.all([
+      const source_zone_id = sourceZoneId === "all" ? undefined : sourceZoneId;
+      const [summaryRes, sourceMetricsRes, ordersRes, plansRes, exceptionsRes, pendingQueueRes] = await Promise.all([
         getDailySummary(activeToken, serviceDate),
+        getSourceMetrics(activeToken, {
+          date_from: sourceDateFrom,
+          date_to: sourceDateTo,
+          zone_id: source_zone_id,
+        }),
         listOrders(activeToken, serviceDate),
         listPlans(activeToken, serviceDate),
         listExceptions(activeToken),
         listPendingQueue(activeToken, { service_date: serviceDate, zone_id, reason }),
       ]);
       setSummary(summaryRes);
+      setSourceMetrics(sourceMetricsRes.items ?? []);
       setOrders(ordersRes.items ?? []);
       setPlans(plansRes.items ?? []);
       setExceptions(exceptionsRes.items ?? []);
@@ -183,7 +203,7 @@ export default function HomePage() {
     } catch (e) {
       setError(formatError(e));
     }
-  }, [pendingQueueReason, pendingQueueZoneId, serviceDate, token]);
+  }, [pendingQueueReason, pendingQueueZoneId, serviceDate, sourceDateFrom, sourceDateTo, sourceZoneId, token]);
 
   const refreshZones = useCallback(async (authToken?: string) => {
     const activeToken = authToken ?? token;
@@ -274,6 +294,7 @@ export default function HomePage() {
     setToken("");
     setRole(null);
     setSummary(null);
+    setSourceMetrics([]);
     setOrders([]);
     setPendingQueue([]);
     setPlans([]);
@@ -688,6 +709,64 @@ export default function HomePage() {
               </div>
             </div>
           )}
+
+          <div className="card grid">
+            <h2>Métricas por Origen</h2>
+            <div className="row">
+              <label>
+                date_from{" "}
+                <input type="date" value={sourceDateFrom} onChange={(e) => setSourceDateFrom(e.target.value)} />
+              </label>
+              <label>
+                date_to <input type="date" value={sourceDateTo} onChange={(e) => setSourceDateTo(e.target.value)} />
+              </label>
+              <label>
+                zone_id{" "}
+                <select value={sourceZoneId} onChange={(e) => setSourceZoneId(e.target.value)}>
+                  <option value="all">all</option>
+                  {sourceMetricsZoneOptions.map((zoneId) => (
+                    <option key={zoneId} value={zoneId}>
+                      {zoneId}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="secondary" onClick={() => void refreshOps()}>
+                Aplicar filtros
+              </button>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>source_channel</th>
+                  <th>total_orders</th>
+                  <th>late_orders</th>
+                  <th>late_rate</th>
+                  <th>approved_exceptions</th>
+                  <th>rejected_exceptions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sourceMetrics.length === 0 && (
+                  <tr>
+                    <td colSpan={6} style={{ color: "#6b7280" }}>
+                      Sin métricas para los filtros actuales.
+                    </td>
+                  </tr>
+                )}
+                {sourceMetrics.map((item) => (
+                  <tr key={item.source_channel}>
+                    <td>{item.source_channel}</td>
+                    <td>{item.total_orders}</td>
+                    <td>{item.late_orders}</td>
+                    <td>{item.late_rate}</td>
+                    <td>{item.approved_exceptions}</td>
+                    <td>{item.rejected_exceptions}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <div className="grid cols-2">
             <div className="card grid">

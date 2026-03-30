@@ -89,6 +89,22 @@ export type DashboardSummary = {
   rejected_exceptions: number;
 };
 
+export type DashboardSourceMetricsItem = {
+  source_channel: "sales" | "office" | "direct_customer" | "hotel_direct" | "other";
+  total_orders: number;
+  late_orders: number;
+  late_rate: number;
+  approved_exceptions: number;
+  rejected_exceptions: number;
+};
+
+export type DashboardSourceMetrics = {
+  date_from: string;
+  date_to: string;
+  zone_id: string | null;
+  items: DashboardSourceMetricsItem[];
+};
+
 export type Order = {
   id: string;
   customer_id: string;
@@ -232,6 +248,13 @@ export async function login(payload: LoginRequest): Promise<TokenResponse> {
 
 export async function getDailySummary(token: string, serviceDate: string): Promise<DashboardSummary> {
   return request<DashboardSummary>(`/dashboard/daily-summary${buildQuery({ service_date: serviceDate })}`, { token });
+}
+
+export async function getSourceMetrics(
+  token: string,
+  params: { date_from: string; date_to: string; zone_id?: string },
+): Promise<DashboardSourceMetrics> {
+  return request<DashboardSourceMetrics>(`/dashboard/source-metrics${buildQuery(params)}`, { token });
 }
 
 export async function listOrders(token: string, serviceDate: string): Promise<ListResponse<Order>> {
