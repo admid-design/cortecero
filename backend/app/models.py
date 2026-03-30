@@ -156,6 +156,7 @@ class Order(Base):
         nullable=False,
         default=OrderIntakeType.new_order,
     )
+    total_weight_kg: Mapped[float | None] = mapped_column(Numeric(14, 3), nullable=True)
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
