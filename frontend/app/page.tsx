@@ -869,7 +869,8 @@ export default function HomePage() {
                     <th>id</th>
                     <th>zona</th>
                     <th>estado</th>
-                    <th>pedidos</th>
+                    <th>peso_kg</th>
+                    <th>con/sin peso</th>
                     <th>acción</th>
                   </tr>
                 </thead>
@@ -879,7 +880,11 @@ export default function HomePage() {
                       <td>{shortId(plan.id)}</td>
                       <td>{shortId(plan.zone_id)}</td>
                       <td>{plan.status}</td>
-                      <td>{Array.isArray(plan.orders) ? plan.orders.length : 0}</td>
+                      <td>{plan.total_weight_kg}</td>
+                      <td>
+                        {plan.orders_with_weight}/{plan.orders_total}
+                        {plan.orders_missing_weight > 0 ? ` (${plan.orders_missing_weight} sin peso)` : ""}
+                      </td>
                       <td>{plan.status === "open" && <button onClick={() => onLockPlan(plan.id)}>Lock</button>}</td>
                     </tr>
                   ))}

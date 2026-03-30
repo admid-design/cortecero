@@ -150,6 +150,10 @@ export type Plan = {
   version: number;
   locked_at: string | null;
   locked_by: string | null;
+  total_weight_kg: number;
+  orders_total: number;
+  orders_with_weight: number;
+  orders_missing_weight: number;
   orders: PlanOrder[];
 };
 
