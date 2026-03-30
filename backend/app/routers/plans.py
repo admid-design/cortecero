@@ -23,8 +23,17 @@ from app.models import (
     PlanStatus,
     Tenant,
     UserRole,
+    Vehicle,
 )
-from app.schemas import AutoLockRunResponse, PlanCreateRequest, PlanOrderCreateRequest, PlanOrderOut, PlanOut, PlansListResponse
+from app.schemas import (
+    AutoLockRunResponse,
+    PlanCreateRequest,
+    PlanOrderCreateRequest,
+    PlanOrderOut,
+    PlanOut,
+    PlansListResponse,
+    PlanVehicleUpdateRequest,
+)
 
 
 router = APIRouter(prefix="/plans", tags=["Plans"])
@@ -52,6 +61,14 @@ def _serialize_plan(db: Session, tenant_id: uuid.UUID, plan: Plan) -> PlanOut:
         orders_total = 0
         orders_with_weight = 0
     orders_missing_weight = orders_total - orders_with_weight
+    vehicle = None
+    if plan.vehicle_id is not None:
+        vehicle = db.scalar(
+            select(Vehicle).where(
+                Vehicle.id == plan.vehicle_id,
+                Vehicle.tenant_id == tenant_id,
+            )
+        )
 
     return PlanOut(
         id=plan.id,
@@ -59,6 +76,10 @@ def _serialize_plan(db: Session, tenant_id: uuid.UUID, plan: Plan) -> PlanOut:
         zone_id=plan.zone_id,
         status=plan.status.value,
         version=plan.version,
+        vehicle_id=vehicle.id if vehicle else None,
+        vehicle_code=vehicle.code if vehicle else None,
+        vehicle_name=vehicle.name if vehicle else None,
+        vehicle_capacity_kg=vehicle.capacity_kg if vehicle else None,
         locked_at=plan.locked_at,
         locked_by=plan.locked_by,
         total_weight_kg=total_weight_kg,
@@ -234,6 +255,55 @@ def get_plan(
     plan = db.scalar(select(Plan).where(Plan.id == plan_id, Plan.tenant_id == current.tenant_id))
     if not plan:
         raise not_found("PLAN_NOT_FOUND", "Plan no encontrado")
+    return _serialize_plan(db, current.tenant_id, plan)
+
+
+@router.patch("/{plan_id}/vehicle", response_model=PlanOut)
+def update_plan_vehicle(
+    plan_id: uuid.UUID,
+    payload: PlanVehicleUpdateRequest,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+) -> PlanOut:
+    plan = db.scalar(select(Plan).where(Plan.id == plan_id, Plan.tenant_id == current.tenant_id))
+    if not plan:
+        raise not_found("PLAN_NOT_FOUND", "Plan no encontrado")
+
+    target_vehicle = None
+    if payload.vehicle_id is not None:
+        target_vehicle = db.scalar(
+            select(Vehicle).where(
+                Vehicle.id == payload.vehicle_id,
+                Vehicle.tenant_id == current.tenant_id,
+            )
+        )
+        if not target_vehicle:
+            raise not_found("VEHICLE_NOT_FOUND", "Vehículo no encontrado")
+        if not target_vehicle.active:
+            raise unprocessable("INVALID_STATE_TRANSITION", "No se puede asignar un vehículo inactivo")
+
+    previous_vehicle_id = plan.vehicle_id
+    if previous_vehicle_id == payload.vehicle_id:
+        return _serialize_plan(db, current.tenant_id, plan)
+
+    plan.vehicle_id = target_vehicle.id if target_vehicle else None
+    plan.version += 1
+
+    write_audit(
+        db,
+        tenant_id=current.tenant_id,
+        entity_type=EntityType.plan,
+        entity_id=plan.id,
+        action="plan.vehicle_updated",
+        actor_id=current.id,
+        metadata={
+            "previous_vehicle_id": str(previous_vehicle_id) if previous_vehicle_id is not None else None,
+            "new_vehicle_id": str(plan.vehicle_id) if plan.vehicle_id is not None else None,
+        },
+    )
+
+    db.commit()
+    db.refresh(plan)
     return _serialize_plan(db, current.tenant_id, plan)
 
 

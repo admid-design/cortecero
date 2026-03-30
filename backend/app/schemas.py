@@ -119,6 +119,10 @@ class PlanOrderCreateRequest(BaseModel):
     order_id: uuid.UUID
 
 
+class PlanVehicleUpdateRequest(BaseModel):
+    vehicle_id: uuid.UUID | None
+
+
 class AutoLockRunResponse(BaseModel):
     tenant_id: uuid.UUID
     service_date: date
@@ -144,6 +148,10 @@ class PlanOut(APIModel):
     zone_id: uuid.UUID
     status: str
     version: int
+    vehicle_id: uuid.UUID | None
+    vehicle_code: str | None
+    vehicle_name: str | None
+    vehicle_capacity_kg: Decimal | None
     locked_at: datetime | None
     locked_by: uuid.UUID | None
     total_weight_kg: Decimal

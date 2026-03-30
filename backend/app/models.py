@@ -193,6 +193,7 @@ class Plan(Base):
     zone_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     status: Mapped[PlanStatus] = mapped_column(Enum(PlanStatus, name="plan_status"), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    vehicle_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     locked_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -202,6 +203,24 @@ class Plan(Base):
         UniqueConstraint("tenant_id", "service_date", "zone_id", name="uq_plan_key"),
         ForeignKeyConstraint(["zone_id", "tenant_id"], ["zones.id", "zones.tenant_id"], ondelete="RESTRICT"),
         ForeignKeyConstraint(["locked_by", "tenant_id"], ["users.id", "users.tenant_id"], ondelete="SET NULL"),
+        ForeignKeyConstraint(["vehicle_id", "tenant_id"], ["vehicles.id", "vehicles.tenant_id"], ondelete="SET NULL"),
+    )
+
+
+class Vehicle(Base):
+    __tablename__ = "vehicles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    code: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    capacity_kg: Mapped[float | None] = mapped_column(Numeric(14, 3), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_vehicle_code"),
+        UniqueConstraint("id", "tenant_id", name="uq_vehicle_tenant_scope"),
     )
 
 

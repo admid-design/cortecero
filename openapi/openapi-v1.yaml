@@ -319,6 +319,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/Plan'
 
+  /plans/{plan_id}/vehicle:
+    patch:
+      tags: [Plans]
+      summary: Asignar o limpiar vehículo del plan
+      description: >
+        Actualiza el vehículo asignado al plan. Si `vehicle_id` es `null`, limpia la asignación.
+      parameters:
+        - in: path
+          name: plan_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanVehicleUpdateRequest'
+      responses:
+        "200":
+          description: Plan actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+        "404":
+          description: Plan o vehículo no encontrado
+        "422":
+          description: Transición inválida (por ejemplo, vehículo inactivo)
+
   /plans/auto-lock/run:
     post:
       tags: [Plans]
@@ -1102,6 +1133,19 @@ components:
           enum: [open, locked, dispatched]
         version:
           type: integer
+        vehicle_id:
+          type: string
+          format: uuid
+          nullable: true
+        vehicle_code:
+          type: string
+          nullable: true
+        vehicle_name:
+          type: string
+          nullable: true
+        vehicle_capacity_kg:
+          type: number
+          nullable: true
         locked_at:
           type: string
           format: date-time
@@ -1144,6 +1188,15 @@ components:
         added_by:
           type: string
           format: uuid
+
+    PlanVehicleUpdateRequest:
+      type: object
+      required: [vehicle_id]
+      properties:
+        vehicle_id:
+          type: string
+          format: uuid
+          nullable: true
 
     AutoLockRunResponse:
       type: object
