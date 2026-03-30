@@ -888,6 +888,87 @@ paths:
         "422":
           description: Perfil operativo inválido o timezone inválida
 
+  /admin/customers/{customer_id}/operational-exceptions:
+    get:
+      tags: [Admin Customers]
+      summary: Listar excepciones operativas del cliente
+      parameters:
+        - in: path
+          name: customer_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Excepciones operativas del cliente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerOperationalExceptionsListResponse'
+        "404":
+          description: Cliente no encontrado
+    post:
+      tags: [Admin Customers]
+      summary: Crear excepción operativa del cliente
+      parameters:
+        - in: path
+          name: customer_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerOperationalExceptionCreateRequest'
+      responses:
+        "201":
+          description: Excepción operativa creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerOperationalException'
+        "403":
+          description: Rol sin permisos de escritura
+        "404":
+          description: Cliente no encontrado
+        "409":
+          description: Duplicado date+type por cliente
+        "422":
+          description: Excepción operativa inválida
+
+  /admin/customers/{customer_id}/operational-exceptions/{exception_id}:
+    delete:
+      tags: [Admin Customers]
+      summary: Eliminar excepción operativa del cliente
+      parameters:
+        - in: path
+          name: customer_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: exception_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Excepción operativa eliminada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerOperationalException'
+        "403":
+          description: Rol sin permisos de escritura
+        "404":
+          description: Cliente o excepción no encontrados
+
   /admin/customers/{customer_id}/deactivate:
     post:
       tags: [Admin Customers]
@@ -1587,6 +1668,51 @@ components:
           enum: [none, same_day, cross_midnight]
         is_customized:
           type: boolean
+
+    CustomerOperationalExceptionCreateRequest:
+      type: object
+      required: [date, type, note]
+      properties:
+        date:
+          type: string
+          format: date
+        type:
+          type: string
+          enum: [blocked, restricted]
+        note:
+          type: string
+          maxLength: 2000
+
+    CustomerOperationalException:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        type:
+          type: string
+          enum: [blocked, restricted]
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CustomerOperationalExceptionsListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerOperationalException'
+        total:
+          type: integer
 
     CustomersListResponse:
       type: object

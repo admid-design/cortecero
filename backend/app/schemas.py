@@ -314,6 +314,7 @@ class CustomersListResponse(BaseModel):
 
 
 CustomerOperationalWindowMode = Literal["none", "same_day", "cross_midnight"]
+CustomerOperationalExceptionType = Literal["blocked", "restricted"]
 
 
 class CustomerOperationalProfilePutRequest(BaseModel):
@@ -336,6 +337,26 @@ class CustomerOperationalProfileOut(BaseModel):
     evaluation_timezone: str
     window_mode: CustomerOperationalWindowMode
     is_customized: bool
+
+
+class CustomerOperationalExceptionCreateRequest(BaseModel):
+    date: date
+    type: CustomerOperationalExceptionType
+    note: str = Field(min_length=1, max_length=2000)
+
+
+class CustomerOperationalExceptionOut(APIModel):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    date: date
+    type: CustomerOperationalExceptionType
+    note: str
+    created_at: datetime
+
+
+class CustomerOperationalExceptionsListResponse(BaseModel):
+    items: list[CustomerOperationalExceptionOut]
+    total: int
 
 
 class UserCreateRequest(BaseModel):

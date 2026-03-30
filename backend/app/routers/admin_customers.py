@@ -11,9 +11,21 @@ from app.audit import write_audit
 from app.db import get_db
 from app.deps import CurrentUser, require_roles
 from app.errors import conflict, not_found, unprocessable
-from app.models import Customer, CustomerOperationalProfile, EntityType, Tenant, UserRole, Zone
+from app.models import (
+    Customer,
+    CustomerOperationalException,
+    CustomerOperationalExceptionType,
+    CustomerOperationalProfile,
+    EntityType,
+    Tenant,
+    UserRole,
+    Zone,
+)
 from app.schemas import (
     CustomerCreateRequest,
+    CustomerOperationalExceptionCreateRequest,
+    CustomerOperationalExceptionOut,
+    CustomerOperationalExceptionsListResponse,
     CustomerOperationalProfileOut,
     CustomerOperationalProfilePutRequest,
     CustomerOut,
@@ -119,6 +131,26 @@ def _to_operational_profile_out(
         evaluation_timezone=evaluation_timezone,
         window_mode=_window_mode(window_start, window_end),
         is_customized=is_customized,
+    )
+
+
+def _normalize_operational_exception_note(note: str) -> str:
+    normalized_note = note.strip()
+    if not normalized_note:
+        raise unprocessable("INVALID_OPERATIONAL_EXCEPTION", "note es obligatoria y no puede estar vacía")
+    return normalized_note
+
+
+def _to_operational_exception_out(row: CustomerOperationalException) -> CustomerOperationalExceptionOut:
+    return CustomerOperationalExceptionOut.model_validate(
+        {
+            "id": row.id,
+            "customer_id": row.customer_id,
+            "date": row.date,
+            "type": row.type.value,
+            "note": row.note,
+            "created_at": row.created_at,
+        }
     )
 
 
@@ -259,6 +291,128 @@ def put_customer_operational_profile(
 
     db.refresh(profile)
     return _to_operational_profile_out(customer.id, evaluation_timezone, profile=profile)
+
+
+@router.get("/{customer_id}/operational-exceptions", response_model=CustomerOperationalExceptionsListResponse)
+def list_customer_operational_exceptions(
+    customer_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.office, UserRole.logistics, UserRole.admin)),
+) -> CustomerOperationalExceptionsListResponse:
+    customer = _get_customer_or_404(db, current.tenant_id, customer_id)
+    rows = list(
+        db.scalars(
+            select(CustomerOperationalException)
+            .where(
+                CustomerOperationalException.tenant_id == current.tenant_id,
+                CustomerOperationalException.customer_id == customer.id,
+            )
+            .order_by(
+                CustomerOperationalException.date.asc(),
+                CustomerOperationalException.type.asc(),
+                CustomerOperationalException.created_at.asc(),
+            )
+        )
+    )
+    return CustomerOperationalExceptionsListResponse(
+        items=[_to_operational_exception_out(row) for row in rows],
+        total=len(rows),
+    )
+
+
+@router.post("/{customer_id}/operational-exceptions", response_model=CustomerOperationalExceptionOut, status_code=201)
+def create_customer_operational_exception(
+    customer_id: uuid.UUID,
+    payload: CustomerOperationalExceptionCreateRequest,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.admin)),
+) -> CustomerOperationalExceptionOut:
+    customer = _get_customer_or_404(db, current.tenant_id, customer_id)
+    normalized_note = _normalize_operational_exception_note(payload.note)
+
+    existing = db.scalar(
+        select(CustomerOperationalException).where(
+            CustomerOperationalException.tenant_id == current.tenant_id,
+            CustomerOperationalException.customer_id == customer.id,
+            CustomerOperationalException.date == payload.date,
+            CustomerOperationalException.type == CustomerOperationalExceptionType(payload.type),
+        )
+    )
+    if existing:
+        raise conflict("OPERATIONAL_EXCEPTION_CONFLICT", "Ya existe una excepción para esa fecha y tipo")
+
+    row = CustomerOperationalException(
+        tenant_id=current.tenant_id,
+        customer_id=customer.id,
+        date=payload.date,
+        type=CustomerOperationalExceptionType(payload.type),
+        note=normalized_note,
+        created_at=datetime.now(UTC),
+    )
+    db.add(row)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise conflict("OPERATIONAL_EXCEPTION_CONFLICT", "Ya existe una excepción para esa fecha y tipo") from exc
+
+    write_audit(
+        db,
+        tenant_id=current.tenant_id,
+        entity_type=EntityType.tenant,
+        entity_id=current.tenant_id,
+        action="customer.operational_exception_created",
+        actor_id=current.id,
+        metadata={
+            "customer_id": str(customer.id),
+            "exception_id": str(row.id),
+            "date": str(row.date),
+            "type": row.type.value,
+            "note": row.note,
+        },
+    )
+    db.commit()
+    db.refresh(row)
+    return _to_operational_exception_out(row)
+
+
+@router.delete("/{customer_id}/operational-exceptions/{exception_id}", response_model=CustomerOperationalExceptionOut)
+def delete_customer_operational_exception(
+    customer_id: uuid.UUID,
+    exception_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.admin)),
+) -> CustomerOperationalExceptionOut:
+    customer = _get_customer_or_404(db, current.tenant_id, customer_id)
+    row = db.scalar(
+        select(CustomerOperationalException).where(
+            CustomerOperationalException.id == exception_id,
+            CustomerOperationalException.tenant_id == current.tenant_id,
+            CustomerOperationalException.customer_id == customer.id,
+        )
+    )
+    if not row:
+        raise not_found("ENTITY_NOT_FOUND", "Excepción operativa no encontrada")
+
+    out = _to_operational_exception_out(row)
+    write_audit(
+        db,
+        tenant_id=current.tenant_id,
+        entity_type=EntityType.tenant,
+        entity_id=current.tenant_id,
+        action="customer.operational_exception_deleted",
+        actor_id=current.id,
+        metadata={
+            "customer_id": str(customer.id),
+            "exception_id": str(row.id),
+            "date": str(row.date),
+            "type": row.type.value,
+            "note": row.note,
+        },
+    )
+    db.delete(row)
+    db.commit()
+    return out
 
 
 @router.post("", response_model=CustomerOut, status_code=201)

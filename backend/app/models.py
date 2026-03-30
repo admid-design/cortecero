@@ -81,6 +81,11 @@ class SourceChannel(str, enum.Enum):
     other = "other"
 
 
+class CustomerOperationalExceptionType(str, enum.Enum):
+    blocked = "blocked"
+    restricted = "restricted"
+
+
 class Tenant(Base):
     __tablename__ = "tenants"
 
@@ -152,6 +157,36 @@ class CustomerOperationalProfile(Base):
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "customer_id", name="uq_customer_operational_profile"),
+        ForeignKeyConstraint(
+            ["customer_id", "tenant_id"],
+            ["customers.id", "customers.tenant_id"],
+            ondelete="CASCADE",
+        ),
+    )
+
+
+class CustomerOperationalException(Base):
+    __tablename__ = "customer_operational_exceptions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    customer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    type: Mapped[CustomerOperationalExceptionType] = mapped_column(
+        Enum(CustomerOperationalExceptionType, name="customer_operational_exception_type"),
+        nullable=False,
+    )
+    note: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "customer_id",
+            "date",
+            "type",
+            name="uq_customer_operational_exception_per_day_type",
+        ),
         ForeignKeyConstraint(
             ["customer_id", "tenant_id"],
             ["customers.id", "customers.tenant_id"],
