@@ -213,6 +213,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/Order'
 
+  /orders/{order_id}/weight:
+    patch:
+      tags: [Orders]
+      summary: Actualizar peso total del pedido
+      description: >
+        Permite fijar o limpiar (`null`) el peso total del pedido en kg.
+      parameters:
+        - in: path
+          name: order_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderWeightUpdateRequest'
+      responses:
+        "200":
+          description: Pedido actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
   /plans:
     get:
       tags: [Plans]
@@ -965,10 +992,21 @@ components:
         intake_type:
           type: string
           enum: [new_order, same_customer_addon]
+        total_weight_kg:
+          type: number
+          nullable: true
         lines:
           type: array
           items:
             $ref: '#/components/schemas/OrderLine'
+
+    OrderWeightUpdateRequest:
+      type: object
+      required: [total_weight_kg]
+      properties:
+        total_weight_kg:
+          type: number
+          nullable: true
 
     OrderLine:
       type: object

@@ -79,12 +79,17 @@ class OrderOut(APIModel):
     effective_cutoff_at: datetime
     source_channel: str
     intake_type: Literal["new_order", "same_customer_addon"]
+    total_weight_kg: Decimal | None
     lines: list[OrderLineOut]
 
 
 class OrdersListResponse(BaseModel):
     items: list[OrderOut]
     total: int
+
+
+class OrderWeightUpdateRequest(BaseModel):
+    total_weight_kg: Decimal | None
 
 
 PendingQueueReason = Literal["LATE_PENDING_EXCEPTION", "LOCKED_PLAN_EXCEPTION_REQUIRED", "EXCEPTION_REJECTED"]

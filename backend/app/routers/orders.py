@@ -16,6 +16,7 @@ from app.domain import (
     resolve_cutoff,
 )
 from app.errors import not_found
+from app.errors import unprocessable
 from app.models import (
     Customer,
     EntityType,
@@ -38,6 +39,7 @@ from app.schemas import (
     OrderIngestionResult,
     OrderLineOut,
     OrderOut,
+    OrderWeightUpdateRequest,
     OrdersListResponse,
     PendingQueueListResponse,
     PendingQueueReason,
@@ -69,6 +71,7 @@ def _serialize_order(order: Order, lines: list[OrderLine]) -> OrderOut:
         effective_cutoff_at=order.effective_cutoff_at,
         source_channel=order.source_channel.value,
         intake_type=order.intake_type.value,
+        total_weight_kg=order.total_weight_kg,
         lines=[
             OrderLineOut(
                 id=line.id,
@@ -420,5 +423,42 @@ def get_order(
     if not order:
         raise not_found("ORDER_NOT_FOUND", "Pedido no encontrado")
 
+    lines = list(db.scalars(select(OrderLine).where(OrderLine.order_id == order.id, OrderLine.tenant_id == current.tenant_id)))
+    return _serialize_order(order, lines)
+
+
+@router.patch("/orders/{order_id}/weight", response_model=OrderOut)
+def update_order_weight(
+    order_id: uuid.UUID,
+    payload: OrderWeightUpdateRequest,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+) -> OrderOut:
+    order = db.scalar(select(Order).where(Order.id == order_id, Order.tenant_id == current.tenant_id))
+    if not order:
+        raise not_found("ORDER_NOT_FOUND", "Pedido no encontrado")
+
+    if payload.total_weight_kg is not None and payload.total_weight_kg < 0:
+        raise unprocessable("INVALID_WEIGHT_VALUE", "total_weight_kg debe ser mayor o igual a 0")
+
+    previous_weight = order.total_weight_kg
+    order.total_weight_kg = payload.total_weight_kg
+    order.updated_at = datetime.now(UTC)
+
+    write_audit(
+        db,
+        tenant_id=current.tenant_id,
+        entity_type=EntityType.order,
+        entity_id=order.id,
+        action="order.weight_updated",
+        actor_id=current.id,
+        metadata={
+            "previous_total_weight_kg": str(previous_weight) if previous_weight is not None else None,
+            "new_total_weight_kg": str(order.total_weight_kg) if order.total_weight_kg is not None else None,
+        },
+    )
+
+    db.commit()
+    db.refresh(order)
     lines = list(db.scalars(select(OrderLine).where(OrderLine.order_id == order.id, OrderLine.tenant_id == current.tenant_id)))
     return _serialize_order(order, lines)
