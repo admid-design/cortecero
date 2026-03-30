@@ -17,6 +17,7 @@ import {
   deactivateAdminZone,
   getDailySummary,
   getPlanCapacityAlerts,
+  getPlanCustomerConsolidation,
   getAdminCustomerOperationalProfile,
   getSourceMetrics,
   getAdminTenantSettings,
@@ -57,6 +58,7 @@ import {
   type PendingQueueReason,
   type Plan,
   type PlanCapacityAlert,
+  type PlanCustomerConsolidationResponse,
   type TenantSettings,
   type UserRole,
   type Zone,
@@ -151,6 +153,9 @@ export default function HomePage() {
   const [operationalQueue, setOperationalQueue] = useState<OperationalQueueItem[]>([]);
   const [capacityAlerts, setCapacityAlerts] = useState<PlanCapacityAlert[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [selectedConsolidationPlanId, setSelectedConsolidationPlanId] = useState("");
+  const [planConsolidation, setPlanConsolidation] = useState<PlanCustomerConsolidationResponse | null>(null);
+  const [planConsolidationLoading, setPlanConsolidationLoading] = useState(false);
   const [exceptions, setExceptions] = useState<ExceptionItem[]>([]);
   const [pendingQueueZoneId, setPendingQueueZoneId] = useState("all");
   const [pendingQueueReason, setPendingQueueReason] = useState<"all" | PendingQueueReason>("all");
@@ -487,6 +492,9 @@ export default function HomePage() {
       setSavingWeightOrderId(null);
       setVehicleDrafts({});
       setSavingVehiclePlanId(null);
+      setSelectedConsolidationPlanId("");
+      setPlanConsolidation(null);
+      setPlanConsolidationLoading(false);
       resetOperationalProfileForm();
       resetOperationalExceptionsState();
       await refreshOps(auth.access_token);
@@ -500,6 +508,9 @@ export default function HomePage() {
         setCustomers([]);
         setUsers([]);
         setTenantSettings(null);
+        setSelectedConsolidationPlanId("");
+        setPlanConsolidation(null);
+        setPlanConsolidationLoading(false);
         resetOperationalProfileForm();
         resetOperationalExceptionsState();
       }
@@ -518,6 +529,9 @@ export default function HomePage() {
     setOperationalQueue([]);
     setCapacityAlerts([]);
     setPlans([]);
+    setSelectedConsolidationPlanId("");
+    setPlanConsolidation(null);
+    setPlanConsolidationLoading(false);
     setExceptions([]);
     setZones([]);
     setCustomers([]);
@@ -621,6 +635,24 @@ export default function HomePage() {
       setError(formatError(e));
     } finally {
       setSavingVehiclePlanId(null);
+    }
+  }
+
+  async function onLoadPlanConsolidation(planId?: string) {
+    const targetPlanId = (planId ?? selectedConsolidationPlanId).trim();
+    if (!token || !targetPlanId) {
+      setError("Selecciona un plan para cargar consolidación");
+      return;
+    }
+    setPlanConsolidationLoading(true);
+    try {
+      const response = await getPlanCustomerConsolidation(token, targetPlanId);
+      setSelectedConsolidationPlanId(targetPlanId);
+      setPlanConsolidation(response);
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setPlanConsolidationLoading(false);
     }
   }
 
@@ -1243,11 +1275,100 @@ export default function HomePage() {
                           <span style={{ color: "#6b7280" }}>solo lectura</span>
                         )}
                       </td>
-                      <td>{plan.status === "open" && <button onClick={() => onLockPlan(plan.id)}>Lock</button>}</td>
+                      <td className="row">
+                        {plan.status === "open" && <button onClick={() => onLockPlan(plan.id)}>Lock</button>}
+                        <button
+                          className="secondary"
+                          onClick={() => {
+                            void onLoadPlanConsolidation(plan.id);
+                          }}
+                          disabled={planConsolidationLoading}
+                        >
+                          Consolidar
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+
+              <div className="card grid" style={{ marginTop: 8 }}>
+                <h3>Consolidación por Cliente (Plan)</h3>
+                <div className="row">
+                  <select
+                    value={selectedConsolidationPlanId}
+                    onChange={(e) => setSelectedConsolidationPlanId(e.target.value)}
+                    style={{ minWidth: 320 }}
+                  >
+                    <option value="">Selecciona plan</option>
+                    {plans.map((plan) => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.service_date} · {shortId(plan.zone_id)} · {shortId(plan.id)}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="secondary"
+                    onClick={() => {
+                      void onLoadPlanConsolidation();
+                    }}
+                    disabled={planConsolidationLoading}
+                  >
+                    {planConsolidationLoading ? "Cargando..." : "Cargar consolidación"}
+                  </button>
+                </div>
+
+                {!planConsolidation && !planConsolidationLoading && (
+                  <p style={{ margin: 0, color: "#6b7280" }}>
+                    Selecciona un plan para ver la consolidación operativa por cliente.
+                  </p>
+                )}
+
+                {planConsolidation && (
+                  <>
+                    <div className="row" style={{ gap: 6 }}>
+                      <span className="pill">plan_id: {shortId(planConsolidation.plan_id)}</span>
+                      <span className="pill">service_date: {planConsolidation.service_date}</span>
+                      <span className="pill">zone_id: {shortId(planConsolidation.zone_id)}</span>
+                      <span className="pill">total_customers: {planConsolidation.total_customers}</span>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>customer_id</th>
+                          <th>customer_name</th>
+                          <th>total_orders</th>
+                          <th>order_refs</th>
+                          <th>total_weight_kg</th>
+                          <th>with/missing weight</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {planConsolidation.items.length === 0 && (
+                          <tr>
+                            <td colSpan={6} style={{ color: "#6b7280" }}>
+                              Sin pedidos incluidos para este plan.
+                            </td>
+                          </tr>
+                        )}
+                        {planConsolidation.items.map((item) => (
+                          <tr key={item.customer_id}>
+                            <td>{shortId(item.customer_id)}</td>
+                            <td>{item.customer_name}</td>
+                            <td>{item.total_orders}</td>
+                            <td>{item.order_refs.join(", ")}</td>
+                            <td>{item.total_weight_kg == null ? "—" : item.total_weight_kg}</td>
+                            <td>
+                              {item.orders_with_weight}/{item.total_orders}
+                              {item.orders_missing_weight > 0 ? ` (${item.orders_missing_weight} sin peso)` : ""}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                )}
+              </div>
             </div>
 
             <div className="card grid">

@@ -206,6 +206,24 @@ export type PlanCapacityAlertsResponse = {
   total: number;
 };
 
+export type PlanCustomerConsolidationItem = {
+  customer_id: string;
+  customer_name: string;
+  total_orders: number;
+  order_refs: string[];
+  total_weight_kg: number | null;
+  orders_with_weight: number;
+  orders_missing_weight: number;
+};
+
+export type PlanCustomerConsolidationResponse = {
+  plan_id: string;
+  service_date: string;
+  zone_id: string;
+  items: PlanCustomerConsolidationItem[];
+  total_customers: number;
+};
+
 export type AutoLockRunResponse = {
   tenant_id: string;
   service_date: string;
@@ -375,6 +393,13 @@ export async function getPlanCapacityAlerts(
   params: { service_date: string; zone_id?: string; level?: CapacityAlertLevel },
 ): Promise<PlanCapacityAlertsResponse> {
   return request<PlanCapacityAlertsResponse>(`/plans/capacity-alerts${buildQuery(params)}`, { token });
+}
+
+export async function getPlanCustomerConsolidation(
+  token: string,
+  planId: string,
+): Promise<PlanCustomerConsolidationResponse> {
+  return request<PlanCustomerConsolidationResponse>(`/plans/${planId}/customer-consolidation`, { token });
 }
 
 export async function listExceptions(token: string): Promise<ListResponse<ExceptionItem>> {
