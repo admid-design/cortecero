@@ -101,6 +101,21 @@ export type Order = {
   intake_type: "new_order" | "same_customer_addon";
 };
 
+export type PendingQueueReason =
+  | "LATE_PENDING_EXCEPTION"
+  | "LOCKED_PLAN_EXCEPTION_REQUIRED"
+  | "EXCEPTION_REJECTED";
+
+export type PendingQueueItem = {
+  order_id: string;
+  external_ref: string;
+  status: string;
+  reason: PendingQueueReason;
+  service_date: string;
+  zone_id: string;
+  created_at: string;
+};
+
 export type PlanOrder = {
   id: string;
   plan_id: string;
@@ -229,6 +244,13 @@ export async function listPlans(token: string, serviceDate: string): Promise<Lis
 
 export async function listExceptions(token: string): Promise<ListResponse<ExceptionItem>> {
   return request<ListResponse<ExceptionItem>>("/exceptions", { token });
+}
+
+export async function listPendingQueue(
+  token: string,
+  params: { service_date: string; zone_id?: string; reason?: PendingQueueReason },
+): Promise<ListResponse<PendingQueueItem>> {
+  return request<ListResponse<PendingQueueItem>>(`/orders/pending-queue${buildQuery(params)}`, { token });
 }
 
 export async function createPlan(token: string, payload: { service_date: string; zone_id: string }): Promise<Plan> {

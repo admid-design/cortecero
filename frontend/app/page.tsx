@@ -16,6 +16,7 @@ import {
   getDailySummary,
   getAdminTenantSettings,
   includeOrderInPlan,
+  listPendingQueue,
   listAdminCustomers,
   listAdminUsers,
   listAdminZones,
@@ -33,6 +34,8 @@ import {
   type DashboardSummary,
   type ExceptionItem,
   type Order,
+  type PendingQueueItem,
+  type PendingQueueReason,
   type Plan,
   type TenantSettings,
   type UserRole,
@@ -83,8 +86,11 @@ export default function HomePage() {
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [pendingQueue, setPendingQueue] = useState<PendingQueueItem[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [exceptions, setExceptions] = useState<ExceptionItem[]>([]);
+  const [pendingQueueZoneId, setPendingQueueZoneId] = useState("all");
+  const [pendingQueueReason, setPendingQueueReason] = useState<"all" | PendingQueueReason>("all");
 
   const [newPlanZoneId, setNewPlanZoneId] = useState("");
   const [includePlanId, setIncludePlanId] = useState("");
@@ -137,26 +143,37 @@ export default function HomePage() {
 
   const isAuthenticated = useMemo(() => token.length > 0, [token]);
   const isAdmin = useMemo(() => role === "admin", [role]);
+  const pendingQueueZoneOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const order of orders) values.add(order.zone_id);
+    for (const plan of plans) values.add(plan.zone_id);
+    for (const item of pendingQueue) values.add(item.zone_id);
+    return [...values];
+  }, [orders, plans, pendingQueue]);
 
   const refreshOps = useCallback(async (authToken?: string) => {
     const activeToken = authToken ?? token;
     if (!activeToken) return;
     setError("");
     try {
-      const [summaryRes, ordersRes, plansRes, exceptionsRes] = await Promise.all([
+      const zone_id = pendingQueueZoneId === "all" ? undefined : pendingQueueZoneId;
+      const reason = pendingQueueReason === "all" ? undefined : pendingQueueReason;
+      const [summaryRes, ordersRes, plansRes, exceptionsRes, pendingQueueRes] = await Promise.all([
         getDailySummary(activeToken, serviceDate),
         listOrders(activeToken, serviceDate),
         listPlans(activeToken, serviceDate),
         listExceptions(activeToken),
+        listPendingQueue(activeToken, { service_date: serviceDate, zone_id, reason }),
       ]);
       setSummary(summaryRes);
       setOrders(ordersRes.items ?? []);
       setPlans(plansRes.items ?? []);
       setExceptions(exceptionsRes.items ?? []);
+      setPendingQueue(pendingQueueRes.items ?? []);
     } catch (e) {
       setError(formatError(e));
     }
-  }, [serviceDate, token]);
+  }, [pendingQueueReason, pendingQueueZoneId, serviceDate, token]);
 
   const refreshZones = useCallback(async (authToken?: string) => {
     const activeToken = authToken ?? token;
@@ -248,6 +265,7 @@ export default function HomePage() {
     setRole(null);
     setSummary(null);
     setOrders([]);
+    setPendingQueue([]);
     setPlans([]);
     setExceptions([]);
     setZones([]);
@@ -746,6 +764,73 @@ export default function HomePage() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <div className="card grid">
+            <h2>Pending Queue</h2>
+            <div className="row">
+              <label>
+                service_date{" "}
+                <input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} />
+              </label>
+              <label>
+                zone_id{" "}
+                <select value={pendingQueueZoneId} onChange={(e) => setPendingQueueZoneId(e.target.value)}>
+                  <option value="all">all</option>
+                  {pendingQueueZoneOptions.map((zoneId) => (
+                    <option key={zoneId} value={zoneId}>
+                      {zoneId}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                reason{" "}
+                <select
+                  value={pendingQueueReason}
+                  onChange={(e) => setPendingQueueReason(e.target.value as "all" | PendingQueueReason)}
+                >
+                  <option value="all">all</option>
+                  <option value="LATE_PENDING_EXCEPTION">LATE_PENDING_EXCEPTION</option>
+                  <option value="LOCKED_PLAN_EXCEPTION_REQUIRED">LOCKED_PLAN_EXCEPTION_REQUIRED</option>
+                  <option value="EXCEPTION_REJECTED">EXCEPTION_REJECTED</option>
+                </select>
+              </label>
+              <button className="secondary" onClick={() => void refreshOps()}>
+                Aplicar filtros
+              </button>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>ref</th>
+                  <th>order_id</th>
+                  <th>zone_id</th>
+                  <th>status</th>
+                  <th>reason</th>
+                  <th>created_at</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingQueue.length === 0 && (
+                  <tr>
+                    <td colSpan={6} style={{ color: "#6b7280" }}>
+                      Sin pendientes para los filtros actuales.
+                    </td>
+                  </tr>
+                )}
+                {pendingQueue.map((item) => (
+                  <tr key={item.order_id}>
+                    <td>{item.external_ref}</td>
+                    <td>{shortId(item.order_id)}</td>
+                    <td>{shortId(item.zone_id)}</td>
+                    <td>{item.status}</td>
+                    <td>{item.reason}</td>
+                    <td>{new Date(item.created_at).toLocaleString("es-ES")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           <div className="card">
