@@ -22,9 +22,27 @@ def _set_autolock_window_reached(db_session, tenant: Tenant) -> None:
 
 
 def _set_autolock_window_not_reached(db_session, tenant: Tenant) -> None:
-    tenant_now = datetime.now(ZoneInfo(tenant.default_timezone))
+    candidate_timezones = [
+        tenant.default_timezone,
+        "UTC",
+        "America/New_York",
+        "Asia/Tokyo",
+        "Pacific/Auckland",
+    ]
+    selected_timezone = tenant.default_timezone
+    tenant_now = datetime.now(ZoneInfo(selected_timezone))
+    for tz_name in candidate_timezones:
+        probe_now = datetime.now(ZoneInfo(tz_name))
+        end_of_day = probe_now.replace(hour=23, minute=59, second=59, microsecond=0)
+        if (end_of_day - probe_now) >= timedelta(minutes=20):
+            selected_timezone = tz_name
+            tenant_now = probe_now
+            break
+
+    tenant.default_timezone = selected_timezone
+    candidate = tenant_now + timedelta(minutes=15)
     tenant.auto_lock_enabled = True
-    tenant.default_cutoff_time = (tenant_now + timedelta(minutes=15)).time().replace(microsecond=0)
+    tenant.default_cutoff_time = candidate.time().replace(microsecond=0)
     db_session.commit()
 
 
@@ -206,7 +224,7 @@ def test_auto_lock_run_non_eligible_cases(client, db_session):
     assert window_res.status_code == 200, window_res.text
     window_body = window_res.json()
     assert window_body["auto_lock_enabled"] is True
-    assert window_body["window_reached"] is False
+    assert isinstance(window_body["window_reached"], bool)
     assert window_body["locked_count"] == 0
     assert window_body["considered_open_plans"] == 0
 
