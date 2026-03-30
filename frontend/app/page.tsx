@@ -21,6 +21,7 @@ import {
   getSourceMetrics,
   getAdminTenantSettings,
   includeOrderInPlan,
+  listOperationalQueue,
   listPendingQueue,
   listAdminCustomers,
   listAdminCustomerOperationalExceptions,
@@ -50,6 +51,8 @@ import {
   type DashboardSourceMetricsItem,
   type ExceptionItem,
   type Order,
+  type OperationalQueueItem,
+  type OperationalQueueReason,
   type PendingQueueItem,
   type PendingQueueReason,
   type Plan,
@@ -145,11 +148,14 @@ export default function HomePage() {
   const [ordersOperationalStateFilter, setOrdersOperationalStateFilter] = useState<OrdersOperationalStateFilter>("all");
   const [ordersOperationalReasonFilter, setOrdersOperationalReasonFilter] = useState("all");
   const [pendingQueue, setPendingQueue] = useState<PendingQueueItem[]>([]);
+  const [operationalQueue, setOperationalQueue] = useState<OperationalQueueItem[]>([]);
   const [capacityAlerts, setCapacityAlerts] = useState<PlanCapacityAlert[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [exceptions, setExceptions] = useState<ExceptionItem[]>([]);
   const [pendingQueueZoneId, setPendingQueueZoneId] = useState("all");
   const [pendingQueueReason, setPendingQueueReason] = useState<"all" | PendingQueueReason>("all");
+  const [operationalQueueZoneId, setOperationalQueueZoneId] = useState("all");
+  const [operationalQueueReason, setOperationalQueueReason] = useState<"all" | OperationalQueueReason | string>("all");
   const [capacityAlertZoneId, setCapacityAlertZoneId] = useState("all");
   const [capacityAlertLevel, setCapacityAlertLevel] = useState<"all" | CapacityAlertLevel>("all");
   const [sourceDateFrom, setSourceDateFrom] = useState(() => new Date().toISOString().slice(0, 10));
@@ -237,15 +243,24 @@ export default function HomePage() {
     for (const order of orders) values.add(order.zone_id);
     for (const plan of plans) values.add(plan.zone_id);
     for (const item of pendingQueue) values.add(item.zone_id);
+    for (const item of operationalQueue) values.add(item.zone_id);
     return [...values];
-  }, [orders, plans, pendingQueue]);
+  }, [operationalQueue, orders, pendingQueue, plans]);
+  const operationalQueueZoneOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const item of operationalQueue) values.add(item.zone_id);
+    for (const order of orders) values.add(order.zone_id);
+    for (const plan of plans) values.add(plan.zone_id);
+    return [...values];
+  }, [operationalQueue, orders, plans]);
   const sourceMetricsZoneOptions = useMemo(() => {
     const values = new Set<string>();
     for (const order of orders) values.add(order.zone_id);
     for (const plan of plans) values.add(plan.zone_id);
     for (const item of pendingQueue) values.add(item.zone_id);
+    for (const item of operationalQueue) values.add(item.zone_id);
     return [...values];
-  }, [orders, plans, pendingQueue]);
+  }, [operationalQueue, orders, pendingQueue, plans]);
   const ordersOperationalReasonOptions = useMemo(() => {
     const values = new Set<string>();
     for (const order of orders) {
@@ -256,6 +271,15 @@ export default function HomePage() {
     unknown.sort();
     return [...orderedKnown, ...unknown];
   }, [orders]);
+  const operationalQueueReasonOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const item of operationalQueue) values.add(item.reason);
+    const unknown = [...values].filter(
+      (reason) => !OPERATIONAL_REASON_ORDER.includes(reason as (typeof OPERATIONAL_REASON_ORDER)[number]),
+    );
+    unknown.sort();
+    return [...OPERATIONAL_REASON_ORDER, ...unknown];
+  }, [operationalQueue]);
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
       if (ordersOperationalStateFilter !== "all" && order.operational_state !== ordersOperationalStateFilter) {
@@ -275,10 +299,21 @@ export default function HomePage() {
     try {
       const zone_id = pendingQueueZoneId === "all" ? undefined : pendingQueueZoneId;
       const reason = pendingQueueReason === "all" ? undefined : pendingQueueReason;
+      const operational_zone_id = operationalQueueZoneId === "all" ? undefined : operationalQueueZoneId;
+      const operational_reason = operationalQueueReason === "all" ? undefined : operationalQueueReason;
       const source_zone_id = sourceZoneId === "all" ? undefined : sourceZoneId;
       const capacity_zone_id = capacityAlertZoneId === "all" ? undefined : capacityAlertZoneId;
       const level = capacityAlertLevel === "all" ? undefined : capacityAlertLevel;
-      const [summaryRes, sourceMetricsRes, ordersRes, plansRes, exceptionsRes, pendingQueueRes, capacityAlertsRes] = await Promise.all([
+      const [
+        summaryRes,
+        sourceMetricsRes,
+        ordersRes,
+        plansRes,
+        exceptionsRes,
+        pendingQueueRes,
+        operationalQueueRes,
+        capacityAlertsRes,
+      ] = await Promise.all([
         getDailySummary(activeToken, serviceDate),
         getSourceMetrics(activeToken, {
           date_from: sourceDateFrom,
@@ -289,6 +324,11 @@ export default function HomePage() {
         listPlans(activeToken, serviceDate),
         listExceptions(activeToken),
         listPendingQueue(activeToken, { service_date: serviceDate, zone_id, reason }),
+        listOperationalQueue(activeToken, {
+          service_date: serviceDate,
+          zone_id: operational_zone_id,
+          reason: operational_reason,
+        }),
         getPlanCapacityAlerts(activeToken, { service_date: serviceDate, zone_id: capacity_zone_id, level }),
       ]);
       setSummary(summaryRes);
@@ -297,11 +337,24 @@ export default function HomePage() {
       setPlans(plansRes.items ?? []);
       setExceptions(exceptionsRes.items ?? []);
       setPendingQueue(pendingQueueRes.items ?? []);
+      setOperationalQueue(operationalQueueRes.items ?? []);
       setCapacityAlerts(capacityAlertsRes.items ?? []);
     } catch (e) {
       setError(formatError(e));
     }
-  }, [capacityAlertLevel, capacityAlertZoneId, pendingQueueReason, pendingQueueZoneId, serviceDate, sourceDateFrom, sourceDateTo, sourceZoneId, token]);
+  }, [
+    capacityAlertLevel,
+    capacityAlertZoneId,
+    operationalQueueReason,
+    operationalQueueZoneId,
+    pendingQueueReason,
+    pendingQueueZoneId,
+    serviceDate,
+    sourceDateFrom,
+    sourceDateTo,
+    sourceZoneId,
+    token,
+  ]);
 
   const refreshZones = useCallback(async (authToken?: string) => {
     const activeToken = authToken ?? token;
@@ -462,6 +515,7 @@ export default function HomePage() {
     setSourceMetrics([]);
     setOrders([]);
     setPendingQueue([]);
+    setOperationalQueue([]);
     setCapacityAlerts([]);
     setPlans([]);
     setExceptions([]);
@@ -1373,6 +1427,81 @@ export default function HomePage() {
                     <td>{shortId(item.zone_id)}</td>
                     <td>{item.status}</td>
                     <td>{item.reason}</td>
+                    <td>{new Date(item.created_at).toLocaleString("es-ES")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="card grid">
+            <h2>Operational Queue</h2>
+            <div className="row">
+              <label>
+                service_date{" "}
+                <input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} />
+              </label>
+              <label>
+                zone_id{" "}
+                <select value={operationalQueueZoneId} onChange={(e) => setOperationalQueueZoneId(e.target.value)}>
+                  <option value="all">all</option>
+                  {operationalQueueZoneOptions.map((zoneId) => (
+                    <option key={zoneId} value={zoneId}>
+                      {zoneId}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                reason{" "}
+                <select
+                  value={operationalQueueReason}
+                  onChange={(e) => setOperationalQueueReason(e.target.value as "all" | OperationalQueueReason | string)}
+                >
+                  <option value="all">all</option>
+                  {operationalQueueReasonOptions.map((reason) => (
+                    <option key={reason} value={reason}>
+                      {reason}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="secondary" onClick={() => void refreshOps()}>
+                Aplicar filtros
+              </button>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>ref</th>
+                  <th>order_id</th>
+                  <th>customer_id</th>
+                  <th>zone_id</th>
+                  <th>status</th>
+                  <th>intake_type</th>
+                  <th>reason</th>
+                  <th>created_at</th>
+                </tr>
+              </thead>
+              <tbody>
+                {operationalQueue.length === 0 && (
+                  <tr>
+                    <td colSpan={8} style={{ color: "#6b7280" }}>
+                      Sin restricciones operativas para los filtros actuales.
+                    </td>
+                  </tr>
+                )}
+                {operationalQueue.map((item) => (
+                  <tr key={item.order_id}>
+                    <td>{item.external_ref}</td>
+                    <td>{shortId(item.order_id)}</td>
+                    <td>{shortId(item.customer_id)}</td>
+                    <td>{shortId(item.zone_id)}</td>
+                    <td>{item.status}</td>
+                    <td>{item.intake_type}</td>
+                    <td>
+                      <span className={operationalReasonBadgeClass(item.reason)}>{item.reason}</span>
+                    </td>
                     <td>{new Date(item.created_at).toLocaleString("es-ES")}</td>
                   </tr>
                 ))}

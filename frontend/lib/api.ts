@@ -131,6 +131,7 @@ export type PendingQueueReason =
   | "LATE_PENDING_EXCEPTION"
   | "LOCKED_PLAN_EXCEPTION_REQUIRED"
   | "EXCEPTION_REJECTED";
+export type OperationalQueueReason = OrderOperationalReason;
 export type CapacityAlertLevel = "OVER_CAPACITY" | "NEAR_CAPACITY";
 
 export type PendingQueueItem = {
@@ -140,6 +141,18 @@ export type PendingQueueItem = {
   reason: PendingQueueReason;
   service_date: string;
   zone_id: string;
+  created_at: string;
+};
+
+export type OperationalQueueItem = {
+  order_id: string;
+  external_ref: string;
+  customer_id: string;
+  zone_id: string;
+  service_date: string;
+  status: string;
+  intake_type: "new_order" | "same_customer_addon" | string;
+  reason: OperationalQueueReason | string;
   created_at: string;
 };
 
@@ -373,6 +386,13 @@ export async function listPendingQueue(
   params: { service_date: string; zone_id?: string; reason?: PendingQueueReason },
 ): Promise<ListResponse<PendingQueueItem>> {
   return request<ListResponse<PendingQueueItem>>(`/orders/pending-queue${buildQuery(params)}`, { token });
+}
+
+export async function listOperationalQueue(
+  token: string,
+  params: { service_date: string; zone_id?: string; reason?: OperationalQueueReason | string },
+): Promise<ListResponse<OperationalQueueItem>> {
+  return request<ListResponse<OperationalQueueItem>>(`/orders/operational-queue${buildQuery(params)}`, { token });
 }
 
 export async function createPlan(token: string, payload: { service_date: string; zone_id: string }): Promise<Plan> {
