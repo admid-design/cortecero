@@ -146,6 +146,10 @@ class PlanOut(APIModel):
     version: int
     locked_at: datetime | None
     locked_by: uuid.UUID | None
+    total_weight_kg: Decimal
+    orders_total: int
+    orders_with_weight: int
+    orders_missing_weight: int
     orders: list[PlanOrderOut] = Field(default_factory=list)
 
 

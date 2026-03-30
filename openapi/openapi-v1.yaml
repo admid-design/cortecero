@@ -1110,6 +1110,14 @@ components:
           type: string
           format: uuid
           nullable: true
+        total_weight_kg:
+          type: number
+        orders_total:
+          type: integer
+        orders_with_weight:
+          type: integer
+        orders_missing_weight:
+          type: integer
         orders:
           type: array
           items:

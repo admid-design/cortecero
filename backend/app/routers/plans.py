@@ -3,7 +3,7 @@ from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -36,6 +36,23 @@ def _serialize_plan(db: Session, tenant_id: uuid.UUID, plan: Plan) -> PlanOut:
             select(PlanOrder).where(PlanOrder.tenant_id == tenant_id, PlanOrder.plan_id == plan.id).order_by(PlanOrder.added_at)
         )
     )
+    order_ids = [po.order_id for po in plan_orders]
+    if order_ids:
+        total_weight_kg, orders_total, orders_with_weight = db.execute(
+            select(
+                func.coalesce(func.sum(Order.total_weight_kg), 0),
+                func.count(Order.id),
+                func.count(Order.total_weight_kg),
+            ).where(Order.tenant_id == tenant_id, Order.id.in_(order_ids))
+        ).one()
+        orders_total = int(orders_total or 0)
+        orders_with_weight = int(orders_with_weight or 0)
+    else:
+        total_weight_kg = 0
+        orders_total = 0
+        orders_with_weight = 0
+    orders_missing_weight = orders_total - orders_with_weight
+
     return PlanOut(
         id=plan.id,
         service_date=plan.service_date,
@@ -44,6 +61,10 @@ def _serialize_plan(db: Session, tenant_id: uuid.UUID, plan: Plan) -> PlanOut:
         version=plan.version,
         locked_at=plan.locked_at,
         locked_by=plan.locked_by,
+        total_weight_kg=total_weight_kg,
+        orders_total=orders_total,
+        orders_with_weight=orders_with_weight,
+        orders_missing_weight=orders_missing_weight,
         orders=[
             PlanOrderOut(
                 id=po.id,
