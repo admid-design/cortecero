@@ -2,6 +2,38 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.0] - 2026-03-30
+
+R4 closure release, including the full R3 operational planning track and R4 weight/vehicle/capacity track.
+
+### Added
+- R3 operational planning capabilities:
+  - `orders.intake_type` classification (`new_order` / `same_customer_addon`).
+  - Pending Queue endpoint and UI with deterministic ordering and tenant isolation.
+  - Source metrics endpoint and UI by `source_channel`.
+  - Manual auto-lock run endpoint and UI action with idempotent behavior.
+- R4 load and vehicle capabilities:
+  - `orders.total_weight_kg` persistence and operational editing endpoint/UI.
+  - Plan-level derived weight aggregation in backend and plans UI.
+  - Tenant-safe vehicle assignment model (`vehicles` + `plans.vehicle_id`) and assignment endpoint/UI.
+  - Derived capacity alerts endpoint/UI by `service_date` with `OVER_CAPACITY` and `NEAR_CAPACITY`.
+- Automated test coverage for R3/R4 critical paths:
+  - intake classification
+  - pending queue
+  - source metrics
+  - auto-lock
+  - order weight update
+  - plan weight aggregation
+  - vehicle schema/assignment
+  - capacity alerts
+
+### Changed
+- OpenAPI contract expanded to include R3/R4 endpoints and schemas.
+- Frontend typed API client expanded to cover all new R3/R4 operational flows.
+
+### Notes
+- This release closes R4 scope and is the final baseline before opening R5 work.
+
 ## [0.2.0] - 2026-03-30
 
 R2 closure release, including post-merge P1 fix and auth/deprecations cleanup.
