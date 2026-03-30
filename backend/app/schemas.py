@@ -103,6 +103,12 @@ class OrderWeightUpdateRequest(BaseModel):
 
 
 PendingQueueReason = Literal["LATE_PENDING_EXCEPTION", "LOCKED_PLAN_EXCEPTION_REQUIRED", "EXCEPTION_REJECTED"]
+OperationalQueueReason = Literal[
+    "CUSTOMER_DATE_BLOCKED",
+    "CUSTOMER_NOT_ACCEPTING_ORDERS",
+    "OUTSIDE_CUSTOMER_WINDOW",
+    "INSUFFICIENT_LEAD_TIME",
+]
 CapacityAlertLevel = Literal["OVER_CAPACITY", "NEAR_CAPACITY"]
 
 
@@ -118,6 +124,23 @@ class PendingQueueItemOut(APIModel):
 
 class PendingQueueListResponse(BaseModel):
     items: list[PendingQueueItemOut]
+    total: int
+
+
+class OperationalQueueItemOut(APIModel):
+    order_id: uuid.UUID
+    external_ref: str
+    customer_id: uuid.UUID
+    zone_id: uuid.UUID
+    service_date: date
+    status: str
+    intake_type: Literal["new_order", "same_customer_addon"]
+    reason: OperationalQueueReason
+    created_at: datetime
+
+
+class OperationalQueueListResponse(BaseModel):
+    items: list[OperationalQueueItemOut]
     total: int
 
 

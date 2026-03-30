@@ -194,6 +194,50 @@ paths:
                   total:
                     type: integer
 
+  /orders/operational-queue:
+    get:
+      tags: [Orders]
+      summary: Cola operativa de restricciones
+      description: >
+        Lista pedidos con `operational_state=restricted` para un `service_date`,
+        derivados de perfil/excepciones operativas de cliente, sin side effects.
+        Orden determinista: prioridad de razón, `created_at` asc, `order_id` asc.
+      parameters:
+        - in: query
+          name: service_date
+          required: true
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: zone_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: reason
+          schema:
+            type: string
+            enum:
+              - CUSTOMER_DATE_BLOCKED
+              - CUSTOMER_NOT_ACCEPTING_ORDERS
+              - OUTSIDE_CUSTOMER_WINDOW
+              - INSUFFICIENT_LEAD_TIME
+      responses:
+        "200":
+          description: Pedidos restringidos por reglas operativas de cliente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OperationalQueueItem'
+                  total:
+                    type: integer
+
   /orders/{order_id}:
     get:
       tags: [Orders]
@@ -1256,6 +1300,40 @@ components:
         zone_id:
           type: string
           format: uuid
+        created_at:
+          type: string
+          format: date-time
+
+    OperationalQueueItem:
+      type: object
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        external_ref:
+          type: string
+        customer_id:
+          type: string
+          format: uuid
+        zone_id:
+          type: string
+          format: uuid
+        service_date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [ingested, late_pending_exception, ready_for_planning, planned, exception_rejected]
+        intake_type:
+          type: string
+          enum: [new_order, same_customer_addon]
+        reason:
+          type: string
+          enum:
+            - CUSTOMER_DATE_BLOCKED
+            - CUSTOMER_NOT_ACCEPTING_ORDERS
+            - OUTSIDE_CUSTOMER_WINDOW
+            - INSUFFICIENT_LEAD_TIME
         created_at:
           type: string
           format: date-time

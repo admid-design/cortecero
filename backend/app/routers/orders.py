@@ -38,6 +38,9 @@ from app.models import (
     Zone,
 )
 from app.schemas import (
+    OperationalQueueItemOut,
+    OperationalQueueListResponse,
+    OperationalQueueReason,
     OrderIngestionBatchInput,
     OrderIngestionItemResult,
     OrderIngestionResult,
@@ -46,8 +49,8 @@ from app.schemas import (
     OrderWeightUpdateRequest,
     OrdersListResponse,
     PendingQueueListResponse,
-    PendingQueueReason,
     PendingQueueItemOut,
+    PendingQueueReason,
 )
 
 
@@ -569,6 +572,60 @@ def list_pending_queue(
         )
     )
     return PendingQueueListResponse(items=items, total=len(items))
+
+
+@router.get("/orders/operational-queue", response_model=OperationalQueueListResponse)
+def list_operational_queue(
+    service_date: date,
+    zone_id: uuid.UUID | None = None,
+    reason: OperationalQueueReason | None = None,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.office, UserRole.logistics, UserRole.admin)),
+) -> OperationalQueueListResponse:
+    tenant = db.scalar(select(Tenant).where(Tenant.id == current.tenant_id))
+    if not tenant:
+        raise not_found("TENANT_NOT_FOUND", "Tenant no encontrado")
+
+    query = select(Order).where(Order.tenant_id == current.tenant_id, Order.service_date == service_date)
+    if zone_id is not None:
+        query = query.where(Order.zone_id == zone_id)
+
+    orders = list(db.scalars(query))
+    if not orders:
+        return OperationalQueueListResponse(items=[], total=0)
+
+    operational_reason_by_order = _build_operational_reason_map(db, tenant=tenant, orders=orders)
+
+    items: list[OperationalQueueItemOut] = []
+    for order in orders:
+        operational_reason = operational_reason_by_order.get(order.id)
+        if operational_reason is None:
+            continue
+        if reason is not None and operational_reason != reason:
+            continue
+
+        items.append(
+            OperationalQueueItemOut(
+                order_id=order.id,
+                external_ref=order.external_ref,
+                customer_id=order.customer_id,
+                zone_id=order.zone_id,
+                service_date=order.service_date,
+                status=order.status.value,
+                intake_type=order.intake_type.value,
+                reason=operational_reason,
+                created_at=order.created_at,
+            )
+        )
+
+    items.sort(
+        key=lambda item: (
+            _OPERATIONAL_REASON_PRIORITY[item.reason],
+            item.created_at,
+            str(item.order_id),
+        )
+    )
+    return OperationalQueueListResponse(items=items, total=len(items))
 
 
 @router.get("/orders/{order_id}", response_model=OrderOut)
