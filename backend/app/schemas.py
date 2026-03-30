@@ -177,6 +177,22 @@ class DashboardSummaryResponse(BaseModel):
     rejected_exceptions: int
 
 
+class DashboardSourceMetricsItem(BaseModel):
+    source_channel: Literal["sales", "office", "direct_customer", "hotel_direct", "other"]
+    total_orders: int
+    late_orders: int
+    late_rate: float
+    approved_exceptions: int
+    rejected_exceptions: int
+
+
+class DashboardSourceMetricsResponse(BaseModel):
+    date_from: date
+    date_to: date
+    zone_id: uuid.UUID | None
+    items: list[DashboardSourceMetricsItem]
+
+
 class AuditLogOut(APIModel):
     id: uuid.UUID
     entity_type: str

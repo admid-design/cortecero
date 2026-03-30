@@ -494,6 +494,40 @@ paths:
                   rejected_exceptions:
                     type: integer
 
+  /dashboard/source-metrics:
+    get:
+      tags: [Dashboard]
+      summary: Métricas por origen de pedido
+      description: >
+        Métricas derivadas por source_channel para un rango de service_date (inclusive).
+      parameters:
+        - in: query
+          name: date_from
+          required: true
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: date_to
+          required: true
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: zone_id
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: KPIs por origen
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSourceMetricsResponse'
+        "422":
+          description: Rango inválido (date_from > date_to)
+
   /audit:
     get:
       tags: [Audit]
@@ -960,6 +994,42 @@ components:
         created_at:
           type: string
           format: date-time
+
+    DashboardSourceMetricsItem:
+      type: object
+      properties:
+        source_channel:
+          type: string
+          enum: [sales, office, direct_customer, hotel_direct, other]
+        total_orders:
+          type: integer
+        late_orders:
+          type: integer
+        late_rate:
+          type: number
+          format: float
+        approved_exceptions:
+          type: integer
+        rejected_exceptions:
+          type: integer
+
+    DashboardSourceMetricsResponse:
+      type: object
+      properties:
+        date_from:
+          type: string
+          format: date
+        date_to:
+          type: string
+          format: date
+        zone_id:
+          type: string
+          format: uuid
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardSourceMetricsItem'
 
     Plan:
       type: object
