@@ -313,6 +313,31 @@ class CustomersListResponse(BaseModel):
     total: int
 
 
+CustomerOperationalWindowMode = Literal["none", "same_day", "cross_midnight"]
+
+
+class CustomerOperationalProfilePutRequest(BaseModel):
+    accept_orders: bool
+    window_start: time | None
+    window_end: time | None
+    min_lead_hours: int
+    consolidate_by_default: bool
+    ops_note: str | None = Field(max_length=2000)
+
+
+class CustomerOperationalProfileOut(BaseModel):
+    customer_id: uuid.UUID
+    accept_orders: bool
+    window_start: time | None
+    window_end: time | None
+    min_lead_hours: int
+    consolidate_by_default: bool
+    ops_note: str | None
+    evaluation_timezone: str
+    window_mode: CustomerOperationalWindowMode
+    is_customized: bool
+
+
 class UserCreateRequest(BaseModel):
     email: EmailStr
     full_name: str = Field(min_length=1, max_length=160)

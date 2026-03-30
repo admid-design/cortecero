@@ -135,6 +135,31 @@ class Customer(Base):
     )
 
 
+class CustomerOperationalProfile(Base):
+    __tablename__ = "customer_operational_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    customer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    accept_orders: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    window_start: Mapped[time | None] = mapped_column(Time, nullable=True)
+    window_end: Mapped[time | None] = mapped_column(Time, nullable=True)
+    min_lead_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    consolidate_by_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    ops_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "customer_id", name="uq_customer_operational_profile"),
+        ForeignKeyConstraint(
+            ["customer_id", "tenant_id"],
+            ["customers.id", "customers.tenant_id"],
+            ondelete="CASCADE",
+        ),
+    )
+
+
 class Order(Base):
     __tablename__ = "orders"
 

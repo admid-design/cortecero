@@ -833,6 +833,61 @@ paths:
         "422":
           description: Transición inválida
 
+  /admin/customers/{customer_id}/operational-profile:
+    get:
+      tags: [Admin Customers]
+      summary: Leer perfil operativo del cliente
+      parameters:
+        - in: path
+          name: customer_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Perfil operativo (persistido o por defecto)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerOperationalProfile'
+        "404":
+          description: Cliente no encontrado
+        "422":
+          description: Timezone de evaluación inválida
+    put:
+      tags: [Admin Customers]
+      summary: Reemplazar (upsert) perfil operativo del cliente
+      description: >
+        PUT opera como upsert y reemplazo completo: crea el perfil si no existe o reemplaza
+        todos sus campos si ya existe. Para limpiar campos opcionales se envía null explícito.
+      parameters:
+        - in: path
+          name: customer_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerOperationalProfilePutRequest'
+      responses:
+        "200":
+          description: Perfil operativo actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerOperationalProfile'
+        "403":
+          description: Rol sin permisos de escritura
+        "404":
+          description: Cliente no encontrado
+        "422":
+          description: Perfil operativo inválido o timezone inválida
+
   /admin/customers/{customer_id}/deactivate:
     post:
       tags: [Admin Customers]
@@ -1473,6 +1528,65 @@ components:
         created_at:
           type: string
           format: date-time
+
+    CustomerOperationalProfilePutRequest:
+      type: object
+      required:
+        - accept_orders
+        - window_start
+        - window_end
+        - min_lead_hours
+        - consolidate_by_default
+        - ops_note
+      properties:
+        accept_orders:
+          type: boolean
+        window_start:
+          type: string
+          format: time
+          nullable: true
+        window_end:
+          type: string
+          format: time
+          nullable: true
+        min_lead_hours:
+          type: integer
+        consolidate_by_default:
+          type: boolean
+        ops_note:
+          type: string
+          nullable: true
+
+    CustomerOperationalProfile:
+      type: object
+      properties:
+        customer_id:
+          type: string
+          format: uuid
+        accept_orders:
+          type: boolean
+        window_start:
+          type: string
+          format: time
+          nullable: true
+        window_end:
+          type: string
+          format: time
+          nullable: true
+        min_lead_hours:
+          type: integer
+        consolidate_by_default:
+          type: boolean
+        ops_note:
+          type: string
+          nullable: true
+        evaluation_timezone:
+          type: string
+        window_mode:
+          type: string
+          enum: [none, same_day, cross_midnight]
+        is_customized:
+          type: boolean
 
     CustomersListResponse:
       type: object
