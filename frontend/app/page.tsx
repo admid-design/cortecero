@@ -27,10 +27,12 @@ import {
   lockPlan,
   login,
   rejectException,
+  runAutoLock,
   updateAdminCustomer,
   updateAdminTenantSettings,
   updateAdminUser,
   updateAdminZone,
+  type AutoLockRunResponse,
   type Customer,
   type DashboardSummary,
   type DashboardSourceMetricsItem,
@@ -111,6 +113,8 @@ export default function HomePage() {
   const [newPlanZoneId, setNewPlanZoneId] = useState("");
   const [includePlanId, setIncludePlanId] = useState("");
   const [includeOrderId, setIncludeOrderId] = useState("");
+  const [autoLockRunning, setAutoLockRunning] = useState(false);
+  const [autoLockResult, setAutoLockResult] = useState<AutoLockRunResponse | null>(null);
   const [exceptionOrderId, setExceptionOrderId] = useState("");
   const [exceptionNote, setExceptionNote] = useState("Pedido fuera de corte");
 
@@ -159,6 +163,7 @@ export default function HomePage() {
 
   const isAuthenticated = useMemo(() => token.length > 0, [token]);
   const isAdmin = useMemo(() => role === "admin", [role]);
+  const canRunAutoLock = useMemo(() => role === "logistics" || role === "admin", [role]);
   const pendingQueueZoneOptions = useMemo(() => {
     const values = new Set<string>();
     for (const order of orders) values.add(order.zone_id);
@@ -273,6 +278,7 @@ export default function HomePage() {
       setToken(auth.access_token);
       setRole(nextRole);
       setViewMode("ops");
+      setAutoLockResult(null);
       await refreshOps(auth.access_token);
       if (nextRole === "admin") {
         await refreshZones(auth.access_token);
@@ -304,6 +310,8 @@ export default function HomePage() {
     setUsers([]);
     setTenantSettings(null);
     setViewMode("ops");
+    setAutoLockResult(null);
+    setAutoLockRunning(false);
   }
 
   async function onCreatePlan() {
@@ -324,6 +332,21 @@ export default function HomePage() {
       await refreshOps();
     } catch (e) {
       setError(formatError(e));
+    }
+  }
+
+  async function onRunAutoLock() {
+    if (!token || !canRunAutoLock) return;
+    setError("");
+    setAutoLockRunning(true);
+    try {
+      const result = await runAutoLock(token);
+      setAutoLockResult(result);
+      await refreshOps();
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setAutoLockRunning(false);
     }
   }
 
@@ -771,6 +794,21 @@ export default function HomePage() {
           <div className="grid cols-2">
             <div className="card grid">
               <h2>Planes</h2>
+              {canRunAutoLock && (
+                <div className="row">
+                  <button className="secondary" onClick={onRunAutoLock} disabled={autoLockRunning}>
+                    {autoLockRunning ? "Ejecutando auto-lock..." : "Ejecutar auto-lock"}
+                  </button>
+                  {autoLockResult && (
+                    <span className="pill">
+                      service_date {autoLockResult.service_date} · locked {autoLockResult.locked_count}/
+                      {autoLockResult.considered_open_plans} · enabled{" "}
+                      {autoLockResult.auto_lock_enabled ? "true" : "false"} · window{" "}
+                      {autoLockResult.window_reached ? "reached" : "not_reached"}
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="row">
                 <input
                   placeholder="zone_id para crear plan"

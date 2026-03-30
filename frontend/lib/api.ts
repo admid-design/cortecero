@@ -152,6 +152,16 @@ export type Plan = {
   orders: PlanOrder[];
 };
 
+export type AutoLockRunResponse = {
+  tenant_id: string;
+  service_date: string;
+  auto_lock_enabled: boolean;
+  window_reached: boolean;
+  considered_open_plans: number;
+  locked_count: number;
+  locked_plan_ids: string[];
+};
+
 export type ExceptionItem = {
   id: string;
   order_id: string;
@@ -282,6 +292,10 @@ export async function createPlan(token: string, payload: { service_date: string;
 
 export async function lockPlan(token: string, planId: string): Promise<Plan> {
   return request<Plan>(`/plans/${planId}/lock`, { token, method: "POST" });
+}
+
+export async function runAutoLock(token: string): Promise<AutoLockRunResponse> {
+  return request<AutoLockRunResponse>("/plans/auto-lock/run", { token, method: "POST" });
 }
 
 export async function includeOrderInPlan(token: string, planId: string, orderId: string): Promise<PlanOrder> {
