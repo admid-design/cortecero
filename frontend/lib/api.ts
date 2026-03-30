@@ -98,7 +98,7 @@ export type Order = {
   status: string;
   is_late: boolean;
   effective_cutoff_at: string;
-  intake_type: "new_order" | "same_customer_addon";
+  intake_type: "new_order" | "same_customer_addon" | string;
 };
 
 export type PendingQueueReason =

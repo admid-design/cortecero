@@ -72,6 +72,16 @@ function shortId(value: string): string {
   return value.slice(0, 8);
 }
 
+function intakeBadgeMeta(intakeType: string): { className: string; label: string } {
+  if (intakeType === "new_order") {
+    return { className: "badge intake-new", label: "nuevo" };
+  }
+  if (intakeType === "same_customer_addon") {
+    return { className: "badge intake-addon", label: "añadido" };
+  }
+  return { className: "badge intake-unknown", label: intakeType || "unknown" };
+}
+
 export default function HomePage() {
   const [tenantSlug, setTenantSlug] = useState("demo-cortecero");
   const [email, setEmail] = useState("logistics@demo.cortecero.app");
@@ -851,16 +861,14 @@ export default function HomePage() {
                 {orders.map((order) => {
                   const badgeClass =
                     order.status === "exception_rejected" ? "badge rejected" : order.is_late ? "badge late" : "badge ok";
-                  const intakeBadgeClass =
-                    order.intake_type === "same_customer_addon" ? "badge intake-addon" : "badge intake-new";
-                  const intakeLabel = order.intake_type === "same_customer_addon" ? "añadido" : "nuevo";
+                  const intakeMeta = intakeBadgeMeta(order.intake_type);
                   return (
                     <tr key={order.id}>
                       <td>{order.external_ref}</td>
                       <td>{shortId(order.customer_id)}</td>
                       <td>{shortId(order.zone_id)}</td>
                       <td>
-                        <span className={intakeBadgeClass}>{intakeLabel}</span>
+                        <span className={intakeMeta.className}>{intakeMeta.label}</span>
                       </td>
                       <td>{order.status}</td>
                       <td>

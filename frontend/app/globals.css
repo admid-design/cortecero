@@ -209,6 +209,11 @@ th {
   color: #6d28d9;
 }
 
+.badge.intake-unknown {
+  background: #e5e7eb;
+  color: #374151;
+}
+
 @media (max-width: 980px) {
   .grid.cols-2 {
     grid-template-columns: 1fr;
