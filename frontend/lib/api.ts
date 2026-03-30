@@ -148,6 +148,10 @@ export type Plan = {
   zone_id: string;
   status: "open" | "locked" | "dispatched";
   version: number;
+  vehicle_id: string | null;
+  vehicle_code: string | null;
+  vehicle_name: string | null;
+  vehicle_capacity_kg: number | null;
   locked_at: string | null;
   locked_by: string | null;
   total_weight_kg: number;
@@ -301,6 +305,18 @@ export async function lockPlan(token: string, planId: string): Promise<Plan> {
 
 export async function runAutoLock(token: string): Promise<AutoLockRunResponse> {
   return request<AutoLockRunResponse>("/plans/auto-lock/run", { token, method: "POST" });
+}
+
+export async function updatePlanVehicle(
+  token: string,
+  planId: string,
+  payload: { vehicle_id: string | null },
+): Promise<Plan> {
+  return request<Plan>(`/plans/${planId}/vehicle`, {
+    token,
+    method: "PATCH",
+    body: payload,
+  });
 }
 
 export async function includeOrderInPlan(token: string, planId: string, orderId: string): Promise<PlanOrder> {

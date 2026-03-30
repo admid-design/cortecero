@@ -28,6 +28,7 @@ import {
   login,
   rejectException,
   runAutoLock,
+  updatePlanVehicle,
   updateOrderWeight,
   updateAdminCustomer,
   updateAdminTenantSettings,
@@ -118,6 +119,8 @@ export default function HomePage() {
   const [autoLockResult, setAutoLockResult] = useState<AutoLockRunResponse | null>(null);
   const [weightDrafts, setWeightDrafts] = useState<Record<string, string>>({});
   const [savingWeightOrderId, setSavingWeightOrderId] = useState<string | null>(null);
+  const [vehicleDrafts, setVehicleDrafts] = useState<Record<string, string>>({});
+  const [savingVehiclePlanId, setSavingVehiclePlanId] = useState<string | null>(null);
   const [exceptionOrderId, setExceptionOrderId] = useState("");
   const [exceptionNote, setExceptionNote] = useState("Pedido fuera de corte");
 
@@ -168,6 +171,7 @@ export default function HomePage() {
   const isAdmin = useMemo(() => role === "admin", [role]);
   const canEditOrderWeight = useMemo(() => role === "logistics" || role === "admin", [role]);
   const canRunAutoLock = useMemo(() => role === "logistics" || role === "admin", [role]);
+  const canAssignPlanVehicle = useMemo(() => role === "logistics" || role === "admin", [role]);
   const pendingQueueZoneOptions = useMemo(() => {
     const values = new Set<string>();
     for (const order of orders) values.add(order.zone_id);
@@ -285,6 +289,8 @@ export default function HomePage() {
       setAutoLockResult(null);
       setWeightDrafts({});
       setSavingWeightOrderId(null);
+      setVehicleDrafts({});
+      setSavingVehiclePlanId(null);
       await refreshOps(auth.access_token);
       if (nextRole === "admin") {
         await refreshZones(auth.access_token);
@@ -320,6 +326,8 @@ export default function HomePage() {
     setAutoLockRunning(false);
     setWeightDrafts({});
     setSavingWeightOrderId(null);
+    setVehicleDrafts({});
+    setSavingVehiclePlanId(null);
   }
 
   async function onCreatePlan() {
@@ -386,6 +394,29 @@ export default function HomePage() {
       setError(formatError(e));
     } finally {
       setSavingWeightOrderId(null);
+    }
+  }
+
+  async function onSavePlanVehicle(plan: Plan, clear = false) {
+    if (!token || !canAssignPlanVehicle) return;
+
+    const rawValue = clear ? "" : (vehicleDrafts[plan.id] ?? plan.vehicle_id ?? "").trim();
+    const nextVehicleId = rawValue.length > 0 ? rawValue : null;
+
+    setError("");
+    setSavingVehiclePlanId(plan.id);
+    try {
+      await updatePlanVehicle(token, plan.id, { vehicle_id: nextVehicleId });
+      setVehicleDrafts((current) => {
+        const next = { ...current };
+        delete next[plan.id];
+        return next;
+      });
+      await refreshOps();
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setSavingVehiclePlanId(null);
     }
   }
 
@@ -869,8 +900,10 @@ export default function HomePage() {
                     <th>id</th>
                     <th>zona</th>
                     <th>estado</th>
+                    <th>vehículo</th>
                     <th>peso_kg</th>
                     <th>con/sin peso</th>
+                    <th>asignar vehículo</th>
                     <th>acción</th>
                   </tr>
                 </thead>
@@ -880,10 +913,56 @@ export default function HomePage() {
                       <td>{shortId(plan.id)}</td>
                       <td>{shortId(plan.zone_id)}</td>
                       <td>{plan.status}</td>
+                      <td>
+                        {plan.vehicle_id ? (
+                          <div className="grid" style={{ gap: 2 }}>
+                            <span>{plan.vehicle_name ?? "vehículo"}</span>
+                            <small style={{ color: "#6b7280" }}>
+                              {plan.vehicle_code ?? shortId(plan.vehicle_id)}
+                              {plan.vehicle_capacity_kg != null ? ` · cap ${plan.vehicle_capacity_kg} kg` : ""}
+                            </small>
+                          </div>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td>{plan.total_weight_kg}</td>
                       <td>
                         {plan.orders_with_weight}/{plan.orders_total}
                         {plan.orders_missing_weight > 0 ? ` (${plan.orders_missing_weight} sin peso)` : ""}
+                      </td>
+                      <td>
+                        {canAssignPlanVehicle ? (
+                          <div className="row" style={{ gap: 6 }}>
+                            <input
+                              placeholder="vehicle_id (uuid)"
+                              value={vehicleDrafts[plan.id] ?? (plan.vehicle_id ?? "")}
+                              onChange={(e) =>
+                                setVehicleDrafts((current) => ({
+                                  ...current,
+                                  [plan.id]: e.target.value,
+                                }))
+                              }
+                              style={{ width: 220 }}
+                            />
+                            <button
+                              className="secondary"
+                              onClick={() => void onSavePlanVehicle(plan)}
+                              disabled={savingVehiclePlanId === plan.id}
+                            >
+                              {savingVehiclePlanId === plan.id ? "Guardando..." : "Guardar"}
+                            </button>
+                            <button
+                              className="secondary"
+                              onClick={() => void onSavePlanVehicle(plan, true)}
+                              disabled={savingVehiclePlanId === plan.id}
+                            >
+                              Limpiar
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ color: "#6b7280" }}>solo lectura</span>
+                        )}
                       </td>
                       <td>{plan.status === "open" && <button onClick={() => onLockPlan(plan.id)}>Lock</button>}</td>
                     </tr>
