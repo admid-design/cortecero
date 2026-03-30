@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.audit import write_audit
 from app.db import get_db
@@ -10,6 +11,13 @@ from app.schemas import TenantSettingsOut, TenantSettingsUpdateRequest
 
 
 router = APIRouter(prefix="/admin/tenant-settings", tags=["Admin Tenant Settings"])
+
+
+def _ensure_valid_iana_timezone(value: str) -> None:
+    try:
+        ZoneInfo(value)
+    except ZoneInfoNotFoundError as exc:
+        raise unprocessable("INVALID_TIMEZONE", "default_timezone no es una IANA timezone válida") from exc
 
 
 @router.get("", response_model=TenantSettingsOut)
@@ -51,6 +59,7 @@ def update_tenant_settings(
     if "default_timezone" in payload.model_fields_set:
         if payload.default_timezone is None:
             raise unprocessable("INVALID_STATE_TRANSITION", "default_timezone no puede ser null")
+        _ensure_valid_iana_timezone(payload.default_timezone)
         tenant.default_timezone = payload.default_timezone
         changed_fields.append("default_timezone")
 

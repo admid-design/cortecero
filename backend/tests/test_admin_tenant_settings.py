@@ -89,3 +89,22 @@ def test_patch_tenant_settings_validates_empty_and_null_values(client):
     )
     assert null_timezone.status_code == 422
     assert null_timezone.json()["detail"]["code"] == "INVALID_STATE_TRANSITION"
+
+
+def test_patch_tenant_settings_rejects_invalid_iana_timezone(client):
+    token = login_as(
+        client,
+        tenant_slug="demo-cortecero",
+        email="admin@demo.cortecero.app",
+        password="admin123",
+    )
+
+    invalid_timezone = client.patch(
+        "/admin/tenant-settings",
+        json={"default_timezone": "Mars/Phobos"},
+        headers=auth_headers(token),
+    )
+    assert invalid_timezone.status_code == 422
+    body = invalid_timezone.json()["detail"]
+    assert body["code"] == "INVALID_TIMEZONE"
+    assert body["message"] == "default_timezone no es una IANA timezone válida"
