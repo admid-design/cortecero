@@ -13,6 +13,7 @@ from app.db import get_db
 from app.deps import CurrentUser, require_roles
 from app.errors import conflict, not_found, unprocessable
 from app.models import (
+    Customer,
     EntityType,
     ExceptionItem,
     ExceptionStatus,
@@ -29,6 +30,8 @@ from app.models import (
 from app.schemas import (
     AutoLockRunResponse,
     PlanCreateRequest,
+    PlanCustomerConsolidationItemOut,
+    PlanCustomerConsolidationResponse,
     PlanOrderCreateRequest,
     PlanOrderOut,
     PlanOut,
@@ -245,6 +248,86 @@ def list_capacity_alerts(
         near_threshold_ratio=float(CAPACITY_ALERT_NEAR_THRESHOLD),
         items=items,
         total=len(items),
+    )
+
+
+@router.get("/{plan_id}/customer-consolidation", response_model=PlanCustomerConsolidationResponse)
+def get_plan_customer_consolidation(
+    plan_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.office, UserRole.logistics, UserRole.admin)),
+) -> PlanCustomerConsolidationResponse:
+    plan = db.scalar(select(Plan).where(Plan.id == plan_id, Plan.tenant_id == current.tenant_id))
+    if not plan:
+        raise not_found("PLAN_NOT_FOUND", "Plan no encontrado")
+
+    rows = db.execute(
+        select(
+            Order.customer_id,
+            Customer.name,
+            Order.external_ref,
+            Order.total_weight_kg,
+            Order.id,
+            PlanOrder.added_at,
+        )
+        .join(
+            Order,
+            (Order.id == PlanOrder.order_id) & (Order.tenant_id == PlanOrder.tenant_id),
+        )
+        .join(
+            Customer,
+            (Customer.id == Order.customer_id) & (Customer.tenant_id == Order.tenant_id),
+        )
+        .where(
+            PlanOrder.tenant_id == current.tenant_id,
+            PlanOrder.plan_id == plan.id,
+        )
+        .order_by(PlanOrder.added_at.asc(), Order.id.asc())
+    ).all()
+
+    grouped: dict[uuid.UUID, dict] = {}
+    for row in rows:
+        bucket = grouped.get(row.customer_id)
+        if bucket is None:
+            bucket = {
+                "customer_id": row.customer_id,
+                "customer_name": row.name,
+                "total_orders": 0,
+                "order_refs": [],
+                "total_weight_kg": Decimal("0"),
+                "orders_with_weight": 0,
+                "orders_missing_weight": 0,
+            }
+            grouped[row.customer_id] = bucket
+
+        bucket["total_orders"] += 1
+        bucket["order_refs"].append(row.external_ref)
+        if row.total_weight_kg is None:
+            bucket["orders_missing_weight"] += 1
+        else:
+            bucket["orders_with_weight"] += 1
+            bucket["total_weight_kg"] += Decimal(str(row.total_weight_kg))
+
+    items = [
+        PlanCustomerConsolidationItemOut(
+            customer_id=bucket["customer_id"],
+            customer_name=bucket["customer_name"],
+            total_orders=bucket["total_orders"],
+            order_refs=bucket["order_refs"],
+            total_weight_kg=bucket["total_weight_kg"] if bucket["orders_with_weight"] > 0 else None,
+            orders_with_weight=bucket["orders_with_weight"],
+            orders_missing_weight=bucket["orders_missing_weight"],
+        )
+        for bucket in grouped.values()
+    ]
+    items.sort(key=lambda item: (-item.total_orders, item.customer_name.lower(), str(item.customer_id)))
+
+    return PlanCustomerConsolidationResponse(
+        plan_id=plan.id,
+        service_date=plan.service_date,
+        zone_id=plan.zone_id,
+        items=items,
+        total_customers=len(items),
     )
 
 

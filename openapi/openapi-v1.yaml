@@ -396,6 +396,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/Plan'
 
+  /plans/{plan_id}/customer-consolidation:
+    get:
+      tags: [Plans]
+      summary: Consolidación operativa por cliente del plan
+      description: >
+        Lectura derivada de pedidos ya incluidos en el plan, agrupados por cliente.
+        No muta el plan ni recalcula reglas de negocio.
+        Orden determinista de clientes: `total_orders` desc, `customer_name` asc, `customer_id` asc.
+      parameters:
+        - in: path
+          name: plan_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Consolidación por cliente para el plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanCustomerConsolidationResponse'
+        "404":
+          description: Plan no encontrado
+
   /plans/{plan_id}/vehicle:
     patch:
       tags: [Plans]
@@ -1479,6 +1504,47 @@ components:
           items:
             $ref: '#/components/schemas/PlanCapacityAlert'
         total:
+          type: integer
+
+    PlanCustomerConsolidationItem:
+      type: object
+      properties:
+        customer_id:
+          type: string
+          format: uuid
+        customer_name:
+          type: string
+        total_orders:
+          type: integer
+        order_refs:
+          type: array
+          items:
+            type: string
+        total_weight_kg:
+          type: number
+          nullable: true
+        orders_with_weight:
+          type: integer
+        orders_missing_weight:
+          type: integer
+
+    PlanCustomerConsolidationResponse:
+      type: object
+      properties:
+        plan_id:
+          type: string
+          format: uuid
+        service_date:
+          type: string
+          format: date
+        zone_id:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanCustomerConsolidationItem'
+        total_customers:
           type: integer
 
     PlanOrder:

@@ -222,6 +222,24 @@ class PlanCapacityAlertsResponse(BaseModel):
     total: int
 
 
+class PlanCustomerConsolidationItemOut(APIModel):
+    customer_id: uuid.UUID
+    customer_name: str
+    total_orders: int
+    order_refs: list[str]
+    total_weight_kg: Decimal | None
+    orders_with_weight: int
+    orders_missing_weight: int
+
+
+class PlanCustomerConsolidationResponse(BaseModel):
+    plan_id: uuid.UUID
+    service_date: date
+    zone_id: uuid.UUID
+    items: list[PlanCustomerConsolidationItemOut]
+    total_customers: int
+
+
 class ExceptionCreateRequest(BaseModel):
     order_id: uuid.UUID
     type: Literal["late_order"]
