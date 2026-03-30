@@ -61,6 +61,14 @@ import {
 
 type ViewMode = "ops" | "admin";
 type AdminSection = "zones" | "customers" | "users" | "tenant";
+type OrdersOperationalStateFilter = "all" | "eligible" | "restricted";
+
+const OPERATIONAL_REASON_ORDER = [
+  "CUSTOMER_DATE_BLOCKED",
+  "CUSTOMER_NOT_ACCEPTING_ORDERS",
+  "OUTSIDE_CUSTOMER_WINDOW",
+  "INSUFFICIENT_LEAD_TIME",
+] as const;
 
 function decodeRoleFromToken(token: string): UserRole | null {
   try {
@@ -99,6 +107,26 @@ function intakeBadgeMeta(intakeType: string): { className: string; label: string
   return { className: "badge intake-unknown", label: intakeType || "unknown" };
 }
 
+function operationalStateBadgeMeta(state: string): { className: string; label: string } {
+  if (state === "eligible") {
+    return { className: "badge ok", label: "eligible" };
+  }
+  if (state === "restricted") {
+    return { className: "badge late", label: "restricted" };
+  }
+  return { className: "badge intake-unknown", label: state || "unknown" };
+}
+
+function operationalReasonBadgeClass(reason: string): string {
+  if (reason === "CUSTOMER_DATE_BLOCKED" || reason === "CUSTOMER_NOT_ACCEPTING_ORDERS") {
+    return "badge rejected";
+  }
+  if (reason === "OUTSIDE_CUSTOMER_WINDOW" || reason === "INSUFFICIENT_LEAD_TIME") {
+    return "badge late";
+  }
+  return "badge intake-unknown";
+}
+
 export default function HomePage() {
   const [tenantSlug, setTenantSlug] = useState("demo-cortecero");
   const [email, setEmail] = useState("logistics@demo.cortecero.app");
@@ -114,6 +142,8 @@ export default function HomePage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [sourceMetrics, setSourceMetrics] = useState<DashboardSourceMetricsItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersOperationalStateFilter, setOrdersOperationalStateFilter] = useState<OrdersOperationalStateFilter>("all");
+  const [ordersOperationalReasonFilter, setOrdersOperationalReasonFilter] = useState("all");
   const [pendingQueue, setPendingQueue] = useState<PendingQueueItem[]>([]);
   const [capacityAlerts, setCapacityAlerts] = useState<PlanCapacityAlert[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -216,6 +246,27 @@ export default function HomePage() {
     for (const item of pendingQueue) values.add(item.zone_id);
     return [...values];
   }, [orders, plans, pendingQueue]);
+  const ordersOperationalReasonOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const order of orders) {
+      if (order.operational_reason) values.add(order.operational_reason);
+    }
+    const orderedKnown = OPERATIONAL_REASON_ORDER.filter((reason) => values.has(reason));
+    const unknown = [...values].filter((reason) => !OPERATIONAL_REASON_ORDER.includes(reason as (typeof OPERATIONAL_REASON_ORDER)[number]));
+    unknown.sort();
+    return [...orderedKnown, ...unknown];
+  }, [orders]);
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      if (ordersOperationalStateFilter !== "all" && order.operational_state !== ordersOperationalStateFilter) {
+        return false;
+      }
+      if (ordersOperationalReasonFilter !== "all" && order.operational_reason !== ordersOperationalReasonFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [orders, ordersOperationalReasonFilter, ordersOperationalStateFilter]);
 
   const refreshOps = useCallback(async (authToken?: string) => {
     const activeToken = authToken ?? token;
@@ -1331,6 +1382,33 @@ export default function HomePage() {
 
           <div className="card">
             <h2>Pedidos</h2>
+            <div className="row" style={{ margin: "10px 0" }}>
+              <label>
+                operational_state{" "}
+                <select
+                  value={ordersOperationalStateFilter}
+                  onChange={(e) => setOrdersOperationalStateFilter(e.target.value as OrdersOperationalStateFilter)}
+                >
+                  <option value="all">all</option>
+                  <option value="eligible">eligible</option>
+                  <option value="restricted">restricted</option>
+                </select>
+              </label>
+              <label>
+                operational_reason{" "}
+                <select value={ordersOperationalReasonFilter} onChange={(e) => setOrdersOperationalReasonFilter(e.target.value)}>
+                  <option value="all">all</option>
+                  {ordersOperationalReasonOptions.map((reason) => (
+                    <option key={reason} value={reason}>
+                      {reason}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="secondary" onClick={() => void refreshOps()}>
+                Refrescar pedidos
+              </button>
+            </div>
             <table>
               <thead>
                 <tr>
@@ -1339,6 +1417,8 @@ export default function HomePage() {
                   <th>zona</th>
                   <th>tipo</th>
                   <th>estado</th>
+                  <th>op_state</th>
+                  <th>op_reason</th>
                   <th>late</th>
                   <th>peso_kg</th>
                   <th>editar_peso</th>
@@ -1346,10 +1426,18 @@ export default function HomePage() {
                 </tr>
               </thead>
               <tbody>
-                {orders.map((order) => {
+                {filteredOrders.length === 0 && (
+                  <tr>
+                    <td colSpan={11} style={{ color: "#6b7280" }}>
+                      Sin pedidos para los filtros actuales.
+                    </td>
+                  </tr>
+                )}
+                {filteredOrders.map((order) => {
                   const badgeClass =
                     order.status === "exception_rejected" ? "badge rejected" : order.is_late ? "badge late" : "badge ok";
                   const intakeMeta = intakeBadgeMeta(order.intake_type);
+                  const operationalStateMeta = operationalStateBadgeMeta(order.operational_state);
                   const weightValue = weightDrafts[order.id] ?? (order.total_weight_kg == null ? "" : String(order.total_weight_kg));
                   return (
                     <tr key={order.id}>
@@ -1360,6 +1448,18 @@ export default function HomePage() {
                         <span className={intakeMeta.className}>{intakeMeta.label}</span>
                       </td>
                       <td>{order.status}</td>
+                      <td>
+                        <span className={operationalStateMeta.className}>{operationalStateMeta.label}</span>
+                      </td>
+                      <td>
+                        {order.operational_reason ? (
+                          <span className={operationalReasonBadgeClass(order.operational_reason)}>
+                            {order.operational_reason}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td>
                         <span className={badgeClass}>{order.is_late ? "late" : "on_time"}</span>
                       </td>

@@ -105,6 +105,13 @@ export type DashboardSourceMetrics = {
   items: DashboardSourceMetricsItem[];
 };
 
+export type OrderOperationalState = "eligible" | "restricted";
+export type OrderOperationalReason =
+  | "CUSTOMER_DATE_BLOCKED"
+  | "CUSTOMER_NOT_ACCEPTING_ORDERS"
+  | "OUTSIDE_CUSTOMER_WINDOW"
+  | "INSUFFICIENT_LEAD_TIME";
+
 export type Order = {
   id: string;
   customer_id: string;
@@ -112,6 +119,8 @@ export type Order = {
   external_ref: string;
   service_date: string;
   status: string;
+  operational_state: OrderOperationalState | string;
+  operational_reason: OrderOperationalReason | string | null;
   is_late: boolean;
   effective_cutoff_at: string;
   intake_type: "new_order" | "same_customer_addon" | string;
