@@ -93,6 +93,7 @@ class OrderWeightUpdateRequest(BaseModel):
 
 
 PendingQueueReason = Literal["LATE_PENDING_EXCEPTION", "LOCKED_PLAN_EXCEPTION_REQUIRED", "EXCEPTION_REJECTED"]
+CapacityAlertLevel = Literal["OVER_CAPACITY", "NEAR_CAPACITY"]
 
 
 class PendingQueueItemOut(APIModel):
@@ -163,6 +164,28 @@ class PlanOut(APIModel):
 
 class PlansListResponse(BaseModel):
     items: list[PlanOut]
+    total: int
+
+
+class PlanCapacityAlertOut(APIModel):
+    plan_id: uuid.UUID
+    service_date: date
+    zone_id: uuid.UUID
+    vehicle_id: uuid.UUID
+    vehicle_code: str | None
+    vehicle_name: str | None
+    total_weight_kg: Decimal
+    vehicle_capacity_kg: Decimal
+    usage_ratio: float
+    alert_level: CapacityAlertLevel
+
+
+class PlanCapacityAlertsResponse(BaseModel):
+    service_date: date
+    zone_id: uuid.UUID | None
+    level: CapacityAlertLevel | None
+    near_threshold_ratio: float
+    items: list[PlanCapacityAlertOut]
     total: int
 
 

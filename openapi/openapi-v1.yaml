@@ -274,7 +274,6 @@ paths:
                       $ref: '#/components/schemas/Plan'
                   total:
                     type: integer
-
     post:
       tags: [Plans]
       summary: Crear plan para fecha y zona
@@ -299,6 +298,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Plan'
+
+  /plans/capacity-alerts:
+    get:
+      tags: [Plans]
+      summary: Alertas de capacidad por plan
+      description: >
+        Lectura derivada de capacidad por plan con vehículo asignado.
+        Reporta solo alertas (over o near) según ratio de carga.
+      parameters:
+        - in: query
+          name: service_date
+          required: true
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: zone_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: level
+          schema:
+            type: string
+            enum: [OVER_CAPACITY, NEAR_CAPACITY]
+      responses:
+        "200":
+          description: Alertas de capacidad calculadas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanCapacityAlertsResponse'
+        "422":
+          description: Filtro inválido
 
   /plans/{plan_id}:
     get:
@@ -1166,6 +1199,62 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlanOrder'
+
+    PlanCapacityAlert:
+      type: object
+      properties:
+        plan_id:
+          type: string
+          format: uuid
+        service_date:
+          type: string
+          format: date
+        zone_id:
+          type: string
+          format: uuid
+        vehicle_id:
+          type: string
+          format: uuid
+        vehicle_code:
+          type: string
+          nullable: true
+        vehicle_name:
+          type: string
+          nullable: true
+        total_weight_kg:
+          type: number
+        vehicle_capacity_kg:
+          type: number
+        usage_ratio:
+          type: number
+          format: float
+        alert_level:
+          type: string
+          enum: [OVER_CAPACITY, NEAR_CAPACITY]
+
+    PlanCapacityAlertsResponse:
+      type: object
+      properties:
+        service_date:
+          type: string
+          format: date
+        zone_id:
+          type: string
+          format: uuid
+          nullable: true
+        level:
+          type: string
+          enum: [OVER_CAPACITY, NEAR_CAPACITY]
+          nullable: true
+        near_threshold_ratio:
+          type: number
+          format: float
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanCapacityAlert'
+        total:
+          type: integer
 
     PlanOrder:
       type: object

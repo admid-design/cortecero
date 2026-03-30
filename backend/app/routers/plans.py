@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends
@@ -32,11 +33,20 @@ from app.schemas import (
     PlanOrderOut,
     PlanOut,
     PlansListResponse,
+    PlanCapacityAlertOut,
+    PlanCapacityAlertsResponse,
     PlanVehicleUpdateRequest,
 )
 
 
 router = APIRouter(prefix="/plans", tags=["Plans"])
+CAPACITY_ALERT_NEAR_THRESHOLD = Decimal("0.90")
+
+
+def _alert_priority(level: str) -> int:
+    if level == "OVER_CAPACITY":
+        return 0
+    return 1
 
 
 def _serialize_plan(db: Session, tenant_id: uuid.UUID, plan: Plan) -> PlanOut:
@@ -119,6 +129,123 @@ def list_plans(
     plans = list(db.scalars(query.order_by(Plan.service_date.desc())))
     items = [_serialize_plan(db, current.tenant_id, plan) for plan in plans]
     return PlansListResponse(items=items, total=len(items))
+
+
+@router.get("/capacity-alerts", response_model=PlanCapacityAlertsResponse)
+def list_capacity_alerts(
+    service_date: date,
+    zone_id: uuid.UUID | None = None,
+    level: str | None = None,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.office, UserRole.logistics, UserRole.admin)),
+) -> PlanCapacityAlertsResponse:
+    allowed_levels = {"OVER_CAPACITY", "NEAR_CAPACITY"}
+    if level is not None and level not in allowed_levels:
+        raise unprocessable("INVALID_FILTER", "level debe ser OVER_CAPACITY o NEAR_CAPACITY")
+
+    plan_query = select(Plan).where(
+        Plan.tenant_id == current.tenant_id,
+        Plan.service_date == service_date,
+        Plan.vehicle_id.is_not(None),
+    )
+    if zone_id is not None:
+        plan_query = plan_query.where(Plan.zone_id == zone_id)
+    plans = list(db.scalars(plan_query))
+
+    if not plans:
+        return PlanCapacityAlertsResponse(
+            service_date=service_date,
+            zone_id=zone_id,
+            level=level,
+            near_threshold_ratio=float(CAPACITY_ALERT_NEAR_THRESHOLD),
+            items=[],
+            total=0,
+        )
+
+    plan_ids = [plan.id for plan in plans]
+    plans_by_id = {plan.id: plan for plan in plans}
+    vehicle_ids = list({plan.vehicle_id for plan in plans if plan.vehicle_id is not None})
+    vehicles = list(
+        db.scalars(
+            select(Vehicle).where(
+                Vehicle.tenant_id == current.tenant_id,
+                Vehicle.id.in_(vehicle_ids),
+            )
+        )
+    )
+    vehicles_by_id = {vehicle.id: vehicle for vehicle in vehicles}
+
+    aggregates = db.execute(
+        select(
+            PlanOrder.plan_id,
+            func.coalesce(func.sum(Order.total_weight_kg), 0).label("total_weight_kg"),
+        )
+        .join(
+            Order,
+            (Order.id == PlanOrder.order_id) & (Order.tenant_id == PlanOrder.tenant_id),
+        )
+        .where(
+            PlanOrder.tenant_id == current.tenant_id,
+            PlanOrder.plan_id.in_(plan_ids),
+        )
+        .group_by(PlanOrder.plan_id)
+    ).all()
+    total_weight_by_plan = {row.plan_id: Decimal(str(row.total_weight_kg)) for row in aggregates}
+
+    items: list[PlanCapacityAlertOut] = []
+    for plan_id in plan_ids:
+        plan = plans_by_id[plan_id]
+        if plan.vehicle_id is None:
+            continue
+        vehicle = vehicles_by_id.get(plan.vehicle_id)
+        if vehicle is None or vehicle.capacity_kg is None or vehicle.capacity_kg <= 0:
+            continue
+
+        total_weight_kg = total_weight_by_plan.get(plan.id, Decimal("0"))
+        capacity_kg = Decimal(str(vehicle.capacity_kg))
+        usage_ratio = float(total_weight_kg / capacity_kg) if capacity_kg > 0 else 0.0
+
+        alert_level = None
+        if usage_ratio > 1:
+            alert_level = "OVER_CAPACITY"
+        elif usage_ratio >= float(CAPACITY_ALERT_NEAR_THRESHOLD):
+            alert_level = "NEAR_CAPACITY"
+
+        if alert_level is None:
+            continue
+        if level is not None and alert_level != level:
+            continue
+
+        items.append(
+            PlanCapacityAlertOut(
+                plan_id=plan.id,
+                service_date=plan.service_date,
+                zone_id=plan.zone_id,
+                vehicle_id=vehicle.id,
+                vehicle_code=vehicle.code,
+                vehicle_name=vehicle.name,
+                total_weight_kg=total_weight_kg,
+                vehicle_capacity_kg=capacity_kg,
+                usage_ratio=usage_ratio,
+                alert_level=alert_level,
+            )
+        )
+
+    items.sort(
+        key=lambda item: (
+            _alert_priority(item.alert_level),
+            -item.usage_ratio,
+            str(item.plan_id),
+        )
+    )
+    return PlanCapacityAlertsResponse(
+        service_date=service_date,
+        zone_id=zone_id,
+        level=level,
+        near_threshold_ratio=float(CAPACITY_ALERT_NEAR_THRESHOLD),
+        items=items,
+        total=len(items),
+    )
 
 
 @router.post("", response_model=PlanOut, status_code=201)

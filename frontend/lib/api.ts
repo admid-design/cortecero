@@ -122,6 +122,7 @@ export type PendingQueueReason =
   | "LATE_PENDING_EXCEPTION"
   | "LOCKED_PLAN_EXCEPTION_REQUIRED"
   | "EXCEPTION_REJECTED";
+export type CapacityAlertLevel = "OVER_CAPACITY" | "NEAR_CAPACITY";
 
 export type PendingQueueItem = {
   order_id: string;
@@ -159,6 +160,28 @@ export type Plan = {
   orders_with_weight: number;
   orders_missing_weight: number;
   orders: PlanOrder[];
+};
+
+export type PlanCapacityAlert = {
+  plan_id: string;
+  service_date: string;
+  zone_id: string;
+  vehicle_id: string;
+  vehicle_code: string | null;
+  vehicle_name: string | null;
+  total_weight_kg: number;
+  vehicle_capacity_kg: number;
+  usage_ratio: number;
+  alert_level: CapacityAlertLevel;
+};
+
+export type PlanCapacityAlertsResponse = {
+  service_date: string;
+  zone_id: string | null;
+  level: CapacityAlertLevel | null;
+  near_threshold_ratio: number;
+  items: PlanCapacityAlert[];
+  total: number;
 };
 
 export type AutoLockRunResponse = {
@@ -282,6 +305,13 @@ export async function listOrders(token: string, serviceDate: string): Promise<Li
 
 export async function listPlans(token: string, serviceDate: string): Promise<ListResponse<Plan>> {
   return request<ListResponse<Plan>>(`/plans${buildQuery({ service_date: serviceDate })}`, { token });
+}
+
+export async function getPlanCapacityAlerts(
+  token: string,
+  params: { service_date: string; zone_id?: string; level?: CapacityAlertLevel },
+): Promise<PlanCapacityAlertsResponse> {
+  return request<PlanCapacityAlertsResponse>(`/plans/capacity-alerts${buildQuery(params)}`, { token });
 }
 
 export async function listExceptions(token: string): Promise<ListResponse<ExceptionItem>> {

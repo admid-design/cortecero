@@ -14,6 +14,7 @@ import {
   deactivateAdminCustomer,
   deactivateAdminZone,
   getDailySummary,
+  getPlanCapacityAlerts,
   getSourceMetrics,
   getAdminTenantSettings,
   includeOrderInPlan,
@@ -35,6 +36,7 @@ import {
   updateAdminUser,
   updateAdminZone,
   type AutoLockRunResponse,
+  type CapacityAlertLevel,
   type Customer,
   type DashboardSummary,
   type DashboardSourceMetricsItem,
@@ -43,6 +45,7 @@ import {
   type PendingQueueItem,
   type PendingQueueReason,
   type Plan,
+  type PlanCapacityAlert,
   type TenantSettings,
   type UserRole,
   type Zone,
@@ -104,10 +107,13 @@ export default function HomePage() {
   const [sourceMetrics, setSourceMetrics] = useState<DashboardSourceMetricsItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [pendingQueue, setPendingQueue] = useState<PendingQueueItem[]>([]);
+  const [capacityAlerts, setCapacityAlerts] = useState<PlanCapacityAlert[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [exceptions, setExceptions] = useState<ExceptionItem[]>([]);
   const [pendingQueueZoneId, setPendingQueueZoneId] = useState("all");
   const [pendingQueueReason, setPendingQueueReason] = useState<"all" | PendingQueueReason>("all");
+  const [capacityAlertZoneId, setCapacityAlertZoneId] = useState("all");
+  const [capacityAlertLevel, setCapacityAlertLevel] = useState<"all" | CapacityAlertLevel>("all");
   const [sourceDateFrom, setSourceDateFrom] = useState(() => new Date().toISOString().slice(0, 10));
   const [sourceDateTo, setSourceDateTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [sourceZoneId, setSourceZoneId] = useState("all");
@@ -195,7 +201,9 @@ export default function HomePage() {
       const zone_id = pendingQueueZoneId === "all" ? undefined : pendingQueueZoneId;
       const reason = pendingQueueReason === "all" ? undefined : pendingQueueReason;
       const source_zone_id = sourceZoneId === "all" ? undefined : sourceZoneId;
-      const [summaryRes, sourceMetricsRes, ordersRes, plansRes, exceptionsRes, pendingQueueRes] = await Promise.all([
+      const capacity_zone_id = capacityAlertZoneId === "all" ? undefined : capacityAlertZoneId;
+      const level = capacityAlertLevel === "all" ? undefined : capacityAlertLevel;
+      const [summaryRes, sourceMetricsRes, ordersRes, plansRes, exceptionsRes, pendingQueueRes, capacityAlertsRes] = await Promise.all([
         getDailySummary(activeToken, serviceDate),
         getSourceMetrics(activeToken, {
           date_from: sourceDateFrom,
@@ -206,6 +214,7 @@ export default function HomePage() {
         listPlans(activeToken, serviceDate),
         listExceptions(activeToken),
         listPendingQueue(activeToken, { service_date: serviceDate, zone_id, reason }),
+        getPlanCapacityAlerts(activeToken, { service_date: serviceDate, zone_id: capacity_zone_id, level }),
       ]);
       setSummary(summaryRes);
       setSourceMetrics(sourceMetricsRes.items ?? []);
@@ -213,10 +222,11 @@ export default function HomePage() {
       setPlans(plansRes.items ?? []);
       setExceptions(exceptionsRes.items ?? []);
       setPendingQueue(pendingQueueRes.items ?? []);
+      setCapacityAlerts(capacityAlertsRes.items ?? []);
     } catch (e) {
       setError(formatError(e));
     }
-  }, [pendingQueueReason, pendingQueueZoneId, serviceDate, sourceDateFrom, sourceDateTo, sourceZoneId, token]);
+  }, [capacityAlertLevel, capacityAlertZoneId, pendingQueueReason, pendingQueueZoneId, serviceDate, sourceDateFrom, sourceDateTo, sourceZoneId, token]);
 
   const refreshZones = useCallback(async (authToken?: string) => {
     const activeToken = authToken ?? token;
@@ -315,6 +325,7 @@ export default function HomePage() {
     setSourceMetrics([]);
     setOrders([]);
     setPendingQueue([]);
+    setCapacityAlerts([]);
     setPlans([]);
     setExceptions([]);
     setZones([]);
@@ -1014,6 +1025,78 @@ export default function HomePage() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <div className="card grid">
+            <h2>Alertas de Capacidad</h2>
+            <div className="row">
+              <label>
+                service_date{" "}
+                <input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} />
+              </label>
+              <label>
+                zone_id{" "}
+                <select value={capacityAlertZoneId} onChange={(e) => setCapacityAlertZoneId(e.target.value)}>
+                  <option value="all">all</option>
+                  {pendingQueueZoneOptions.map((zoneId) => (
+                    <option key={zoneId} value={zoneId}>
+                      {zoneId}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                level{" "}
+                <select
+                  value={capacityAlertLevel}
+                  onChange={(e) => setCapacityAlertLevel(e.target.value as "all" | CapacityAlertLevel)}
+                >
+                  <option value="all">all</option>
+                  <option value="OVER_CAPACITY">OVER_CAPACITY</option>
+                  <option value="NEAR_CAPACITY">NEAR_CAPACITY</option>
+                </select>
+              </label>
+              <button className="secondary" onClick={() => void refreshOps()}>
+                Aplicar filtros
+              </button>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>plan_id</th>
+                  <th>zone_id</th>
+                  <th>vehículo</th>
+                  <th>peso_kg</th>
+                  <th>capacidad_kg</th>
+                  <th>usage_ratio</th>
+                  <th>alert_level</th>
+                </tr>
+              </thead>
+              <tbody>
+                {capacityAlerts.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ color: "#6b7280" }}>
+                      Sin alertas para los filtros actuales.
+                    </td>
+                  </tr>
+                )}
+                {capacityAlerts.map((item) => (
+                  <tr key={item.plan_id}>
+                    <td>{shortId(item.plan_id)}</td>
+                    <td>{shortId(item.zone_id)}</td>
+                    <td>{item.vehicle_name ?? item.vehicle_code ?? shortId(item.vehicle_id)}</td>
+                    <td>{item.total_weight_kg}</td>
+                    <td>{item.vehicle_capacity_kg}</td>
+                    <td>{item.usage_ratio.toFixed(2)}</td>
+                    <td>
+                      <span className={item.alert_level === "OVER_CAPACITY" ? "badge rejected" : "badge late"}>
+                        {item.alert_level}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           <div className="card grid">
