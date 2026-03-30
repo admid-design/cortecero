@@ -114,6 +114,16 @@ class PlanOrderCreateRequest(BaseModel):
     order_id: uuid.UUID
 
 
+class AutoLockRunResponse(BaseModel):
+    tenant_id: uuid.UUID
+    service_date: date
+    auto_lock_enabled: bool
+    window_reached: bool
+    considered_open_plans: int
+    locked_count: int
+    locked_plan_ids: list[uuid.UUID]
+
+
 class PlanOrderOut(APIModel):
     id: uuid.UUID
     plan_id: uuid.UUID

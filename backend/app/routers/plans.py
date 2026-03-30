@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -20,9 +21,10 @@ from app.models import (
     Plan,
     PlanOrder,
     PlanStatus,
+    Tenant,
     UserRole,
 )
-from app.schemas import PlanCreateRequest, PlanOrderCreateRequest, PlanOrderOut, PlanOut, PlansListResponse
+from app.schemas import AutoLockRunResponse, PlanCreateRequest, PlanOrderCreateRequest, PlanOrderOut, PlanOut, PlansListResponse
 
 
 router = APIRouter(prefix="/plans", tags=["Plans"])
@@ -121,6 +123,85 @@ def create_plan(
     db.commit()
     db.refresh(plan)
     return _serialize_plan(db, current.tenant_id, plan)
+
+
+@router.post("/auto-lock/run", response_model=AutoLockRunResponse)
+def run_auto_lock(
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+) -> AutoLockRunResponse:
+    tenant = db.scalar(select(Tenant).where(Tenant.id == current.tenant_id))
+    if not tenant:
+        raise not_found("TENANT_NOT_FOUND", "Tenant no encontrado")
+
+    try:
+        tenant_now = datetime.now(ZoneInfo(tenant.default_timezone))
+    except ZoneInfoNotFoundError as exc:
+        raise unprocessable("INVALID_TIMEZONE", "Timezone del tenant no válida") from exc
+
+    target_service_date = tenant_now.date() + date.resolution
+    run_window_at = tenant_now.replace(
+        hour=tenant.default_cutoff_time.hour,
+        minute=tenant.default_cutoff_time.minute,
+        second=tenant.default_cutoff_time.second,
+        microsecond=0,
+    )
+    window_reached = tenant_now >= run_window_at
+    if not tenant.auto_lock_enabled or not window_reached:
+        return AutoLockRunResponse(
+            tenant_id=current.tenant_id,
+            service_date=target_service_date,
+            auto_lock_enabled=tenant.auto_lock_enabled,
+            window_reached=window_reached,
+            considered_open_plans=0,
+            locked_count=0,
+            locked_plan_ids=[],
+        )
+
+    open_plans = list(
+        db.scalars(
+            select(Plan).where(
+                Plan.tenant_id == current.tenant_id,
+                Plan.service_date == target_service_date,
+                Plan.status == PlanStatus.open,
+            )
+        )
+    )
+
+    now_utc = datetime.now(UTC)
+    locked_ids: list[uuid.UUID] = []
+    for plan in open_plans:
+        plan.status = PlanStatus.locked
+        plan.locked_at = now_utc
+        plan.locked_by = current.id
+        plan.version += 1
+        locked_ids.append(plan.id)
+
+        write_audit(
+            db,
+            tenant_id=current.tenant_id,
+            entity_type=EntityType.plan,
+            entity_id=plan.id,
+            action="auto_lock_plan",
+            actor_id=current.id,
+            metadata={
+                "service_date": str(plan.service_date),
+                "zone_id": str(plan.zone_id),
+                "previous_status": PlanStatus.open.value,
+                "new_status": PlanStatus.locked.value,
+            },
+        )
+
+    db.commit()
+    return AutoLockRunResponse(
+        tenant_id=current.tenant_id,
+        service_date=target_service_date,
+        auto_lock_enabled=tenant.auto_lock_enabled,
+        window_reached=window_reached,
+        considered_open_plans=len(open_plans),
+        locked_count=len(locked_ids),
+        locked_plan_ids=locked_ids,
+    )
 
 
 @router.get("/{plan_id}", response_model=PlanOut)

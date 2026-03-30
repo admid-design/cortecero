@@ -292,6 +292,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/Plan'
 
+  /plans/auto-lock/run:
+    post:
+      tags: [Plans]
+      summary: Ejecutar auto-lock de planes elegibles
+      description: >
+        Bloquea planes open del tenant para el service_date objetivo (mañana en timezone del tenant)
+        cuando auto_lock_enabled=true y la ventana horaria está alcanzada.
+        Es idempotente: no re-bloquea planes ya locked/dispatched.
+      responses:
+        "200":
+          description: Resultado de ejecución auto-lock
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoLockRunResponse'
+
   /plans/{plan_id}/lock:
     post:
       tags: [Plans]
@@ -1082,6 +1098,29 @@ components:
         added_by:
           type: string
           format: uuid
+
+    AutoLockRunResponse:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+        service_date:
+          type: string
+          format: date
+        auto_lock_enabled:
+          type: boolean
+        window_reached:
+          type: boolean
+        considered_open_plans:
+          type: integer
+        locked_count:
+          type: integer
+        locked_plan_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
 
     Exception:
       type: object
