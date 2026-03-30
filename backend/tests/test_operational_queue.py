@@ -367,3 +367,25 @@ def test_operational_queue_is_tenant_isolated(client, db_session):
     assert demo_queue.status_code == 200, demo_queue.text
     demo_ids = {item["order_id"] for item in demo_queue.json()["items"]}
     assert str(tenant_b_order_id) not in demo_ids
+
+
+def test_operational_queue_invalid_reason_rejected_with_contract(client):
+    office_token = login_as(
+        client,
+        tenant_slug="demo-cortecero",
+        email="office@demo.cortecero.app",
+        password="office123",
+    )
+
+    res = client.get(
+        "/orders/operational-queue",
+        params={"service_date": far_future_service_date(7100), "reason": "INVALID_REASON"},
+        headers=auth_headers(office_token),
+    )
+    assert res.status_code == 422
+    detail = res.json()["detail"]
+    assert detail["code"] == "INVALID_OPERATIONAL_FILTER"
+    assert (
+        detail["message"]
+        == "reason debe ser CUSTOMER_DATE_BLOCKED, CUSTOMER_NOT_ACCEPTING_ORDERS, OUTSIDE_CUSTOMER_WINDOW o INSUFFICIENT_LEAD_TIME"
+    )

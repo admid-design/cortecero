@@ -40,7 +40,6 @@ from app.models import (
 from app.schemas import (
     OperationalQueueItemOut,
     OperationalQueueListResponse,
-    OperationalQueueReason,
     OrderIngestionBatchInput,
     OrderIngestionItemResult,
     OrderIngestionResult,
@@ -578,13 +577,18 @@ def list_pending_queue(
 def list_operational_queue(
     service_date: date,
     zone_id: uuid.UUID | None = None,
-    reason: OperationalQueueReason | None = None,
+    reason: str | None = None,
     db: Session = Depends(get_db),
     current: CurrentUser = Depends(require_roles(UserRole.office, UserRole.logistics, UserRole.admin)),
 ) -> OperationalQueueListResponse:
     tenant = db.scalar(select(Tenant).where(Tenant.id == current.tenant_id))
     if not tenant:
         raise not_found("TENANT_NOT_FOUND", "Tenant no encontrado")
+    if reason is not None and reason not in _OPERATIONAL_REASON_PRIORITY:
+        raise unprocessable(
+            "INVALID_OPERATIONAL_FILTER",
+            "reason debe ser CUSTOMER_DATE_BLOCKED, CUSTOMER_NOT_ACCEPTING_ORDERS, OUTSIDE_CUSTOMER_WINDOW o INSUFFICIENT_LEAD_TIME",
+        )
 
     query = select(Order).where(Order.tenant_id == current.tenant_id, Order.service_date == service_date)
     if zone_id is not None:
