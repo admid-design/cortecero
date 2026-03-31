@@ -2,7 +2,7 @@
 
 Estado: abierto  
 Fecha: 2026-03-31  
-Baseline revisado: `main@aa4cd4a`
+Baseline revisado: `main@ce0a697`
 
 ## 1) Objetivo del gate
 Validar si R6 está listo para cierre formal contra los criterios de fase:
@@ -17,7 +17,6 @@ Validar si R6 está listo para cierre formal contra los criterios de fase:
 Veredicto actual: **NO-GO para cierre de R6**.
 
 R6 tiene una base sólida y varios bloques cerrados, pero aún quedan huecos de fase:
-- falta el endpoint de export operativo (`R6-BE-004`)
 - falta la vista timeline de snapshots (`R6-FE-003`)
 - falta cerrar QA específico de coherencia evaluación vs snapshot (`R6-QA-002`) como bloque explícito
 - falta un gate CI orientado a superficie R6/export (`R6-CI-001`)
@@ -35,8 +34,8 @@ R6 tiene una base sólida y varios bloques cerrados, pero aún quedan huecos de 
 | `R6-QA-001` | Cerrado | `docs/R6_QA_001_TEMPORAL_MATRIX.md`, `backend/tests/test_operational_temporal_dst.py`, commit `e484906` |
 | `R6-BE-003` | Cerrado | `/orders/operational-resolution-queue`, commit `b7621c9` |
 | `R6-FE-002` | Cerrado | vista resolution queue + deuda técnica FE cerrada, commits `1738b20`, `47eebc1`, `f8b52b6`, `aa4cd4a` |
+| `R6-BE-004` | Cerrado | `/exports/operational-dataset`, commit `ce0a697` |
 | `R6-DB-003` | Pendiente | no hay migración específica de hardening timezone en R6 |
-| `R6-BE-004` | Pendiente | no existe `/exports/operational-dataset` |
 | `R6-FE-003` | Pendiente | no existe vista timeline de snapshots por pedido |
 | `R6-QA-002` | Parcial/Pendiente | hay cobertura de idempotencia, pero no bloque QA cerrado como ticket |
 | `R6-CI-001` | Pendiente | `openapi-check` sigue gateando superficie R5, no R6/export |
@@ -48,7 +47,7 @@ R6 tiene una base sólida y varios bloques cerrados, pero aún quedan huecos de 
 | Contrato R6 estable y validado | Parcial |
 | Explicabilidad operativa en lectura | Cumplido |
 | Persistencia histórica de snapshots | Cumplido |
-| Export operativo estable para analítica/IA | Pendiente |
+| Export operativo estable para analítica/IA | Cumplido |
 | QA temporal y DST contractual | Cumplido |
 | QA de coherencia evaluación/snapshot | Parcial |
 | CI bloqueando rotura de superficie R6/export | Pendiente |
@@ -56,9 +55,8 @@ R6 tiene una base sólida y varios bloques cerrados, pero aún quedan huecos de 
 ## 5) Huecos restantes (lista exacta)
 
 ### P0 (bloquean cierre de R6)
-1. Implementar `R6-BE-004`: `GET /exports/operational-dataset` con shape estable, paginado y tenant-safe.
-2. Implementar `R6-CI-001`: gate CI de contrato R6 y smoke del export.
-3. Cerrar `R6-FE-003`: timeline de snapshots por pedido (solo lectura, sin lógica paralela).
+1. Implementar `R6-CI-001`: gate CI de contrato R6 y smoke del export.
+2. Cerrar `R6-FE-003`: timeline de snapshots por pedido (solo lectura, sin lógica paralela).
 
 ### P1 (debe quedar cerrado para considerar R6 robusto)
 1. Cerrar `R6-QA-002` como bloque explícito:
@@ -77,11 +75,9 @@ R6 tiene una base sólida y varios bloques cerrados, pero aún quedan huecos de 
 ## 7) Criterio de salida de este gate
 
 `R6-GATE-001` queda cerrado cuando:
-1. `R6-BE-004` esté merged y verificado.
-2. `R6-FE-003` esté merged y verificado.
-3. `R6-QA-002` esté cerrado con evidencia.
-4. `R6-CI-001` esté activo y en verde.
-5. `R6-DB-003` esté implementado o diferido formalmente con decisión explícita de riesgo.
+1. `R6-FE-003` esté merged y verificado.
+2. `R6-QA-002` esté cerrado con evidencia.
+3. `R6-CI-001` esté activo y en verde.
+4. `R6-DB-003` esté implementado o diferido formalmente con decisión explícita de riesgo.
 
 Hasta entonces, **R6 permanece abierto** y **R7 no debería iniciarse**.
-
