@@ -354,3 +354,22 @@ class AuditLog(Base):
     __table_args__ = (
         ForeignKeyConstraint(["actor_id", "tenant_id"], ["users.id", "users.tenant_id"], ondelete="SET NULL"),
     )
+
+
+class OrderOperationalSnapshot(Base):
+    __tablename__ = "order_operational_snapshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    service_date: Mapped[date] = mapped_column(Date, nullable=False)
+    operational_state: Mapped[str] = mapped_column(Text, nullable=False)
+    operational_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evaluation_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    timezone_used: Mapped[str] = mapped_column(Text, nullable=False)
+    rule_version: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_json: Mapped[dict] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(["order_id", "tenant_id"], ["orders.id", "orders.tenant_id"], ondelete="CASCADE"),
+    )

@@ -177,6 +177,17 @@ class AutoLockRunResponse(BaseModel):
     locked_plan_ids: list[uuid.UUID]
 
 
+class OperationalSnapshotRunResponse(BaseModel):
+    tenant_id: uuid.UUID
+    service_date: date
+    rule_version: str
+    evaluation_ts_bucket: datetime
+    considered_orders: int
+    generated_snapshots: int
+    skipped_existing: int
+    generated_snapshot_ids: list[uuid.UUID]
+
+
 class PlanOrderOut(APIModel):
     id: uuid.UUID
     plan_id: uuid.UUID

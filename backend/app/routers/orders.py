@@ -32,6 +32,7 @@ from app.models import (
     OrderIntakeType,
     OrderLine,
     OperationalReasonCatalog,
+    OrderOperationalSnapshot,
     OrderStatus,
     Plan,
     PlanStatus,
@@ -44,6 +45,7 @@ from app.schemas import (
     OperationalQueueItemOut,
     OperationalQueueListResponse,
     OperationalExplanationOut,
+    OperationalSnapshotRunResponse,
     OrderIngestionBatchInput,
     OrderIngestionItemResult,
     OrderIngestionResult,
@@ -78,6 +80,7 @@ _OPERATIONAL_REASON_PRIORITY: dict[str, int] = {
 _OPERATIONAL_RULE_VERSION = "r6-operational-eval-v1"
 _OPERATIONAL_REASON_FALLBACK_CATEGORY = "catalog_mismatch"
 _OPERATIONAL_REASON_FALLBACK_SEVERITY = "critical"
+_OPERATIONAL_SNAPSHOT_BUCKET_HOURS = 1
 
 
 @dataclass(frozen=True)
@@ -96,6 +99,14 @@ class _OperationalEvaluation:
     timezone_source: Literal["zone", "tenant_default", "utc_fallback"]
     rule_version: str
     catalog_status: Literal["active", "inactive", "missing", "not_applicable"]
+
+
+@dataclass(frozen=True)
+class _OperationalContext:
+    profiles_by_customer: dict[uuid.UUID, CustomerOperationalProfile]
+    date_restriction_keys: set[tuple[uuid.UUID, date]]
+    zones_by_id: dict[uuid.UUID, Zone]
+    reason_catalog_by_code: dict[str, OperationalReasonCatalog]
 
 
 def _resolve_timezone(tenant_default_timezone: str, zone_timezone: str | None) -> _ResolvedTimezone:
@@ -228,6 +239,43 @@ def _default_operational_evaluation() -> _OperationalEvaluation:
     )
 
 
+def _snapshot_bucket_bounds(now_utc: datetime) -> tuple[datetime, datetime]:
+    bucket_start = now_utc.replace(minute=0, second=0, microsecond=0)
+    bucket_end = bucket_start + timedelta(hours=_OPERATIONAL_SNAPSHOT_BUCKET_HOURS)
+    return bucket_start, bucket_end
+
+
+def _build_snapshot_evidence(
+    order: Order,
+    *,
+    profile: CustomerOperationalProfile | None,
+    timezone: _ResolvedTimezone,
+) -> dict:
+    created_local = ensure_aware_utc(order.created_at).astimezone(timezone.tzinfo)
+    service_local = datetime.combine(order.service_date, time.min, tzinfo=timezone.tzinfo)
+    window_start = profile.window_start if profile else None
+    window_end = profile.window_end if profile else None
+
+    if window_start is None or window_end is None:
+        window_type = "none"
+    elif window_start < window_end:
+        window_type = "same_day"
+    elif window_start > window_end:
+        window_type = "cross_midnight"
+    else:
+        window_type = "invalid_equal"
+
+    return {
+        "window_type": window_type,
+        "window_start": window_start.isoformat() if window_start else None,
+        "window_end": window_end.isoformat() if window_end else None,
+        "lead_hours_required": profile.min_lead_hours if profile else 0,
+        "created_local": created_local.isoformat(),
+        "service_local": service_local.isoformat(),
+        "timezone_source": timezone.timezone_source,
+    }
+
+
 def _serialize_order(order: Order, lines: list[OrderLine], *, operational: _OperationalEvaluation) -> OrderOut:
     return OrderOut(
         id=order.id,
@@ -268,15 +316,12 @@ def _serialize_order(order: Order, lines: list[OrderLine], *, operational: _Oper
     )
 
 
-def _build_operational_evaluation_map(
+def _load_operational_context(
     db: Session,
     *,
     tenant: Tenant,
     orders: list[Order],
-) -> dict[uuid.UUID, _OperationalEvaluation]:
-    if not orders:
-        return {}
-
+) -> _OperationalContext:
     customer_ids = {order.customer_id for order in orders}
     service_dates = {order.service_date for order in orders}
     zone_ids = {order.zone_id for order in orders}
@@ -332,26 +377,59 @@ def _build_operational_evaluation_map(
         )
     }
 
+    return _OperationalContext(
+        profiles_by_customer=profiles_by_customer,
+        date_restriction_keys=date_restriction_keys,
+        zones_by_id=zones_by_id,
+        reason_catalog_by_code=reason_catalog_by_code,
+    )
+
+
+def _build_operational_evaluation_map(
+    db: Session,
+    *,
+    tenant: Tenant,
+    orders: list[Order],
+) -> dict[uuid.UUID, _OperationalEvaluation]:
+    if not orders:
+        return {}
+    context = _load_operational_context(db, tenant=tenant, orders=orders)
+
     evaluation_by_order_id: dict[uuid.UUID, _OperationalEvaluation] = {}
     for order in orders:
-        zone = zones_by_id.get(order.zone_id)
-        resolved_timezone = _resolve_timezone(
-            tenant_default_timezone=tenant.default_timezone,
-            zone_timezone=zone.timezone if zone else None,
-        )
-        reason_code = _resolve_operational_reason(
+        evaluation_by_order_id[order.id], _, _ = _evaluate_order_operational(
             order,
-            profile=profiles_by_customer.get(order.customer_id),
-            has_date_restriction=(order.customer_id, order.service_date) in date_restriction_keys,
-            tzinfo=resolved_timezone.tzinfo,
-        )
-        evaluation_by_order_id[order.id] = _build_operational_explanation(
-            reason_code,
-            timezone=resolved_timezone,
-            reason_catalog_by_code=reason_catalog_by_code,
+            tenant=tenant,
+            context=context,
         )
 
     return evaluation_by_order_id
+
+
+def _evaluate_order_operational(
+    order: Order,
+    *,
+    tenant: Tenant,
+    context: _OperationalContext,
+) -> tuple[_OperationalEvaluation, _ResolvedTimezone, CustomerOperationalProfile | None]:
+    zone = context.zones_by_id.get(order.zone_id)
+    resolved_timezone = _resolve_timezone(
+        tenant_default_timezone=tenant.default_timezone,
+        zone_timezone=zone.timezone if zone else None,
+    )
+    profile = context.profiles_by_customer.get(order.customer_id)
+    reason_code = _resolve_operational_reason(
+        order,
+        profile=profile,
+        has_date_restriction=(order.customer_id, order.service_date) in context.date_restriction_keys,
+        tzinfo=resolved_timezone.tzinfo,
+    )
+    evaluation = _build_operational_explanation(
+        reason_code,
+        timezone=resolved_timezone,
+        reason_catalog_by_code=context.reason_catalog_by_code,
+    )
+    return evaluation, resolved_timezone, profile
 
 
 def _resolve_intake_type(db: Session, tenant_id: uuid.UUID, customer_id: uuid.UUID, service_date: date) -> OrderIntakeType:
@@ -752,6 +830,112 @@ def list_operational_queue(
         )
     )
     return OperationalQueueListResponse(items=items, total=len(items))
+
+
+@router.post("/orders/operational-snapshots/run", response_model=OperationalSnapshotRunResponse)
+def run_operational_snapshots(
+    service_date: date,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.admin)),
+) -> OperationalSnapshotRunResponse:
+    tenant = db.scalar(select(Tenant).where(Tenant.id == current.tenant_id))
+    if not tenant:
+        raise not_found("TENANT_NOT_FOUND", "Tenant no encontrado")
+
+    orders = list(
+        db.scalars(
+            select(Order)
+            .where(
+                Order.tenant_id == current.tenant_id,
+                Order.service_date == service_date,
+            )
+            .order_by(Order.created_at.asc(), Order.id.asc())
+        )
+    )
+    considered_orders = len(orders)
+
+    run_ts = datetime.now(UTC)
+    bucket_start, bucket_end = _snapshot_bucket_bounds(run_ts)
+    generated_snapshot_ids: list[uuid.UUID] = []
+    skipped_existing = 0
+
+    if orders:
+        context = _load_operational_context(db, tenant=tenant, orders=orders)
+        order_ids = [order.id for order in orders]
+        existing_order_ids = set(
+            db.scalars(
+                select(OrderOperationalSnapshot.order_id).where(
+                    OrderOperationalSnapshot.tenant_id == current.tenant_id,
+                    OrderOperationalSnapshot.service_date == service_date,
+                    OrderOperationalSnapshot.rule_version == _OPERATIONAL_RULE_VERSION,
+                    OrderOperationalSnapshot.evaluation_ts >= bucket_start,
+                    OrderOperationalSnapshot.evaluation_ts < bucket_end,
+                    OrderOperationalSnapshot.order_id.in_(order_ids),
+                )
+            )
+        )
+
+        for order in orders:
+            if order.id in existing_order_ids:
+                skipped_existing += 1
+                continue
+
+            evaluation, resolved_timezone, profile = _evaluate_order_operational(
+                order,
+                tenant=tenant,
+                context=context,
+            )
+            state = "restricted" if evaluation.reason_code else "eligible"
+            evidence = _build_snapshot_evidence(
+                order,
+                profile=profile,
+                timezone=resolved_timezone,
+            )
+            snapshot = OrderOperationalSnapshot(
+                tenant_id=current.tenant_id,
+                order_id=order.id,
+                service_date=order.service_date,
+                operational_state=state,
+                operational_reason=evaluation.reason_code,
+                evaluation_ts=run_ts,
+                timezone_used=evaluation.timezone_used,
+                rule_version=evaluation.rule_version,
+                evidence_json=evidence,
+            )
+            db.add(snapshot)
+            db.flush()
+            generated_snapshot_ids.append(snapshot.id)
+
+    write_audit(
+        db,
+        tenant_id=current.tenant_id,
+        entity_type=EntityType.tenant,
+        entity_id=current.tenant_id,
+        action="operational_snapshot_generated",
+        actor_id=current.id,
+        metadata={
+            "service_date": service_date.isoformat(),
+            "rule_version": _OPERATIONAL_RULE_VERSION,
+            "evaluation_ts_bucket_start": bucket_start.isoformat(),
+            "evaluation_ts_bucket_end": bucket_end.isoformat(),
+            "considered_orders": considered_orders,
+            "generated_snapshots": len(generated_snapshot_ids),
+            "skipped_existing": skipped_existing,
+            "generated_snapshot_ids": [str(item) for item in generated_snapshot_ids],
+        },
+    )
+
+    db.commit()
+    return OperationalSnapshotRunResponse(
+        tenant_id=current.tenant_id,
+        service_date=service_date,
+        rule_version=_OPERATIONAL_RULE_VERSION,
+        evaluation_ts_bucket=bucket_start,
+        considered_orders=considered_orders,
+        generated_snapshots=len(generated_snapshot_ids),
+        skipped_existing=skipped_existing,
+        generated_snapshot_ids=generated_snapshot_ids,
+    )
 
 
 @router.get("/orders/{order_id}", response_model=OrderOut)

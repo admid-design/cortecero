@@ -240,6 +240,30 @@ paths:
         "422":
           description: Filtro reason inválido (INVALID_OPERATIONAL_FILTER)
 
+  /orders/operational-snapshots/run:
+    post:
+      tags: [Orders]
+      summary: Ejecutar persistencia de snapshots operativos por fecha
+      description: >
+        Recalcula evaluación operativa para pedidos del `service_date` y persiste
+        snapshots append-only con idempotencia por `(order_id, evaluation_ts_bucket, rule_version)`.
+      parameters:
+        - in: query
+          name: service_date
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Resultado de ejecución de snapshots operativos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationalSnapshotRunResponse'
+        "403":
+          description: RBAC_FORBIDDEN
+
   /orders/{order_id}:
     get:
       tags: [Orders]
@@ -1320,6 +1344,32 @@ components:
         total_weight_kg:
           type: number
           nullable: true
+
+    OperationalSnapshotRunResponse:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+        service_date:
+          type: string
+          format: date
+        rule_version:
+          type: string
+        evaluation_ts_bucket:
+          type: string
+          format: date-time
+        considered_orders:
+          type: integer
+        generated_snapshots:
+          type: integer
+        skipped_existing:
+          type: integer
+        generated_snapshot_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
 
     OrderLine:
       type: object
