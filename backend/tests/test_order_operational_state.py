@@ -16,6 +16,7 @@ from app.models import (
     UserRole,
     Zone,
 )
+from app.routers.orders import _resolve_timezone
 from app.security import hash_password
 from tests.helpers import auth_headers, create_order, login_as
 
@@ -374,7 +375,7 @@ def test_operational_explanation_catalog_resolution_and_timezone_fallbacks(clien
     assert active_explanation["severity"] == "critical"
     assert active_explanation["catalog_status"] == "active"
     assert active_explanation["rule_version"] == "r6-operational-eval-v1"
-    assert active_explanation["timezone_source"] in {"zone", "tenant_default"}
+    assert active_explanation["timezone_source"] == "zone"
 
     catalog_row = db_session.scalar(
         select(OperationalReasonCatalog).where(
@@ -403,22 +404,13 @@ def test_operational_explanation_catalog_resolution_and_timezone_fallbacks(clien
     assert missing_explanation["severity"] == "critical"
     assert missing_explanation["catalog_status"] == "missing"
 
-    zone.timezone = "Invalid/Zone"
-    tenant.default_timezone = "Europe/Madrid"
-    db_session.commit()
-    tenant_fallback_detail = client.get(f"/orders/{order_id}", headers=auth_headers(office_token))
-    assert tenant_fallback_detail.status_code == 200, tenant_fallback_detail.text
-    tenant_fallback_explanation = tenant_fallback_detail.json()["operational_explanation"]
-    assert tenant_fallback_explanation["timezone_used"] == "Europe/Madrid"
-    assert tenant_fallback_explanation["timezone_source"] == "tenant_default"
+    tenant_fallback = _resolve_timezone("Europe/Madrid", "Invalid/Zone")
+    assert tenant_fallback.timezone_used == "Europe/Madrid"
+    assert tenant_fallback.timezone_source == "tenant_default"
 
-    tenant.default_timezone = "Invalid/Tenant"
-    db_session.commit()
-    utc_fallback_detail = client.get(f"/orders/{order_id}", headers=auth_headers(office_token))
-    assert utc_fallback_detail.status_code == 200, utc_fallback_detail.text
-    utc_fallback_explanation = utc_fallback_detail.json()["operational_explanation"]
-    assert utc_fallback_explanation["timezone_used"] == "UTC"
-    assert utc_fallback_explanation["timezone_source"] == "utc_fallback"
+    utc_fallback = _resolve_timezone("Invalid/Tenant", "Invalid/Zone")
+    assert utc_fallback.timezone_used == "UTC"
+    assert utc_fallback.timezone_source == "utc_fallback"
 
 
 def test_orders_operational_state_is_tenant_isolated(client, db_session):

@@ -349,12 +349,18 @@ def test_put_customer_operational_profile_validations_and_timezone_contract(clie
 
     customer = db_session.query(Customer).filter(Customer.id == customer_id).one()
     zone = db_session.query(Zone).filter(Zone.id == customer.zone_id, Zone.tenant_id == customer.tenant_id).one()
-    zone.timezone = "Mars/Phobos"
-    db_session.commit()
 
-    invalid_timezone = client.get(
+    invalid_timezone_update = client.patch(
+        f"/admin/zones/{zone.id}",
+        json={"timezone": "Mars/Phobos"},
+        headers=auth_headers(token),
+    )
+    assert invalid_timezone_update.status_code == 422
+    assert invalid_timezone_update.json()["detail"]["code"] == "INVALID_TIMEZONE"
+
+    valid_profile = client.get(
         f"/admin/customers/{customer_id}/operational-profile",
         headers=auth_headers(token),
     )
-    assert invalid_timezone.status_code == 422
-    assert invalid_timezone.json()["detail"]["code"] == "INVALID_TIMEZONE"
+    assert valid_profile.status_code == 200, valid_profile.text
+    assert valid_profile.json()["evaluation_timezone"] == zone.timezone

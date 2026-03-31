@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -14,6 +15,13 @@ from app.schemas import ZoneCreateRequest, ZoneOut, ZoneUpdateRequest, ZonesList
 
 
 router = APIRouter(prefix="/admin/zones", tags=["Admin Zones"])
+
+
+def _ensure_valid_iana_timezone(value: str) -> None:
+    try:
+        ZoneInfo(value)
+    except ZoneInfoNotFoundError as exc:
+        raise unprocessable("INVALID_TIMEZONE", "timezone no es una IANA timezone válida") from exc
 
 
 @router.get("", response_model=ZonesListResponse)
@@ -36,6 +44,8 @@ def create_zone(
     db: Session = Depends(get_db),
     current: CurrentUser = Depends(require_roles(UserRole.admin)),
 ) -> ZoneOut:
+    _ensure_valid_iana_timezone(payload.timezone)
+
     existing = db.scalar(
         select(Zone).where(
             Zone.tenant_id == current.tenant_id,
@@ -94,6 +104,7 @@ def update_zone(
         row.default_cutoff_time = payload.default_cutoff_time
 
     if payload.timezone is not None:
+        _ensure_valid_iana_timezone(payload.timezone)
         row.timezone = payload.timezone
 
     try:

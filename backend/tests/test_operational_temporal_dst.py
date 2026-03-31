@@ -3,7 +3,8 @@ from datetime import date
 
 from sqlalchemy import select
 
-from app.models import Tenant, Zone
+from app.models import Zone
+from app.routers.orders import _resolve_timezone
 from tests.helpers import auth_headers, create_order, login_as
 
 
@@ -305,53 +306,11 @@ def test_operational_dst_backward_edges_are_deterministic(client, db_session):
     assert out_explanation["timezone_source"] == "zone"
 
 
-def test_operational_invalid_timezone_uses_utc_fallback_deterministically(client, db_session):
-    admin_token = login_as(
-        client,
-        tenant_slug="demo-cortecero",
-        email="admin@demo.cortecero.app",
-        password="admin123",
-    )
-    office_token = login_as(
-        client,
-        tenant_slug="demo-cortecero",
-        email="office@demo.cortecero.app",
-        password="office123",
-    )
-    zone_id, customer_id = _first_zone_and_customer(client, admin_token)
+def test_operational_timezone_resolver_fallback_is_deterministic():
+    tenant_fallback = _resolve_timezone("Europe/Madrid", "Invalid/Zone")
+    assert tenant_fallback.timezone_used == "Europe/Madrid"
+    assert tenant_fallback.timezone_source == "tenant_default"
 
-    # First persist a valid profile; then force invalid timezone config directly in DB.
-    _put_profile(
-        client,
-        admin_token,
-        customer_id,
-        accept_orders=False,
-        window_start=None,
-        window_end=None,
-        min_lead_hours=0,
-    )
-
-    order_id = create_order(
-        client,
-        office_token,
-        customer_id=customer_id,
-        external_ref_prefix="R6-QA-UTC-FALLBACK",
-        service_date="2100-07-03",
-        created_at="2100-07-03T12:00:00Z",
-    )
-
-    tenant = db_session.scalar(select(Tenant).where(Tenant.slug == "demo-cortecero"))
-    assert tenant is not None
-    _set_zone_timezone(db_session, zone_id, "Invalid/Zone")
-    tenant.default_timezone = "Invalid/Tenant"
-    db_session.commit()
-
-    detail = client.get(f"/orders/{order_id}", headers=auth_headers(office_token))
-    assert detail.status_code == 200, detail.text
-    body = detail.json()
-    reason = body["operational_reason"]
-    explanation = body["operational_explanation"]
-
-    assert reason == "CUSTOMER_NOT_ACCEPTING_ORDERS"
-    assert explanation["timezone_used"] == "UTC"
-    assert explanation["timezone_source"] == "utc_fallback"
+    utc_fallback = _resolve_timezone("Invalid/Tenant", "Invalid/Zone")
+    assert utc_fallback.timezone_used == "UTC"
+    assert utc_fallback.timezone_source == "utc_fallback"

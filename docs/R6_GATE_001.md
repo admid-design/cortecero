@@ -1,6 +1,6 @@
 # R6-GATE-001 — Revisión de Cierre de R6
 
-Estado: abierto  
+Estado: cerrado  
 Fecha: 2026-03-31  
 Baseline revisado: `main@cfc94d8`
 
@@ -14,10 +14,10 @@ Validar si R6 está listo para cierre formal contra los criterios de fase:
 - CI de contrato/export
 
 ## 2) Resumen ejecutivo
-Veredicto actual: **NO-GO para cierre de R6**.
+Veredicto actual: **GO para cierre de R6**.
 
-R6 tiene una base sólida y varios bloques cerrados, pero aún quedan huecos de fase:
-- sigue abierto el hardening de timezone en escritura (`R6-DB-003`)
+R6 cierra su último hueco de fase con `R6-DB-003`:
+- hardening de timezone en escritura cerrado en DB + API + tests
 
 ## 3) Estado por ticket R6
 
@@ -35,7 +35,7 @@ R6 tiene una base sólida y varios bloques cerrados, pero aún quedan huecos de 
 | `R6-CI-001` | Cerrado | `openapi-check` gateando superficie R6/export, commit `7d507c6` |
 | `R6-FE-003` | Cerrado | timeline de snapshots en UI operativa, commit `060a9f0` |
 | `R6-QA-002` | Cerrado | coherencia evaluación↔snapshot e idempotencia por lote, `backend/tests/test_operational_snapshot_consistency.py`, commit `cfc94d8` |
-| `R6-DB-003` | Pendiente | no hay migración específica de hardening timezone en R6 |
+| `R6-DB-003` | Cerrado | `db/migrations/012_timezone_hardening.sql`, validación IANA en `/admin/zones`, tests `test_timezone_hardening_schema.py` |
 
 ## 4) Checklist de fase (gate)
 
@@ -55,18 +55,18 @@ R6 tiene una base sólida y varios bloques cerrados, pero aún quedan huecos de 
 Sin pendientes P0 abiertos.
 
 ### P1 (debe quedar cerrado para considerar R6 robusto)
-1. Ejecutar `R6-DB-003` o formalizar su aplazamiento con riesgo aceptado:
-- hardening de timezone en escritura
-- evitar normalizar `utc_fallback` como estado operativo permanente
+Sin pendientes P1 abiertos.
 
 ## 6) Riesgos residuales
 
-1. Riesgo analítico si timezone inválida termina absorbida por fallback sin hardening.
-2. Riesgo de cierre prematuro de R6 si no se implementa o difiere formalmente `R6-DB-003`.
+1. Mantener vigilancia de drift semántico en `utc_fallback` como degradación diagnóstica, no estado normal.
+2. Preservar coherencia de contrato OpenAPI/export en siguientes fases para no degradar la superficie R6 ya cerrada.
 
 ## 7) Criterio de salida de este gate
 
-`R6-GATE-001` queda cerrado cuando:
-1. `R6-DB-003` esté implementado o diferido formalmente con decisión explícita de riesgo.
+`R6-GATE-001` queda cerrado con:
+1. `R6-DB-003` implementado y validado en suite backend.
+2. CI contractual de R6/export en verde.
+3. Sin pendientes P0/P1 abiertos en R6.
 
-Hasta entonces, **R6 permanece abierto** y **R7 no debería iniciarse**.
+Resultado: **R6 cerrado**. R7 puede abrirse con backlog separado.

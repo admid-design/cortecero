@@ -58,6 +58,39 @@ def test_create_zone_requires_admin_role(client):
     assert res.json()["detail"]["code"] == "RBAC_FORBIDDEN"
 
 
+def test_zone_timezone_must_be_valid_iana(client):
+    token = login_as(
+        client,
+        tenant_slug="demo-cortecero",
+        email="admin@demo.cortecero.app",
+        password="admin123",
+    )
+
+    create_invalid_res = client.post(
+        "/admin/zones",
+        json={"name": "Zona Invalid TZ", "default_cutoff_time": "10:30:00", "timezone": "Invalid/Timezone"},
+        headers=auth_headers(token),
+    )
+    assert create_invalid_res.status_code == 422
+    assert create_invalid_res.json()["detail"]["code"] == "INVALID_TIMEZONE"
+
+    create_ok_res = client.post(
+        "/admin/zones",
+        json={"name": "Zona Valid TZ", "default_cutoff_time": "10:30:00", "timezone": "Europe/Madrid"},
+        headers=auth_headers(token),
+    )
+    assert create_ok_res.status_code == 201, create_ok_res.text
+    zone_id = create_ok_res.json()["id"]
+
+    update_invalid_res = client.patch(
+        f"/admin/zones/{zone_id}",
+        json={"timezone": "Nope/Timezone"},
+        headers=auth_headers(token),
+    )
+    assert update_invalid_res.status_code == 422
+    assert update_invalid_res.json()["detail"]["code"] == "INVALID_TIMEZONE"
+
+
 def test_create_update_zone_and_name_conflict(client):
     token = login_as(
         client,
