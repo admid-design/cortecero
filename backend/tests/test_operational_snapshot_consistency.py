@@ -4,8 +4,6 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.models import (
-    Customer,
-    CustomerOperationalProfile,
     Order,
     OrderOperationalSnapshot,
     Tenant,
@@ -257,4 +255,3 @@ def test_operational_snapshot_batch_run_is_idempotent_in_same_bucket(client, db_
     )
     assert len(snapshot_rows) == 3
     assert {str(row.order_id) for row in snapshot_rows} == set(created_ids)
-
