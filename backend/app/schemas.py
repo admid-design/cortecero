@@ -65,6 +65,28 @@ class OrderLineOut(APIModel):
     volume_m3: Decimal | None
 
 
+OperationalReasonCode = Literal[
+    "CUSTOMER_DATE_BLOCKED",
+    "CUSTOMER_NOT_ACCEPTING_ORDERS",
+    "OUTSIDE_CUSTOMER_WINDOW",
+    "INSUFFICIENT_LEAD_TIME",
+]
+
+OperationalReasonSeverity = Literal["low", "medium", "high", "critical"]
+OperationalReasonCatalogStatus = Literal["active", "inactive", "missing", "not_applicable"]
+OperationalTimezoneSource = Literal["zone", "tenant_default", "utc_fallback"]
+
+
+class OperationalExplanationOut(APIModel):
+    reason_code: OperationalReasonCode | None
+    reason_category: str | None
+    severity: OperationalReasonSeverity | None
+    timezone_used: str
+    timezone_source: OperationalTimezoneSource
+    rule_version: str
+    catalog_status: OperationalReasonCatalogStatus
+
+
 class OrderOut(APIModel):
     id: uuid.UUID
     customer_id: uuid.UUID
@@ -80,15 +102,8 @@ class OrderOut(APIModel):
     source_channel: str
     intake_type: Literal["new_order", "same_customer_addon"]
     operational_state: Literal["eligible", "restricted"]
-    operational_reason: (
-        Literal[
-            "CUSTOMER_DATE_BLOCKED",
-            "CUSTOMER_NOT_ACCEPTING_ORDERS",
-            "OUTSIDE_CUSTOMER_WINDOW",
-            "INSUFFICIENT_LEAD_TIME",
-        ]
-        | None
-    )
+    operational_reason: OperationalReasonCode | None
+    operational_explanation: OperationalExplanationOut
     total_weight_kg: Decimal | None
     lines: list[OrderLineOut]
 
@@ -103,12 +118,7 @@ class OrderWeightUpdateRequest(BaseModel):
 
 
 PendingQueueReason = Literal["LATE_PENDING_EXCEPTION", "LOCKED_PLAN_EXCEPTION_REQUIRED", "EXCEPTION_REJECTED"]
-OperationalQueueReason = Literal[
-    "CUSTOMER_DATE_BLOCKED",
-    "CUSTOMER_NOT_ACCEPTING_ORDERS",
-    "OUTSIDE_CUSTOMER_WINDOW",
-    "INSUFFICIENT_LEAD_TIME",
-]
+OperationalQueueReason = OperationalReasonCode
 CapacityAlertLevel = Literal["OVER_CAPACITY", "NEAR_CAPACITY"]
 
 

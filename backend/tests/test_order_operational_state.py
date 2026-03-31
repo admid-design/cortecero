@@ -8,6 +8,7 @@ from app.models import (
     CustomerOperationalProfile,
     Order,
     OrderIntakeType,
+    OperationalReasonCatalog,
     OrderStatus,
     SourceChannel,
     Tenant,
@@ -134,6 +135,11 @@ def test_operational_reason_precedence_and_status_not_mutated(client, db_session
     detail_body = detail_res.json()
     assert detail_body["operational_state"] == "restricted"
     assert detail_body["operational_reason"] == "CUSTOMER_DATE_BLOCKED"
+    assert detail_body["operational_explanation"]["reason_code"] == "CUSTOMER_DATE_BLOCKED"
+    assert detail_body["operational_explanation"]["reason_category"] == "customer_calendar"
+    assert detail_body["operational_explanation"]["severity"] == "critical"
+    assert detail_body["operational_explanation"]["catalog_status"] == "active"
+    assert detail_body["operational_explanation"]["rule_version"] == "r6-operational-eval-v1"
     assert detail_body["status"] == status_before.value
 
     list_res = client.get(
@@ -145,6 +151,10 @@ def test_operational_reason_precedence_and_status_not_mutated(client, db_session
     item = next(row for row in list_res.json()["items"] if row["id"] == str(order_id))
     assert item["operational_state"] == "restricted"
     assert item["operational_reason"] == "CUSTOMER_DATE_BLOCKED"
+    assert item["operational_explanation"]["reason_code"] == "CUSTOMER_DATE_BLOCKED"
+    assert item["operational_explanation"]["reason_category"] == "customer_calendar"
+    assert item["operational_explanation"]["severity"] == "critical"
+    assert item["operational_explanation"]["catalog_status"] == "active"
     assert item["status"] == status_before.value
 
     db_session.expire_all()
@@ -313,6 +323,102 @@ def test_operational_reason_temporal_edges_and_precedence_rules(client, db_sessi
         client.get(f"/orders/{lead_insufficient}", headers=auth_headers(office_token)).json()["operational_reason"]
         == "INSUFFICIENT_LEAD_TIME"
     )
+
+
+def test_operational_explanation_catalog_resolution_and_timezone_fallbacks(client, db_session):
+    admin_token = login_as(
+        client,
+        tenant_slug="demo-cortecero",
+        email="admin@demo.cortecero.app",
+        password="admin123",
+    )
+    office_token = login_as(
+        client,
+        tenant_slug="demo-cortecero",
+        email="office@demo.cortecero.app",
+        password="office123",
+    )
+    zone_id, customer_id = _first_zone_and_customer(client, admin_token)
+    zone_uuid = uuid.UUID(zone_id)
+
+    tenant = db_session.scalar(select(Tenant).where(Tenant.slug == "demo-cortecero"))
+    zone = db_session.scalar(select(Zone).where(Zone.id == zone_uuid))
+    assert tenant is not None
+    assert zone is not None
+
+    _put_profile(
+        client,
+        admin_token,
+        customer_id,
+        accept_orders=False,
+        window_start=None,
+        window_end=None,
+        min_lead_hours=0,
+    )
+
+    service_date = date(2101, 1, 10)
+    order_id = create_order(
+        client,
+        office_token,
+        customer_id=customer_id,
+        external_ref_prefix="OPS-EXPLAIN",
+        service_date=service_date.isoformat(),
+        created_at=f"{service_date.isoformat()}T06:00:00Z",
+    )
+
+    active_detail = client.get(f"/orders/{order_id}", headers=auth_headers(office_token))
+    assert active_detail.status_code == 200, active_detail.text
+    active_explanation = active_detail.json()["operational_explanation"]
+    assert active_explanation["reason_code"] == "CUSTOMER_NOT_ACCEPTING_ORDERS"
+    assert active_explanation["reason_category"] == "customer_policy"
+    assert active_explanation["severity"] == "critical"
+    assert active_explanation["catalog_status"] == "active"
+    assert active_explanation["rule_version"] == "r6-operational-eval-v1"
+    assert active_explanation["timezone_source"] in {"zone", "tenant_default"}
+
+    catalog_row = db_session.scalar(
+        select(OperationalReasonCatalog).where(
+            OperationalReasonCatalog.code == "CUSTOMER_NOT_ACCEPTING_ORDERS"
+        )
+    )
+    assert catalog_row is not None
+
+    catalog_row.active = False
+    db_session.commit()
+    inactive_detail = client.get(f"/orders/{order_id}", headers=auth_headers(office_token))
+    assert inactive_detail.status_code == 200, inactive_detail.text
+    inactive_explanation = inactive_detail.json()["operational_explanation"]
+    assert inactive_explanation["reason_code"] == "CUSTOMER_NOT_ACCEPTING_ORDERS"
+    assert inactive_explanation["reason_category"] == "catalog_mismatch"
+    assert inactive_explanation["severity"] == "critical"
+    assert inactive_explanation["catalog_status"] == "inactive"
+
+    db_session.delete(catalog_row)
+    db_session.commit()
+    missing_detail = client.get(f"/orders/{order_id}", headers=auth_headers(office_token))
+    assert missing_detail.status_code == 200, missing_detail.text
+    missing_explanation = missing_detail.json()["operational_explanation"]
+    assert missing_explanation["reason_code"] == "CUSTOMER_NOT_ACCEPTING_ORDERS"
+    assert missing_explanation["reason_category"] == "catalog_mismatch"
+    assert missing_explanation["severity"] == "critical"
+    assert missing_explanation["catalog_status"] == "missing"
+
+    zone.timezone = "Invalid/Zone"
+    tenant.default_timezone = "Europe/Madrid"
+    db_session.commit()
+    tenant_fallback_detail = client.get(f"/orders/{order_id}", headers=auth_headers(office_token))
+    assert tenant_fallback_detail.status_code == 200, tenant_fallback_detail.text
+    tenant_fallback_explanation = tenant_fallback_detail.json()["operational_explanation"]
+    assert tenant_fallback_explanation["timezone_used"] == "Europe/Madrid"
+    assert tenant_fallback_explanation["timezone_source"] == "tenant_default"
+
+    tenant.default_timezone = "Invalid/Tenant"
+    db_session.commit()
+    utc_fallback_detail = client.get(f"/orders/{order_id}", headers=auth_headers(office_token))
+    assert utc_fallback_detail.status_code == 200, utc_fallback_detail.text
+    utc_fallback_explanation = utc_fallback_detail.json()["operational_explanation"]
+    assert utc_fallback_explanation["timezone_used"] == "UTC"
+    assert utc_fallback_explanation["timezone_source"] == "utc_fallback"
 
 
 def test_orders_operational_state_is_tenant_isolated(client, db_session):

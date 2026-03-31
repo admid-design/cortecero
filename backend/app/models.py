@@ -86,6 +86,19 @@ class CustomerOperationalExceptionType(str, enum.Enum):
     restricted = "restricted"
 
 
+class OperationalReasonCatalog(Base):
+    __tablename__ = "operational_reason_catalog"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    code: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    category: Mapped[str] = mapped_column(Text, nullable=False)
+    severity: Mapped[str] = mapped_column(Text, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class Tenant(Base):
     __tablename__ = "tenants"
 

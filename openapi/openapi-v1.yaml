@@ -1274,6 +1274,8 @@ components:
             - CUSTOMER_NOT_ACCEPTING_ORDERS
             - OUTSIDE_CUSTOMER_WINDOW
             - INSUFFICIENT_LEAD_TIME
+        operational_explanation:
+          $ref: '#/components/schemas/OperationalExplanation'
         total_weight_kg:
           type: number
           nullable: true
@@ -1281,6 +1283,35 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrderLine'
+
+    OperationalExplanation:
+      type: object
+      properties:
+        reason_code:
+          type: string
+          nullable: true
+          enum:
+            - CUSTOMER_DATE_BLOCKED
+            - CUSTOMER_NOT_ACCEPTING_ORDERS
+            - OUTSIDE_CUSTOMER_WINDOW
+            - INSUFFICIENT_LEAD_TIME
+        reason_category:
+          type: string
+          nullable: true
+        severity:
+          type: string
+          nullable: true
+          enum: [low, medium, high, critical]
+        timezone_used:
+          type: string
+        timezone_source:
+          type: string
+          enum: [zone, tenant_default, utc_fallback]
+        rule_version:
+          type: string
+        catalog_status:
+          type: string
+          enum: [active, inactive, missing, not_applicable]
 
     OrderWeightUpdateRequest:
       type: object

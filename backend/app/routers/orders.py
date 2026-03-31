@@ -1,5 +1,7 @@
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends
@@ -29,6 +31,7 @@ from app.models import (
     Order,
     OrderIntakeType,
     OrderLine,
+    OperationalReasonCatalog,
     OrderStatus,
     Plan,
     PlanStatus,
@@ -40,6 +43,7 @@ from app.models import (
 from app.schemas import (
     OperationalQueueItemOut,
     OperationalQueueListResponse,
+    OperationalExplanationOut,
     OrderIngestionBatchInput,
     OrderIngestionItemResult,
     OrderIngestionResult,
@@ -71,22 +75,53 @@ _OPERATIONAL_REASON_PRECEDENCE: tuple[str, ...] = (
 _OPERATIONAL_REASON_PRIORITY: dict[str, int] = {
     reason: idx for idx, reason in enumerate(_OPERATIONAL_REASON_PRECEDENCE)
 }
+_OPERATIONAL_RULE_VERSION = "r6-operational-eval-v1"
+_OPERATIONAL_REASON_FALLBACK_CATEGORY = "catalog_mismatch"
+_OPERATIONAL_REASON_FALLBACK_SEVERITY = "critical"
 
 
-def _resolve_zoneinfo(tenant_default_timezone: str, zone_timezone: str | None) -> ZoneInfo:
-    timezone_candidates = []
+@dataclass(frozen=True)
+class _ResolvedTimezone:
+    tzinfo: ZoneInfo
+    timezone_used: str
+    timezone_source: Literal["zone", "tenant_default", "utc_fallback"]
+
+
+@dataclass(frozen=True)
+class _OperationalEvaluation:
+    reason_code: str | None
+    reason_category: str | None
+    severity: Literal["low", "medium", "high", "critical"] | None
+    timezone_used: str
+    timezone_source: Literal["zone", "tenant_default", "utc_fallback"]
+    rule_version: str
+    catalog_status: Literal["active", "inactive", "missing", "not_applicable"]
+
+
+def _resolve_timezone(tenant_default_timezone: str, zone_timezone: str | None) -> _ResolvedTimezone:
     if zone_timezone:
-        timezone_candidates.append(zone_timezone)
-    if tenant_default_timezone:
-        timezone_candidates.append(tenant_default_timezone)
-    timezone_candidates.append("UTC")
-
-    for candidate in timezone_candidates:
         try:
-            return ZoneInfo(candidate)
+            return _ResolvedTimezone(
+                tzinfo=ZoneInfo(zone_timezone),
+                timezone_used=zone_timezone,
+                timezone_source="zone",
+            )
         except ZoneInfoNotFoundError:
-            continue
-    return ZoneInfo("UTC")
+            pass
+    if tenant_default_timezone:
+        try:
+            return _ResolvedTimezone(
+                tzinfo=ZoneInfo(tenant_default_timezone),
+                timezone_used=tenant_default_timezone,
+                timezone_source="tenant_default",
+            )
+        except ZoneInfoNotFoundError:
+            pass
+    return _ResolvedTimezone(
+        tzinfo=ZoneInfo("UTC"),
+        timezone_used="UTC",
+        timezone_source="utc_fallback",
+    )
 
 
 def _is_within_window(created_local_time: time, window_start: time | None, window_end: time | None) -> bool:
@@ -132,7 +167,68 @@ def _resolve_operational_reason(
     return reasons[0]
 
 
-def _serialize_order(order: Order, lines: list[OrderLine], *, operational_reason: str | None) -> OrderOut:
+def _build_operational_explanation(
+    reason_code: str | None,
+    *,
+    timezone: _ResolvedTimezone,
+    reason_catalog_by_code: dict[str, OperationalReasonCatalog],
+) -> _OperationalEvaluation:
+    if reason_code is None:
+        return _OperationalEvaluation(
+            reason_code=None,
+            reason_category=None,
+            severity=None,
+            timezone_used=timezone.timezone_used,
+            timezone_source=timezone.timezone_source,
+            rule_version=_OPERATIONAL_RULE_VERSION,
+            catalog_status="not_applicable",
+        )
+
+    catalog_row = reason_catalog_by_code.get(reason_code)
+    if catalog_row is None:
+        return _OperationalEvaluation(
+            reason_code=reason_code,
+            reason_category=_OPERATIONAL_REASON_FALLBACK_CATEGORY,
+            severity=_OPERATIONAL_REASON_FALLBACK_SEVERITY,
+            timezone_used=timezone.timezone_used,
+            timezone_source=timezone.timezone_source,
+            rule_version=_OPERATIONAL_RULE_VERSION,
+            catalog_status="missing",
+        )
+    if not catalog_row.active:
+        return _OperationalEvaluation(
+            reason_code=reason_code,
+            reason_category=_OPERATIONAL_REASON_FALLBACK_CATEGORY,
+            severity=_OPERATIONAL_REASON_FALLBACK_SEVERITY,
+            timezone_used=timezone.timezone_used,
+            timezone_source=timezone.timezone_source,
+            rule_version=_OPERATIONAL_RULE_VERSION,
+            catalog_status="inactive",
+        )
+    return _OperationalEvaluation(
+        reason_code=reason_code,
+        reason_category=catalog_row.category,
+        severity=catalog_row.severity,
+        timezone_used=timezone.timezone_used,
+        timezone_source=timezone.timezone_source,
+        rule_version=_OPERATIONAL_RULE_VERSION,
+        catalog_status="active",
+    )
+
+
+def _default_operational_evaluation() -> _OperationalEvaluation:
+    return _OperationalEvaluation(
+        reason_code=None,
+        reason_category=None,
+        severity=None,
+        timezone_used="UTC",
+        timezone_source="utc_fallback",
+        rule_version=_OPERATIONAL_RULE_VERSION,
+        catalog_status="not_applicable",
+    )
+
+
+def _serialize_order(order: Order, lines: list[OrderLine], *, operational: _OperationalEvaluation) -> OrderOut:
     return OrderOut(
         id=order.id,
         customer_id=order.customer_id,
@@ -147,8 +243,17 @@ def _serialize_order(order: Order, lines: list[OrderLine], *, operational_reason
         effective_cutoff_at=order.effective_cutoff_at,
         source_channel=order.source_channel.value,
         intake_type=order.intake_type.value,
-        operational_state="restricted" if operational_reason else "eligible",
-        operational_reason=operational_reason,
+        operational_state="restricted" if operational.reason_code else "eligible",
+        operational_reason=operational.reason_code,
+        operational_explanation=OperationalExplanationOut(
+            reason_code=operational.reason_code,
+            reason_category=operational.reason_category,
+            severity=operational.severity,
+            timezone_used=operational.timezone_used,
+            timezone_source=operational.timezone_source,
+            rule_version=operational.rule_version,
+            catalog_status=operational.catalog_status,
+        ),
         total_weight_kg=order.total_weight_kg,
         lines=[
             OrderLineOut(
@@ -163,12 +268,12 @@ def _serialize_order(order: Order, lines: list[OrderLine], *, operational_reason
     )
 
 
-def _build_operational_reason_map(
+def _build_operational_evaluation_map(
     db: Session,
     *,
     tenant: Tenant,
     orders: list[Order],
-) -> dict[uuid.UUID, str | None]:
+) -> dict[uuid.UUID, _OperationalEvaluation]:
     if not orders:
         return {}
 
@@ -218,19 +323,35 @@ def _build_operational_reason_map(
     )
     zones_by_id: dict[uuid.UUID, Zone] = {zone.id: zone for zone in zones}
 
-    reason_by_order_id: dict[uuid.UUID, str | None] = {}
+    reason_catalog_by_code: dict[str, OperationalReasonCatalog] = {
+        row.code: row
+        for row in db.scalars(
+            select(OperationalReasonCatalog).where(
+                OperationalReasonCatalog.code.in_(_OPERATIONAL_REASON_PRECEDENCE)
+            )
+        )
+    }
+
+    evaluation_by_order_id: dict[uuid.UUID, _OperationalEvaluation] = {}
     for order in orders:
         zone = zones_by_id.get(order.zone_id)
-        zone_tz = zone.timezone if zone else None
-        tzinfo = _resolve_zoneinfo(tenant.default_timezone, zone_tz)
-        reason_by_order_id[order.id] = _resolve_operational_reason(
+        resolved_timezone = _resolve_timezone(
+            tenant_default_timezone=tenant.default_timezone,
+            zone_timezone=zone.timezone if zone else None,
+        )
+        reason_code = _resolve_operational_reason(
             order,
             profile=profiles_by_customer.get(order.customer_id),
             has_date_restriction=(order.customer_id, order.service_date) in date_restriction_keys,
-            tzinfo=tzinfo,
+            tzinfo=resolved_timezone.tzinfo,
+        )
+        evaluation_by_order_id[order.id] = _build_operational_explanation(
+            reason_code,
+            timezone=resolved_timezone,
+            reason_catalog_by_code=reason_catalog_by_code,
         )
 
-    return reason_by_order_id
+    return evaluation_by_order_id
 
 
 def _resolve_intake_type(db: Session, tenant_id: uuid.UUID, customer_id: uuid.UUID, service_date: date) -> OrderIntakeType:
@@ -462,12 +583,12 @@ def list_orders(
         for line in lines:
             lines_by_order.setdefault(line.order_id, []).append(line)
 
-    operational_reason_by_order = _build_operational_reason_map(db, tenant=tenant, orders=orders)
+    operational_by_order = _build_operational_evaluation_map(db, tenant=tenant, orders=orders)
     serialized = [
         _serialize_order(
             order,
             lines_by_order.get(order.id, []),
-            operational_reason=operational_reason_by_order.get(order.id),
+            operational=operational_by_order.get(order.id) or _default_operational_evaluation(),
         )
         for order in orders
     ]
@@ -598,11 +719,12 @@ def list_operational_queue(
     if not orders:
         return OperationalQueueListResponse(items=[], total=0)
 
-    operational_reason_by_order = _build_operational_reason_map(db, tenant=tenant, orders=orders)
+    operational_by_order = _build_operational_evaluation_map(db, tenant=tenant, orders=orders)
 
     items: list[OperationalQueueItemOut] = []
     for order in orders:
-        operational_reason = operational_reason_by_order.get(order.id)
+        operational = operational_by_order.get(order.id) or _default_operational_evaluation()
+        operational_reason = operational.reason_code
         if operational_reason is None:
             continue
         if reason is not None and operational_reason != reason:
@@ -647,8 +769,9 @@ def get_order(
         raise not_found("ORDER_NOT_FOUND", "Pedido no encontrado")
 
     lines = list(db.scalars(select(OrderLine).where(OrderLine.order_id == order.id, OrderLine.tenant_id == current.tenant_id)))
-    operational_reason_by_order = _build_operational_reason_map(db, tenant=tenant, orders=[order])
-    return _serialize_order(order, lines, operational_reason=operational_reason_by_order.get(order.id))
+    operational_by_order = _build_operational_evaluation_map(db, tenant=tenant, orders=[order])
+    operational = operational_by_order.get(order.id) or _default_operational_evaluation()
+    return _serialize_order(order, lines, operational=operational)
 
 
 @router.patch("/orders/{order_id}/weight", response_model=OrderOut)
@@ -689,5 +812,6 @@ def update_order_weight(
     db.commit()
     db.refresh(order)
     lines = list(db.scalars(select(OrderLine).where(OrderLine.order_id == order.id, OrderLine.tenant_id == current.tenant_id)))
-    operational_reason_by_order = _build_operational_reason_map(db, tenant=tenant, orders=[order])
-    return _serialize_order(order, lines, operational_reason=operational_reason_by_order.get(order.id))
+    operational_by_order = _build_operational_evaluation_map(db, tenant=tenant, orders=[order])
+    operational = operational_by_order.get(order.id) or _default_operational_evaluation()
+    return _serialize_order(order, lines, operational=operational)
