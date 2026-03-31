@@ -68,6 +68,7 @@ import {
   type UserRole,
   type Zone,
 } from "../lib/api";
+import { OperationalQueueCard } from "../components/OperationalQueueCard";
 import { OperationalResolutionQueueCard } from "../components/OperationalResolutionQueueCard";
 
 type ViewMode = "ops" | "admin";
@@ -1612,80 +1613,18 @@ export default function HomePage() {
             </table>
           </div>
 
-          <div className="card grid">
-            <h2>Operational Queue</h2>
-            <div className="row">
-              <label>
-                service_date{" "}
-                <input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} />
-              </label>
-              <label>
-                zone_id{" "}
-                <select value={operationalQueueZoneId} onChange={(e) => setOperationalQueueZoneId(e.target.value)}>
-                  <option value="all">all</option>
-                  {operationalQueueZoneOptions.map((zoneId) => (
-                    <option key={zoneId} value={zoneId}>
-                      {zoneId}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                reason{" "}
-                <select
-                  value={operationalQueueReason}
-                  onChange={(e) => setOperationalQueueReason(e.target.value as "all" | OperationalQueueReason | string)}
-                >
-                  <option value="all">all</option>
-                  {operationalQueueReasonOptions.map((reason) => (
-                    <option key={reason} value={reason}>
-                      {reason}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button className="secondary" onClick={() => void refreshOps()}>
-                Aplicar filtros
-              </button>
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>ref</th>
-                  <th>order_id</th>
-                  <th>customer_id</th>
-                  <th>zone_id</th>
-                  <th>status</th>
-                  <th>intake_type</th>
-                  <th>reason</th>
-                  <th>created_at</th>
-                </tr>
-              </thead>
-              <tbody>
-                {operationalQueue.length === 0 && (
-                  <tr>
-                    <td colSpan={8} style={{ color: "#6b7280" }}>
-                      Sin restricciones operativas para los filtros actuales.
-                    </td>
-                  </tr>
-                )}
-                {operationalQueue.map((item) => (
-                  <tr key={item.order_id}>
-                    <td>{item.external_ref}</td>
-                    <td>{shortId(item.order_id)}</td>
-                    <td>{shortId(item.customer_id)}</td>
-                    <td>{shortId(item.zone_id)}</td>
-                    <td>{item.status}</td>
-                    <td>{item.intake_type}</td>
-                    <td>
-                      <span className={operationalReasonBadgeClass(item.reason)}>{item.reason}</span>
-                    </td>
-                    <td>{new Date(item.created_at).toLocaleString("es-ES")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <OperationalQueueCard
+            serviceDate={serviceDate}
+            onServiceDateChange={setServiceDate}
+            zoneId={operationalQueueZoneId}
+            onZoneIdChange={setOperationalQueueZoneId}
+            zoneOptions={operationalQueueZoneOptions}
+            reason={operationalQueueReason}
+            onReasonChange={setOperationalQueueReason}
+            reasonOptions={operationalQueueReasonOptions}
+            items={operationalQueue}
+            onApplyFilters={() => void refreshOps()}
+          />
 
           <OperationalResolutionQueueCard
             serviceDate={serviceDate}
