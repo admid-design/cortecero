@@ -395,6 +395,26 @@ export type AdminUserCreateRequest = {
 
 export type AdminUserUpdateRequest = Partial<AdminUserCreateRequest>;
 
+export type Product = {
+  id: string;
+  sku: string;
+  name: string;
+  barcode: string | null;
+  uom: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProductCreateRequest = {
+  sku: string;
+  name: string;
+  barcode?: string | null;
+  uom: string;
+};
+
+export type ProductUpdateRequest = Partial<ProductCreateRequest>;
+
 export type TenantSettings = {
   id: string;
   name: string;
@@ -673,6 +693,29 @@ export async function updateAdminUser(
   payload: AdminUserUpdateRequest,
 ): Promise<AdminUser> {
   return request<AdminUser>(`/admin/users/${userId}`, { token, method: "PATCH", body: payload });
+}
+
+export async function listAdminProducts(
+  token: string,
+  params: { active?: boolean } = {},
+): Promise<ListResponse<Product>> {
+  return request<ListResponse<Product>>(`/admin/products${buildQuery(params)}`, { token });
+}
+
+export async function createAdminProduct(token: string, payload: ProductCreateRequest): Promise<Product> {
+  return request<Product>("/admin/products", { token, method: "POST", body: payload });
+}
+
+export async function updateAdminProduct(
+  token: string,
+  productId: string,
+  payload: ProductUpdateRequest,
+): Promise<Product> {
+  return request<Product>(`/admin/products/${productId}`, { token, method: "PATCH", body: payload });
+}
+
+export async function deactivateAdminProduct(token: string, productId: string): Promise<Product> {
+  return request<Product>(`/admin/products/${productId}/deactivate`, { token, method: "POST" });
 }
 
 export async function getAdminTenantSettings(token: string): Promise<TenantSettings> {

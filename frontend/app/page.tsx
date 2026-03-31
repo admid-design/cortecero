@@ -74,9 +74,10 @@ import { OperationalQueueCard } from "../components/OperationalQueueCard";
 import { OperationalResolutionQueueCard } from "../components/OperationalResolutionQueueCard";
 import { OrderOperationalSnapshotsCard } from "../components/OrderOperationalSnapshotsCard";
 import { PendingQueueCard } from "../components/PendingQueueCard";
+import { AdminProductsCard } from "../components/AdminProductsCard";
 
 type ViewMode = "ops" | "admin";
-type AdminSection = "zones" | "customers" | "users" | "tenant";
+type AdminSection = "zones" | "customers" | "users" | "tenant" | "products";
 type OrdersOperationalStateFilter = "all" | "eligible" | "restricted";
 
 const OPERATIONAL_REASON_ORDER = [
@@ -1821,6 +1822,12 @@ export default function HomePage() {
                   Usuarios
                 </button>
                 <button
+                  className={adminSection === "products" ? "tab active" : "tab muted"}
+                  onClick={() => setAdminSection("products")}
+                >
+                  Productos
+                </button>
+                <button
                   className={adminSection === "tenant" ? "tab active" : "tab muted"}
                   onClick={() => {
                     setAdminSection("tenant");
@@ -2333,6 +2340,10 @@ export default function HomePage() {
                     </div>
                   </div>
                 </div>
+              )}
+
+              {adminSection === "products" && (
+                <AdminProductsCard token={token} />
               )}
 
               {adminSection === "tenant" && (
