@@ -253,6 +253,25 @@ class OperationalSnapshotRunResponse(BaseModel):
     generated_snapshot_ids: list[uuid.UUID]
 
 
+class OrderOperationalSnapshotOut(APIModel):
+    id: uuid.UUID
+    order_id: uuid.UUID
+    service_date: date
+    operational_state: Literal["eligible", "restricted"]
+    operational_reason: OperationalReasonCode | None
+    evaluation_ts: datetime
+    timezone_used: str
+    rule_version: str
+    evidence_json: dict[str, Any]
+
+
+class OrderOperationalSnapshotsResponse(BaseModel):
+    order_id: uuid.UUID
+    service_date: date
+    items: list[OrderOperationalSnapshotOut]
+    total: int
+
+
 class PlanOrderOut(APIModel):
     id: uuid.UUID
     plan_id: uuid.UUID

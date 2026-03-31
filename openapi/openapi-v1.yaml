@@ -316,6 +316,39 @@ paths:
         "403":
           description: RBAC_FORBIDDEN
 
+  /orders/{order_id}/operational-snapshots:
+    get:
+      tags: [Orders]
+      summary: Timeline de snapshots operativos por pedido
+      description: >
+        Devuelve la línea temporal append-only de snapshots de evaluación operativa
+        para un pedido, ordenada cronológicamente (`evaluation_ts`, `id`), sin side effects.
+      parameters:
+        - in: path
+          name: order_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: Timeline operativo del pedido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderOperationalSnapshotsResponse'
+        "404":
+          description: ORDER_NOT_FOUND
+        "422":
+          description: INVALID_OPERATIONAL_FILTER
+
   /exports/operational-dataset:
     get:
       tags: [Exports]
@@ -1487,6 +1520,56 @@ components:
           items:
             type: string
             format: uuid
+
+    OrderOperationalSnapshot:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+          format: uuid
+        service_date:
+          type: string
+          format: date
+        operational_state:
+          type: string
+          enum: [eligible, restricted]
+        operational_reason:
+          type: string
+          nullable: true
+          enum:
+            - CUSTOMER_DATE_BLOCKED
+            - CUSTOMER_NOT_ACCEPTING_ORDERS
+            - OUTSIDE_CUSTOMER_WINDOW
+            - INSUFFICIENT_LEAD_TIME
+        evaluation_ts:
+          type: string
+          format: date-time
+        timezone_used:
+          type: string
+        rule_version:
+          type: string
+        evidence_json:
+          type: object
+          additionalProperties: true
+
+    OrderOperationalSnapshotsResponse:
+      type: object
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        service_date:
+          type: string
+          format: date
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderOperationalSnapshot'
 
     OrderLine:
       type: object

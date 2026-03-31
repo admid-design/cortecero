@@ -22,6 +22,7 @@ import {
   getSourceMetrics,
   getAdminTenantSettings,
   includeOrderInPlan,
+  listOrderOperationalSnapshots,
   listOperationalQueue,
   listOperationalResolutionQueue,
   listPendingQueue,
@@ -59,6 +60,7 @@ import {
   type OperationalResolutionQueueItem,
   type OperationalResolutionQueueReason,
   type OperationalResolutionQueueSeverity,
+  type OrderOperationalSnapshotItem,
   type PendingQueueItem,
   type PendingQueueReason,
   type Plan,
@@ -70,6 +72,7 @@ import {
 } from "../lib/api";
 import { OperationalQueueCard } from "../components/OperationalQueueCard";
 import { OperationalResolutionQueueCard } from "../components/OperationalResolutionQueueCard";
+import { OrderOperationalSnapshotsCard } from "../components/OrderOperationalSnapshotsCard";
 import { PendingQueueCard } from "../components/PendingQueueCard";
 
 type ViewMode = "ops" | "admin";
@@ -169,6 +172,10 @@ export default function HomePage() {
   const [pendingQueue, setPendingQueue] = useState<PendingQueueItem[]>([]);
   const [operationalQueue, setOperationalQueue] = useState<OperationalQueueItem[]>([]);
   const [operationalResolutionQueue, setOperationalResolutionQueue] = useState<OperationalResolutionQueueItem[]>([]);
+  const [selectedSnapshotOrderId, setSelectedSnapshotOrderId] = useState("");
+  const [orderOperationalSnapshots, setOrderOperationalSnapshots] = useState<OrderOperationalSnapshotItem[]>([]);
+  const [orderOperationalSnapshotsLoading, setOrderOperationalSnapshotsLoading] = useState(false);
+  const [orderOperationalSnapshotsError, setOrderOperationalSnapshotsError] = useState("");
   const [capacityAlerts, setCapacityAlerts] = useState<PlanCapacityAlert[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedConsolidationPlanId, setSelectedConsolidationPlanId] = useState("");
@@ -308,6 +315,15 @@ export default function HomePage() {
     unknown.sort();
     return [...orderedKnown, ...unknown];
   }, [orders]);
+  const snapshotOrderOptions = useMemo(
+    () =>
+      orders.map((order) => ({
+        id: order.id,
+        externalRef: order.external_ref,
+        serviceDate: order.service_date,
+      })),
+    [orders],
+  );
   const operationalQueueReasonOptions = useMemo(() => {
     const values = new Set<string>();
     for (const item of operationalQueue) values.add(item.reason);
@@ -418,6 +434,31 @@ export default function HomePage() {
     sourceZoneId,
     token,
   ]);
+
+  const onSnapshotOrderChange = useCallback((orderId: string) => {
+    setSelectedSnapshotOrderId(orderId);
+    setOrderOperationalSnapshots([]);
+    setOrderOperationalSnapshotsError("");
+  }, []);
+
+  const loadOrderOperationalSnapshots = useCallback(async () => {
+    if (!token) return;
+    if (!selectedSnapshotOrderId) {
+      setOrderOperationalSnapshotsError("ORDER_REQUIRED: Selecciona un pedido");
+      return;
+    }
+    setOrderOperationalSnapshotsLoading(true);
+    setOrderOperationalSnapshotsError("");
+    try {
+      const data = await listOrderOperationalSnapshots(token, selectedSnapshotOrderId);
+      setOrderOperationalSnapshots(data.items ?? []);
+    } catch (e) {
+      setOrderOperationalSnapshotsError(formatError(e));
+      setOrderOperationalSnapshots([]);
+    } finally {
+      setOrderOperationalSnapshotsLoading(false);
+    }
+  }, [selectedSnapshotOrderId, token]);
 
   const refreshZones = useCallback(async (authToken?: string) => {
     const activeToken = authToken ?? token;
@@ -1586,6 +1627,16 @@ export default function HomePage() {
             severityOptions={OPERATIONAL_SEVERITY_ORDER}
             items={operationalResolutionQueue}
             onApplyFilters={() => void refreshOps()}
+          />
+
+          <OrderOperationalSnapshotsCard
+            selectedOrderId={selectedSnapshotOrderId}
+            onSelectedOrderIdChange={onSnapshotOrderChange}
+            orderOptions={snapshotOrderOptions}
+            items={orderOperationalSnapshots}
+            loading={orderOperationalSnapshotsLoading}
+            error={orderOperationalSnapshotsError}
+            onLoad={() => void loadOrderOperationalSnapshots()}
           />
 
           <div className="card">

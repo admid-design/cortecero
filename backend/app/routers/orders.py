@@ -44,6 +44,8 @@ from app.models import (
 from app.schemas import (
     OperationalQueueItemOut,
     OperationalQueueListResponse,
+    OrderOperationalSnapshotOut,
+    OrderOperationalSnapshotsResponse,
     OperationalResolutionQueueItemOut,
     OperationalResolutionQueueListResponse,
     OperationalExplanationOut,
@@ -912,6 +914,54 @@ def list_operational_resolution_queue(
         )
     )
     return OperationalResolutionQueueListResponse(items=items, total=len(items))
+
+
+@router.get("/orders/{order_id}/operational-snapshots", response_model=OrderOperationalSnapshotsResponse)
+def list_order_operational_snapshots(
+    order_id: uuid.UUID,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.office, UserRole.logistics, UserRole.admin)),
+) -> OrderOperationalSnapshotsResponse:
+    if limit < 1 or limit > 500:
+        raise unprocessable("INVALID_OPERATIONAL_FILTER", "limit debe estar entre 1 y 500")
+
+    order = db.scalar(select(Order).where(Order.id == order_id, Order.tenant_id == current.tenant_id))
+    if not order:
+        raise not_found("ORDER_NOT_FOUND", "Pedido no encontrado")
+
+    snapshots = list(
+        db.scalars(
+            select(OrderOperationalSnapshot)
+            .where(
+                OrderOperationalSnapshot.tenant_id == current.tenant_id,
+                OrderOperationalSnapshot.order_id == order_id,
+            )
+            .order_by(OrderOperationalSnapshot.evaluation_ts.asc(), OrderOperationalSnapshot.id.asc())
+            .limit(limit)
+        )
+    )
+    items = [
+        OrderOperationalSnapshotOut(
+            id=snapshot.id,
+            order_id=snapshot.order_id,
+            service_date=snapshot.service_date,
+            operational_state=snapshot.operational_state,
+            operational_reason=snapshot.operational_reason,
+            evaluation_ts=snapshot.evaluation_ts,
+            timezone_used=snapshot.timezone_used,
+            rule_version=snapshot.rule_version,
+            evidence_json=snapshot.evidence_json,
+        )
+        for snapshot in snapshots
+    ]
+
+    return OrderOperationalSnapshotsResponse(
+        order_id=order.id,
+        service_date=order.service_date,
+        items=items,
+        total=len(items),
+    )
 
 
 @router.post("/orders/operational-snapshots/run", response_model=OperationalSnapshotRunResponse)

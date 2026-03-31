@@ -185,6 +185,25 @@ export type OperationalResolutionQueueItem = {
   created_at: string;
 };
 
+export type OrderOperationalSnapshotItem = {
+  id: string;
+  order_id: string;
+  service_date: string;
+  operational_state: "eligible" | "restricted" | string;
+  operational_reason: OrderOperationalReason | string | null;
+  evaluation_ts: string;
+  timezone_used: string;
+  rule_version: string;
+  evidence_json: Record<string, unknown>;
+};
+
+export type OrderOperationalSnapshotsResponse = {
+  order_id: string;
+  service_date: string;
+  items: OrderOperationalSnapshotItem[];
+  total: number;
+};
+
 export type PlanOrder = {
   id: string;
   plan_id: string;
@@ -461,6 +480,17 @@ export async function listOperationalResolutionQueue(
   return request<ListResponse<OperationalResolutionQueueItem>>(`/orders/operational-resolution-queue${buildQuery(params)}`, {
     token,
   });
+}
+
+export async function listOrderOperationalSnapshots(
+  token: string,
+  orderId: string,
+  params: { limit?: number } = {},
+): Promise<OrderOperationalSnapshotsResponse> {
+  return request<OrderOperationalSnapshotsResponse>(
+    `/orders/${orderId}/operational-snapshots${buildQuery(params)}`,
+    { token },
+  );
 }
 
 export async function createPlan(token: string, payload: { service_date: string; zone_id: string }): Promise<Plan> {
