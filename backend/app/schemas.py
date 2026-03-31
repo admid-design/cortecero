@@ -440,6 +440,36 @@ class ZonesListResponse(BaseModel):
     total: int
 
 
+class ProductCreateRequest(BaseModel):
+    sku: str
+    name: str
+    barcode: str | None = None
+    uom: str
+
+
+class ProductUpdateRequest(BaseModel):
+    sku: str | None = None
+    name: str | None = None
+    barcode: str | None = None
+    uom: str | None = None
+
+
+class ProductOut(APIModel):
+    id: uuid.UUID
+    sku: str
+    name: str
+    barcode: str | None
+    uom: str
+    active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProductsListResponse(BaseModel):
+    items: list[ProductOut]
+    total: int
+
+
 class CustomerCreateRequest(BaseModel):
     zone_id: uuid.UUID
     name: str = Field(min_length=1, max_length=160)

@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import (
     admin_customers,
+    admin_products,
     admin_tenant_settings,
     admin_users,
     admin_zones,
@@ -42,5 +43,6 @@ app.include_router(dashboard.router)
 app.include_router(audit.router)
 app.include_router(admin_zones.router)
 app.include_router(admin_customers.router)
+app.include_router(admin_products.router)
 app.include_router(admin_users.router)
 app.include_router(admin_tenant_settings.router)

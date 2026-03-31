@@ -18,6 +18,7 @@ tags:
   - name: Audit
   - name: Exports
   - name: Admin Zones
+  - name: Admin Products
   - name: Admin Customers
   - name: Admin Users
   - name: Admin Tenant Settings
@@ -1237,6 +1238,101 @@ paths:
         "422":
           description: No se puede desactivar por estado/regla de negocio
 
+  /admin/products:
+    get:
+      tags: [Admin Products]
+      summary: Listado de productos del tenant
+      parameters:
+        - in: query
+          name: active
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Productos filtrados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductsListResponse'
+        "403":
+          description: Rol sin permisos de lectura
+    post:
+      tags: [Admin Products]
+      summary: Crear producto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreateRequest'
+      responses:
+        "201":
+          description: Producto creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        "403":
+          description: Rol sin permisos de escritura
+        "409":
+          description: Conflicto de SKU
+        "422":
+          description: Payload inválido
+
+  /admin/products/{product_id}:
+    patch:
+      tags: [Admin Products]
+      summary: Actualizar producto
+      parameters:
+        - in: path
+          name: product_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdateRequest'
+      responses:
+        "200":
+          description: Producto actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        "404":
+          description: Producto no encontrado
+        "409":
+          description: Conflicto de SKU
+        "422":
+          description: Transición o payload inválido
+
+  /admin/products/{product_id}/deactivate:
+    post:
+      tags: [Admin Products]
+      summary: Desactivar producto
+      parameters:
+        - in: path
+          name: product_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Producto desactivado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        "404":
+          description: Producto no encontrado
+        "422":
+          description: No se puede desactivar por estado/regla de negocio
+
   /admin/users:
     get:
       tags: [Admin Users]
@@ -2156,6 +2252,67 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Zone'
+        total:
+          type: integer
+
+    ProductCreateRequest:
+      type: object
+      required: [sku, name, uom]
+      properties:
+        sku:
+          type: string
+        name:
+          type: string
+        barcode:
+          type: string
+          nullable: true
+        uom:
+          type: string
+
+    ProductUpdateRequest:
+      type: object
+      properties:
+        sku:
+          type: string
+        name:
+          type: string
+        barcode:
+          type: string
+          nullable: true
+        uom:
+          type: string
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        name:
+          type: string
+        barcode:
+          type: string
+          nullable: true
+        uom:
+          type: string
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProductsListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
         total:
           type: integer
 
