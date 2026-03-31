@@ -18,4 +18,7 @@ test("renders empty state and forms for AdminProductsCard", () => {
   assert.match(html, /barcode/);
   assert.match(html, /uom/);
   assert.match(html, /estado/);
+
+  // Empty state explicitly handled
+  assert.match(html, /Sin productos encontrados\./);
 });

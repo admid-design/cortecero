@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import {
   type AdminUser,
   APIError,
+  formatError,
   approveException,
   createAdminCustomer,
   createAdminCustomerOperationalException,
@@ -101,14 +102,6 @@ function decodeRoleFromToken(token: string): UserRole | null {
   } catch {
     return null;
   }
-}
-
-function formatError(error: unknown): string {
-  if (error instanceof APIError) {
-    return error.message;
-  }
-  if (error instanceof Error) return error.message;
-  return "Error inesperado";
 }
 
 function shortId(value: string): string {

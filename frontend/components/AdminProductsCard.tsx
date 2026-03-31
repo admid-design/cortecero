@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   APIError,
+  formatError,
   createAdminProduct,
   deactivateAdminProduct,
   listAdminProducts,
@@ -11,14 +12,6 @@ import {
 type AdminProductsCardProps = {
   token: string;
 };
-
-function formatError(error: unknown): string {
-  if (error instanceof APIError) {
-    return error.message;
-  }
-  if (error instanceof Error) return error.message;
-  return "Error inesperado";
-}
 
 function shortId(value: string): string {
   return value.slice(0, 8);
@@ -156,6 +149,13 @@ export function AdminProductsCard({ token }: AdminProductsCardProps) {
             </tr>
           </thead>
           <tbody>
+            {products.length === 0 && (
+              <tr>
+                <td colSpan={7} style={{ color: "#6b7280", textAlign: "center" }}>
+                  Sin productos encontrados.
+                </td>
+              </tr>
+            )}
             {products.map((product) => (
               <tr key={product.id}>
                 <td>{shortId(product.id)}</td>

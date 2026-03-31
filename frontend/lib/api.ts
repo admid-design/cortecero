@@ -25,6 +25,14 @@ export class APIError extends Error {
   }
 }
 
+export function formatError(error: unknown): string {
+  if (error instanceof APIError) {
+    return error.message;
+  }
+  if (error instanceof Error) return error.message;
+  return "Error inesperado";
+}
+
 function buildQuery(params: Record<string, QueryValue>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
