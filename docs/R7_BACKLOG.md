@@ -13,6 +13,7 @@ Objetivo R7: abrir operación física (catálogo, ubicaciones, inventario, recep
 - RBAC y contrato de errores (`detail.code`, `detail.message`) sin degradación.
 - Inventario y movimientos siempre append-only en capa de eventos.
 - No side effects implícitos en endpoints de lectura.
+- `inventory_movements` es la única fuente de verdad del inventario; `inventory_balances` se trata como estado derivado/materializado.
 
 ## No-hacer en R7
 - No optimización avanzada de rutas.
@@ -41,6 +42,10 @@ Objetivo R7: abrir operación física (catálogo, ubicaciones, inventario, recep
   - `inventory_balances` por `tenant + location + product`.
   - `inventory_movements` append-only (`in`, `out`, `adjustment`, `transfer`).
   - checks para no permitir cantidades negativas en movimientos.
+- Decisión contractual:
+  - `inventory_balances` no admite escritura funcional directa de negocio.
+  - altas/cambios de saldo ocurren exclusivamente por aplicación de `inventory_movements`.
+  - cualquier endpoint de ajuste debe persistir primero movimiento y luego reflejar saldo derivado.
 
 ### R7-DB-004 — Eventos de recepción y carga
 - Tipo: DB
