@@ -2,6 +2,44 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.0] - 2026-03-31
+
+R6 closure release focused on explainability hardening, historical operational snapshots, resolution workflows, and AI-ready export stability.
+
+### Added
+- R6 operational explainability and catalog governance:
+  - `operational_reason_catalog` seeded and versioned for stable reason codes.
+  - `operational_explanation` in order reads with `reason_category`, `severity`, `rule_version`, `timezone_used`, and `catalog_status`.
+- R6 historical traceability:
+  - append-only `order_operational_snapshots` with guardrails against updates/deletes.
+  - timeline reads and batch snapshot generation endpoint with observable idempotency.
+- R6 operational prioritization and analytics surface:
+  - `operational-resolution-queue` endpoint with deterministic ordering and strict filters.
+  - `exports/operational-dataset` endpoint (JSON/CSV), tenant-safe pagination, and optional anonymization.
+- R6 frontend operational coverage:
+  - operational explanation signal in orders table.
+  - dedicated cards for Pending Queue, Operational Queue, and Operational Resolution Queue.
+  - order snapshot timeline card in operational UI.
+
+### Changed
+- Timezone hardening (`R6-DB-003`) across DB and API:
+  - DB function `is_valid_iana_timezone` plus constraints on `tenants.default_timezone` and `zones.timezone`.
+  - invalid existing timezone data normalized during migration before enforcing constraints.
+  - `/admin/zones` now rejects invalid timezone writes with `422 INVALID_TIMEZONE`.
+- CI/OpenAPI gate aligned to R6 critical contract surface:
+  - protects resolution queue, snapshot run, export dataset, and explanation schemas.
+
+### QA / CI
+- Temporal QA matrix completed for same-day/cross-midnight/DST behavior.
+- Snapshot consistency and batch idempotency tests completed.
+- Required checks in green for release commit:
+  - `backend-tests`
+  - `openapi-check`
+  - `frontend-smoke`
+
+### Notes
+- This release closes R6 scope and establishes the baseline before opening R7.
+
 ## [0.4.0] - 2026-03-31
 
 R5 closure release focused on customer operational governance (profiles, operational exceptions, derived operational signals/queues, and plan customer consolidation), with QA/CI hardening.
