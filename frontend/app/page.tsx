@@ -68,6 +68,7 @@ import {
   type UserRole,
   type Zone,
 } from "../lib/api";
+import { OperationalResolutionQueueCard } from "../components/OperationalResolutionQueueCard";
 
 type ViewMode = "ops" | "admin";
 type AdminSection = "zones" | "customers" | "users" | "tenant";
@@ -1686,107 +1687,21 @@ export default function HomePage() {
             </table>
           </div>
 
-          <div className="card grid">
-            <h2>Operational Resolution Queue</h2>
-            <div className="row">
-              <label>
-                service_date{" "}
-                <input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} />
-              </label>
-              <label>
-                zone_id{" "}
-                <select
-                  value={operationalResolutionQueueZoneId}
-                  onChange={(e) => setOperationalResolutionQueueZoneId(e.target.value)}
-                >
-                  <option value="all">all</option>
-                  {operationalResolutionQueueZoneOptions.map((zoneId) => (
-                    <option key={zoneId} value={zoneId}>
-                      {zoneId}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                reason{" "}
-                <select
-                  value={operationalResolutionQueueReason}
-                  onChange={(e) =>
-                    setOperationalResolutionQueueReason(e.target.value as "all" | OperationalResolutionQueueReason | string)
-                  }
-                >
-                  <option value="all">all</option>
-                  {operationalResolutionQueueReasonOptions.map((reason) => (
-                    <option key={reason} value={reason}>
-                      {reason}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                severity{" "}
-                <select
-                  value={operationalResolutionQueueSeverity}
-                  onChange={(e) =>
-                    setOperationalResolutionQueueSeverity(
-                      e.target.value as "all" | OperationalResolutionQueueSeverity | string,
-                    )
-                  }
-                >
-                  <option value="all">all</option>
-                  {OPERATIONAL_SEVERITY_ORDER.map((severity) => (
-                    <option key={severity} value={severity}>
-                      {severity}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button className="secondary" onClick={() => void refreshOps()}>
-                Aplicar filtros
-              </button>
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>ref</th>
-                  <th>order_id</th>
-                  <th>customer_id</th>
-                  <th>zone_id</th>
-                  <th>status</th>
-                  <th>intake_type</th>
-                  <th>reason</th>
-                  <th>severity</th>
-                  <th>created_at</th>
-                </tr>
-              </thead>
-              <tbody>
-                {operationalResolutionQueue.length === 0 && (
-                  <tr>
-                    <td colSpan={9} style={{ color: "#6b7280" }}>
-                      Sin items de resolución para los filtros actuales.
-                    </td>
-                  </tr>
-                )}
-                {operationalResolutionQueue.map((item) => (
-                  <tr key={item.order_id}>
-                    <td>{item.external_ref}</td>
-                    <td>{shortId(item.order_id)}</td>
-                    <td>{shortId(item.customer_id)}</td>
-                    <td>{shortId(item.zone_id)}</td>
-                    <td>{item.status}</td>
-                    <td>{item.intake_type}</td>
-                    <td>
-                      <span className={operationalReasonBadgeClass(item.operational_reason)}>{item.operational_reason}</span>
-                    </td>
-                    <td>
-                      <span className={operationalSeverityBadgeClass(item.severity)}>{item.severity}</span>
-                    </td>
-                    <td>{new Date(item.created_at).toLocaleString("es-ES")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <OperationalResolutionQueueCard
+            serviceDate={serviceDate}
+            onServiceDateChange={setServiceDate}
+            zoneId={operationalResolutionQueueZoneId}
+            onZoneIdChange={setOperationalResolutionQueueZoneId}
+            zoneOptions={operationalResolutionQueueZoneOptions}
+            reason={operationalResolutionQueueReason}
+            onReasonChange={setOperationalResolutionQueueReason}
+            reasonOptions={operationalResolutionQueueReasonOptions}
+            severity={operationalResolutionQueueSeverity}
+            onSeverityChange={setOperationalResolutionQueueSeverity}
+            severityOptions={OPERATIONAL_SEVERITY_ORDER}
+            items={operationalResolutionQueue}
+            onApplyFilters={() => void refreshOps()}
+          />
 
           <div className="card">
             <h2>Pedidos</h2>
