@@ -2,7 +2,7 @@
 
 Estado: abierto  
 Fecha: 2026-03-31  
-Baseline revisado: `main@060a9f0`
+Baseline revisado: `main@cfc94d8`
 
 ## 1) Objetivo del gate
 Validar si R6 está listo para cierre formal contra los criterios de fase:
@@ -34,7 +34,7 @@ R6 tiene una base sólida y varios bloques cerrados, pero aún quedan huecos de 
 | `R6-BE-004` | Cerrado | `/exports/operational-dataset`, commit `ce0a697` |
 | `R6-CI-001` | Cerrado | `openapi-check` gateando superficie R6/export, commit `7d507c6` |
 | `R6-FE-003` | Cerrado | timeline de snapshots en UI operativa, commit `060a9f0` |
-| `R6-QA-002` | Cerrado | coherencia evaluación↔snapshot e idempotencia por lote, `backend/tests/test_operational_snapshot_consistency.py` |
+| `R6-QA-002` | Cerrado | coherencia evaluación↔snapshot e idempotencia por lote, `backend/tests/test_operational_snapshot_consistency.py`, commit `cfc94d8` |
 | `R6-DB-003` | Pendiente | no hay migración específica de hardening timezone en R6 |
 
 ## 4) Checklist de fase (gate)
