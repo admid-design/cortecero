@@ -2,6 +2,39 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.4.0] - 2026-03-31
+
+R5 closure release focused on customer operational governance (profiles, operational exceptions, derived operational signals/queues, and plan customer consolidation), with QA/CI hardening.
+
+### Added
+- R5 data model and migrations:
+  - `customer_operational_profiles`
+  - `customer_operational_exceptions`
+  - operational evaluation indexes for efficient derived reads
+- R5 backend APIs:
+  - Customer operational profile (`GET/PUT`) with explicit timezone/window semantics
+  - Customer operational exceptions (`GET/POST/DELETE`) with conflict-safe constraints
+  - Derived operational state/reason in order reads
+  - Operational queue endpoint with deterministic ordering and explicit filter contract
+  - Plan customer consolidation endpoint (read-only derived aggregation)
+- R5 frontend operational/admin coverage:
+  - Admin customer operational profile panel
+  - Admin customer operational exceptions panel
+  - Operational signal in orders (`operational_state`/`operational_reason`)
+  - Operational Queue view with contract-faithful filters
+  - Plan customer consolidation view (read-only)
+- CI hardening for R5:
+  - `frontend-smoke` workflow (`npm run build`)
+  - OpenAPI surface assertions for mandatory R5 paths/schemas
+
+### Changed
+- OpenAPI contract expanded and synchronized for all R5 endpoints/schemas.
+- Frontend typed API client expanded for full R5 coverage.
+- Error contract reinforced for R5 filter validation (`INVALID_OPERATIONAL_FILTER`).
+
+### Notes
+- This release closes R5 scope and establishes the baseline before opening R6.
+
 ## [0.3.0] - 2026-03-30
 
 R4 closure release, including the full R3 operational planning track and R4 weight/vehicle/capacity track.
