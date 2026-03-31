@@ -240,6 +240,57 @@ paths:
         "422":
           description: Filtro reason inválido (INVALID_OPERATIONAL_FILTER)
 
+  /orders/operational-resolution-queue:
+    get:
+      tags: [Orders]
+      summary: Cola de resolución operativa priorizada
+      description: >
+        Lista pedidos con `operational_state=restricted` para un `service_date`,
+        ordenada para resolución: `severity`, `operational_reason`, `created_at`, `id`.
+        Endpoint de solo lectura, sin side effects.
+      parameters:
+        - in: query
+          name: service_date
+          required: true
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: zone_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: reason
+          schema:
+            type: string
+            enum:
+              - CUSTOMER_DATE_BLOCKED
+              - CUSTOMER_NOT_ACCEPTING_ORDERS
+              - OUTSIDE_CUSTOMER_WINDOW
+              - INSUFFICIENT_LEAD_TIME
+        - in: query
+          name: severity
+          schema:
+            type: string
+            enum: [critical, high, medium, low]
+      responses:
+        "200":
+          description: Pedidos restringidos priorizados para resolución
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OperationalResolutionQueueItem'
+                  total:
+                    type: integer
+        "422":
+          description: Filtro inválido (INVALID_OPERATIONAL_FILTER)
+
   /orders/operational-snapshots/run:
     post:
       tags: [Orders]
@@ -1442,6 +1493,43 @@ components:
             - CUSTOMER_NOT_ACCEPTING_ORDERS
             - OUTSIDE_CUSTOMER_WINDOW
             - INSUFFICIENT_LEAD_TIME
+        created_at:
+          type: string
+          format: date-time
+
+    OperationalResolutionQueueItem:
+      type: object
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        external_ref:
+          type: string
+        customer_id:
+          type: string
+          format: uuid
+        zone_id:
+          type: string
+          format: uuid
+        service_date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [ingested, late_pending_exception, ready_for_planning, planned, exception_rejected]
+        intake_type:
+          type: string
+          enum: [new_order, same_customer_addon]
+        operational_reason:
+          type: string
+          enum:
+            - CUSTOMER_DATE_BLOCKED
+            - CUSTOMER_NOT_ACCEPTING_ORDERS
+            - OUTSIDE_CUSTOMER_WINDOW
+            - INSUFFICIENT_LEAD_TIME
+        severity:
+          type: string
+          enum: [critical, high, medium, low]
         created_at:
           type: string
           format: date-time

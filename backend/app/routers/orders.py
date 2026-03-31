@@ -44,6 +44,8 @@ from app.models import (
 from app.schemas import (
     OperationalQueueItemOut,
     OperationalQueueListResponse,
+    OperationalResolutionQueueItemOut,
+    OperationalResolutionQueueListResponse,
     OperationalExplanationOut,
     OperationalSnapshotRunResponse,
     OrderIngestionBatchInput,
@@ -76,6 +78,12 @@ _OPERATIONAL_REASON_PRECEDENCE: tuple[str, ...] = (
 )
 _OPERATIONAL_REASON_PRIORITY: dict[str, int] = {
     reason: idx for idx, reason in enumerate(_OPERATIONAL_REASON_PRECEDENCE)
+}
+_OPERATIONAL_RESOLUTION_SEVERITY_PRIORITY: dict[str, int] = {
+    "critical": 0,
+    "high": 1,
+    "medium": 2,
+    "low": 3,
 }
 _OPERATIONAL_RULE_VERSION = "r6-operational-eval-v1"
 _OPERATIONAL_REASON_FALLBACK_CATEGORY = "catalog_mismatch"
@@ -830,6 +838,80 @@ def list_operational_queue(
         )
     )
     return OperationalQueueListResponse(items=items, total=len(items))
+
+
+@router.get("/orders/operational-resolution-queue", response_model=OperationalResolutionQueueListResponse)
+def list_operational_resolution_queue(
+    service_date: date,
+    zone_id: uuid.UUID | None = None,
+    reason: str | None = None,
+    severity: str | None = None,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.office, UserRole.logistics, UserRole.admin)),
+) -> OperationalResolutionQueueListResponse:
+    tenant = db.scalar(select(Tenant).where(Tenant.id == current.tenant_id))
+    if not tenant:
+        raise not_found("TENANT_NOT_FOUND", "Tenant no encontrado")
+    if reason is not None and reason not in _OPERATIONAL_REASON_PRIORITY:
+        raise unprocessable(
+            "INVALID_OPERATIONAL_FILTER",
+            "reason debe ser CUSTOMER_DATE_BLOCKED, CUSTOMER_NOT_ACCEPTING_ORDERS, OUTSIDE_CUSTOMER_WINDOW o INSUFFICIENT_LEAD_TIME",
+        )
+    if severity is not None and severity not in _OPERATIONAL_RESOLUTION_SEVERITY_PRIORITY:
+        raise unprocessable(
+            "INVALID_OPERATIONAL_FILTER",
+            "severity debe ser critical, high, medium o low",
+        )
+
+    query = select(Order).where(
+        Order.tenant_id == current.tenant_id,
+        Order.service_date == service_date,
+    )
+    if zone_id is not None:
+        query = query.where(Order.zone_id == zone_id)
+
+    orders = list(db.scalars(query))
+    if not orders:
+        return OperationalResolutionQueueListResponse(items=[], total=0)
+
+    operational_by_order = _build_operational_evaluation_map(db, tenant=tenant, orders=orders)
+
+    items: list[OperationalResolutionQueueItemOut] = []
+    for order in orders:
+        operational = operational_by_order.get(order.id) or _default_operational_evaluation()
+        operational_reason = operational.reason_code
+        operational_severity = operational.severity
+        if operational_reason is None or operational_severity is None:
+            continue
+        if reason is not None and operational_reason != reason:
+            continue
+        if severity is not None and operational_severity != severity:
+            continue
+
+        items.append(
+            OperationalResolutionQueueItemOut(
+                order_id=order.id,
+                external_ref=order.external_ref,
+                customer_id=order.customer_id,
+                zone_id=order.zone_id,
+                service_date=order.service_date,
+                status=order.status.value,
+                intake_type=order.intake_type.value,
+                operational_reason=operational_reason,
+                severity=operational_severity,
+                created_at=order.created_at,
+            )
+        )
+
+    items.sort(
+        key=lambda item: (
+            _OPERATIONAL_RESOLUTION_SEVERITY_PRIORITY[item.severity],
+            item.operational_reason,
+            item.created_at,
+            str(item.order_id),
+        )
+    )
+    return OperationalResolutionQueueListResponse(items=items, total=len(items))
 
 
 @router.post("/orders/operational-snapshots/run", response_model=OperationalSnapshotRunResponse)
