@@ -52,6 +52,7 @@ import {
   type DashboardSourceMetricsItem,
   type ExceptionItem,
   type Order,
+  type OrderOperationalSeverity,
   type OperationalQueueItem,
   type OperationalQueueReason,
   type PendingQueueItem,
@@ -129,6 +130,14 @@ function operationalReasonBadgeClass(reason: string): string {
   if (reason === "OUTSIDE_CUSTOMER_WINDOW" || reason === "INSUFFICIENT_LEAD_TIME") {
     return "badge late";
   }
+  return "badge intake-unknown";
+}
+
+function operationalSeverityBadgeClass(severity: OrderOperationalSeverity | string | null): string {
+  if (severity === "critical") return "badge rejected";
+  if (severity === "high") return "badge late";
+  if (severity === "medium") return "badge intake-addon";
+  if (severity === "low") return "badge ok";
   return "badge intake-unknown";
 }
 
@@ -1669,6 +1678,9 @@ export default function HomePage() {
                   <th>estado</th>
                   <th>op_state</th>
                   <th>op_reason</th>
+                  <th>op_severity</th>
+                  <th>op_timezone</th>
+                  <th>op_catalog</th>
                   <th>late</th>
                   <th>peso_kg</th>
                   <th>editar_peso</th>
@@ -1678,7 +1690,7 @@ export default function HomePage() {
               <tbody>
                 {filteredOrders.length === 0 && (
                   <tr>
-                    <td colSpan={11} style={{ color: "#6b7280" }}>
+                    <td colSpan={14} style={{ color: "#6b7280" }}>
                       Sin pedidos para los filtros actuales.
                     </td>
                   </tr>
@@ -1688,6 +1700,11 @@ export default function HomePage() {
                     order.status === "exception_rejected" ? "badge rejected" : order.is_late ? "badge late" : "badge ok";
                   const intakeMeta = intakeBadgeMeta(order.intake_type);
                   const operationalStateMeta = operationalStateBadgeMeta(order.operational_state);
+                  const reasonCode = order.operational_explanation?.reason_code ?? order.operational_reason;
+                  const reasonSeverity = order.operational_explanation?.severity ?? null;
+                  const reasonTimezone = order.operational_explanation?.timezone_used ?? "—";
+                  const reasonTimezoneSource = order.operational_explanation?.timezone_source ?? "—";
+                  const reasonCatalogStatus = order.operational_explanation?.catalog_status ?? "—";
                   const weightValue = weightDrafts[order.id] ?? (order.total_weight_kg == null ? "" : String(order.total_weight_kg));
                   return (
                     <tr key={order.id}>
@@ -1702,14 +1719,28 @@ export default function HomePage() {
                         <span className={operationalStateMeta.className}>{operationalStateMeta.label}</span>
                       </td>
                       <td>
-                        {order.operational_reason ? (
-                          <span className={operationalReasonBadgeClass(order.operational_reason)}>
-                            {order.operational_reason}
+                        {reasonCode ? (
+                          <span className={operationalReasonBadgeClass(reasonCode)}>
+                            {reasonCode}
                           </span>
                         ) : (
                           "—"
                         )}
                       </td>
+                      <td>
+                        {reasonSeverity ? (
+                          <span className={operationalSeverityBadgeClass(reasonSeverity)}>{reasonSeverity}</span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          <span>{reasonTimezone}</span>
+                          <span style={{ color: "#6b7280", fontSize: 12 }}>{reasonTimezoneSource}</span>
+                        </div>
+                      </td>
+                      <td>{reasonCatalogStatus}</td>
                       <td>
                         <span className={badgeClass}>{order.is_late ? "late" : "on_time"}</span>
                       </td>

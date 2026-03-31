@@ -111,6 +111,19 @@ export type OrderOperationalReason =
   | "CUSTOMER_NOT_ACCEPTING_ORDERS"
   | "OUTSIDE_CUSTOMER_WINDOW"
   | "INSUFFICIENT_LEAD_TIME";
+export type OrderOperationalSeverity = "low" | "medium" | "high" | "critical";
+export type OrderOperationalTimezoneSource = "zone" | "tenant_default" | "utc_fallback";
+export type OrderOperationalCatalogStatus = "active" | "inactive" | "missing" | "not_applicable";
+
+export type OrderOperationalExplanation = {
+  reason_code: OrderOperationalReason | string | null;
+  reason_category: string | null;
+  severity: OrderOperationalSeverity | null;
+  timezone_used: string;
+  timezone_source: OrderOperationalTimezoneSource | string;
+  rule_version: string;
+  catalog_status: OrderOperationalCatalogStatus | string;
+};
 
 export type Order = {
   id: string;
@@ -121,6 +134,7 @@ export type Order = {
   status: string;
   operational_state: OrderOperationalState | string;
   operational_reason: OrderOperationalReason | string | null;
+  operational_explanation: OrderOperationalExplanation;
   is_late: boolean;
   effective_cutoff_at: string;
   intake_type: "new_order" | "same_customer_addon" | string;
