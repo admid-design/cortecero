@@ -40,3 +40,39 @@ jobs:
           validate_spec(spec)
           print("OpenAPI spec is valid")
           PY
+
+      - name: Verify R5 OpenAPI surface
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          spec_path = Path("openapi/openapi-v1.yaml")
+          with spec_path.open("r", encoding="utf-8") as f:
+              spec = yaml.safe_load(f)
+
+          paths = spec.get("paths", {})
+          schemas = spec.get("components", {}).get("schemas", {})
+
+          required_paths = [
+              "/admin/customers/{customer_id}/operational-profile",
+              "/admin/customers/{customer_id}/operational-exceptions",
+              "/orders/operational-queue",
+              "/plans/{plan_id}/customer-consolidation",
+          ]
+          missing_paths = [path for path in required_paths if path not in paths]
+          if missing_paths:
+              raise SystemExit(f"Missing required R5 paths: {missing_paths}")
+
+          required_schemas = [
+              "CustomerOperationalProfile",
+              "CustomerOperationalException",
+              "OperationalQueueItem",
+              "PlanCustomerConsolidationResponse",
+          ]
+          missing_schemas = [name for name in required_schemas if name not in schemas]
+          if missing_schemas:
+              raise SystemExit(f"Missing required R5 schemas: {missing_schemas}")
+
+          print("R5 OpenAPI surface is present")
+          PY
