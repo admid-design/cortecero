@@ -41,7 +41,7 @@ jobs:
           print("OpenAPI spec is valid")
           PY
 
-      - name: Verify R5 OpenAPI surface
+      - name: Verify R6 OpenAPI contract and export smoke
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -58,21 +58,95 @@ jobs:
               "/admin/customers/{customer_id}/operational-profile",
               "/admin/customers/{customer_id}/operational-exceptions",
               "/orders/operational-queue",
+              "/orders/operational-resolution-queue",
+              "/orders/operational-snapshots/run",
+              "/exports/operational-dataset",
               "/plans/{plan_id}/customer-consolidation",
           ]
           missing_paths = [path for path in required_paths if path not in paths]
           if missing_paths:
-              raise SystemExit(f"Missing required R5 paths: {missing_paths}")
+              raise SystemExit(f"Missing required R6 paths: {missing_paths}")
 
           required_schemas = [
+              "Order",
+              "OperationalExplanation",
               "CustomerOperationalProfile",
               "CustomerOperationalException",
               "OperationalQueueItem",
+              "OperationalResolutionQueueItem",
+              "OperationalSnapshotRunResponse",
+              "OperationalDatasetItem",
+              "OperationalDatasetExportResponse",
               "PlanCustomerConsolidationResponse",
           ]
           missing_schemas = [name for name in required_schemas if name not in schemas]
           if missing_schemas:
-              raise SystemExit(f"Missing required R5 schemas: {missing_schemas}")
+              raise SystemExit(f"Missing required R6 schemas: {missing_schemas}")
 
-          print("R5 OpenAPI surface is present")
+          order_schema = schemas["Order"].get("properties", {})
+          explanation_ref = order_schema.get("operational_explanation", {}).get("$ref")
+          if explanation_ref != "#/components/schemas/OperationalExplanation":
+              raise SystemExit("Order.operational_explanation must reference OperationalExplanation")
+
+          for key in ["operational_state", "operational_reason", "operational_explanation"]:
+              if key not in order_schema:
+                  raise SystemExit(f"Order schema missing required operational property: {key}")
+
+          explanation_schema = schemas["OperationalExplanation"].get("properties", {})
+          for key in [
+              "reason_code",
+              "reason_category",
+              "severity",
+              "timezone_used",
+              "timezone_source",
+              "rule_version",
+              "catalog_status",
+          ]:
+              if key not in explanation_schema:
+                  raise SystemExit(f"OperationalExplanation missing field: {key}")
+
+          export_get = paths["/exports/operational-dataset"].get("get", {})
+          export_params = export_get.get("parameters", [])
+          export_param_names = {param.get("name"): param for param in export_params}
+          for required_param in ["date_from", "date_to", "zone_id", "page", "page_size", "anonymize", "format"]:
+              if required_param not in export_param_names:
+                  raise SystemExit(f"Export endpoint missing parameter: {required_param}")
+          for required_query in ["date_from", "date_to"]:
+              if export_param_names[required_query].get("required") is not True:
+                  raise SystemExit(f"Export endpoint requires {required_query}=true")
+
+          responses = export_get.get("responses", {})
+          if "200" not in responses:
+              raise SystemExit("Export endpoint missing 200 response")
+          content = responses["200"].get("content", {})
+          json_ref = content.get("application/json", {}).get("schema", {}).get("$ref")
+          if json_ref != "#/components/schemas/OperationalDatasetExportResponse":
+              raise SystemExit("Export JSON response must reference OperationalDatasetExportResponse")
+          if "text/csv" not in content:
+              raise SystemExit("Export endpoint missing text/csv response content")
+
+          export_schema = schemas["OperationalDatasetExportResponse"].get("properties", {})
+          for key in ["date_from", "date_to", "page", "page_size", "total", "total_pages", "anonymized", "items"]:
+              if key not in export_schema:
+                  raise SystemExit(f"OperationalDatasetExportResponse missing field: {key}")
+          items_ref = export_schema.get("items", {}).get("items", {}).get("$ref")
+          if items_ref != "#/components/schemas/OperationalDatasetItem":
+              raise SystemExit("OperationalDatasetExportResponse.items must reference OperationalDatasetItem")
+
+          dataset_item_schema = schemas["OperationalDatasetItem"].get("properties", {})
+          for key in [
+              "order_id",
+              "service_date",
+              "created_at",
+              "operational_state",
+              "operational_reason",
+              "operational_severity",
+              "rule_version",
+              "timezone_used",
+              "timezone_source",
+          ]:
+              if key not in dataset_item_schema:
+                  raise SystemExit(f"OperationalDatasetItem missing field: {key}")
+
+          print("R6 OpenAPI contract and export smoke are present")
           PY
