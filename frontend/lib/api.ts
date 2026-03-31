@@ -146,6 +146,8 @@ export type PendingQueueReason =
   | "LOCKED_PLAN_EXCEPTION_REQUIRED"
   | "EXCEPTION_REJECTED";
 export type OperationalQueueReason = OrderOperationalReason;
+export type OperationalResolutionQueueReason = OrderOperationalReason;
+export type OperationalResolutionQueueSeverity = OrderOperationalSeverity;
 export type CapacityAlertLevel = "OVER_CAPACITY" | "NEAR_CAPACITY";
 
 export type PendingQueueItem = {
@@ -167,6 +169,19 @@ export type OperationalQueueItem = {
   status: string;
   intake_type: "new_order" | "same_customer_addon" | string;
   reason: OperationalQueueReason | string;
+  created_at: string;
+};
+
+export type OperationalResolutionQueueItem = {
+  order_id: string;
+  external_ref: string;
+  customer_id: string;
+  zone_id: string;
+  service_date: string;
+  status: string;
+  intake_type: "new_order" | "same_customer_addon" | string;
+  operational_reason: OperationalResolutionQueueReason | string;
+  severity: OperationalResolutionQueueSeverity | string;
   created_at: string;
 };
 
@@ -432,6 +447,20 @@ export async function listOperationalQueue(
   params: { service_date: string; zone_id?: string; reason?: OperationalQueueReason | string },
 ): Promise<ListResponse<OperationalQueueItem>> {
   return request<ListResponse<OperationalQueueItem>>(`/orders/operational-queue${buildQuery(params)}`, { token });
+}
+
+export async function listOperationalResolutionQueue(
+  token: string,
+  params: {
+    service_date: string;
+    zone_id?: string;
+    reason?: OperationalResolutionQueueReason | string;
+    severity?: OperationalResolutionQueueSeverity | string;
+  },
+): Promise<ListResponse<OperationalResolutionQueueItem>> {
+  return request<ListResponse<OperationalResolutionQueueItem>>(`/orders/operational-resolution-queue${buildQuery(params)}`, {
+    token,
+  });
 }
 
 export async function createPlan(token: string, payload: { service_date: string; zone_id: string }): Promise<Plan> {

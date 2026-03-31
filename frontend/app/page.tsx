@@ -23,6 +23,7 @@ import {
   getAdminTenantSettings,
   includeOrderInPlan,
   listOperationalQueue,
+  listOperationalResolutionQueue,
   listPendingQueue,
   listAdminCustomers,
   listAdminCustomerOperationalExceptions,
@@ -55,6 +56,9 @@ import {
   type OrderOperationalSeverity,
   type OperationalQueueItem,
   type OperationalQueueReason,
+  type OperationalResolutionQueueItem,
+  type OperationalResolutionQueueReason,
+  type OperationalResolutionQueueSeverity,
   type PendingQueueItem,
   type PendingQueueReason,
   type Plan,
@@ -75,6 +79,7 @@ const OPERATIONAL_REASON_ORDER = [
   "OUTSIDE_CUSTOMER_WINDOW",
   "INSUFFICIENT_LEAD_TIME",
 ] as const;
+const OPERATIONAL_SEVERITY_ORDER = ["critical", "high", "medium", "low"] as const;
 
 function decodeRoleFromToken(token: string): UserRole | null {
   try {
@@ -160,6 +165,7 @@ export default function HomePage() {
   const [ordersOperationalReasonFilter, setOrdersOperationalReasonFilter] = useState("all");
   const [pendingQueue, setPendingQueue] = useState<PendingQueueItem[]>([]);
   const [operationalQueue, setOperationalQueue] = useState<OperationalQueueItem[]>([]);
+  const [operationalResolutionQueue, setOperationalResolutionQueue] = useState<OperationalResolutionQueueItem[]>([]);
   const [capacityAlerts, setCapacityAlerts] = useState<PlanCapacityAlert[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedConsolidationPlanId, setSelectedConsolidationPlanId] = useState("");
@@ -170,6 +176,11 @@ export default function HomePage() {
   const [pendingQueueReason, setPendingQueueReason] = useState<"all" | PendingQueueReason>("all");
   const [operationalQueueZoneId, setOperationalQueueZoneId] = useState("all");
   const [operationalQueueReason, setOperationalQueueReason] = useState<"all" | OperationalQueueReason | string>("all");
+  const [operationalResolutionQueueZoneId, setOperationalResolutionQueueZoneId] = useState("all");
+  const [operationalResolutionQueueReason, setOperationalResolutionQueueReason] =
+    useState<"all" | OperationalResolutionQueueReason | string>("all");
+  const [operationalResolutionQueueSeverity, setOperationalResolutionQueueSeverity] =
+    useState<"all" | OperationalResolutionQueueSeverity | string>("all");
   const [capacityAlertZoneId, setCapacityAlertZoneId] = useState("all");
   const [capacityAlertLevel, setCapacityAlertLevel] = useState<"all" | CapacityAlertLevel>("all");
   const [sourceDateFrom, setSourceDateFrom] = useState(() => new Date().toISOString().slice(0, 10));
@@ -258,8 +269,9 @@ export default function HomePage() {
     for (const plan of plans) values.add(plan.zone_id);
     for (const item of pendingQueue) values.add(item.zone_id);
     for (const item of operationalQueue) values.add(item.zone_id);
+    for (const item of operationalResolutionQueue) values.add(item.zone_id);
     return [...values];
-  }, [operationalQueue, orders, pendingQueue, plans]);
+  }, [operationalQueue, operationalResolutionQueue, orders, pendingQueue, plans]);
   const operationalQueueZoneOptions = useMemo(() => {
     const values = new Set<string>();
     for (const item of operationalQueue) values.add(item.zone_id);
@@ -267,14 +279,22 @@ export default function HomePage() {
     for (const plan of plans) values.add(plan.zone_id);
     return [...values];
   }, [operationalQueue, orders, plans]);
+  const operationalResolutionQueueZoneOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const item of operationalResolutionQueue) values.add(item.zone_id);
+    for (const order of orders) values.add(order.zone_id);
+    for (const plan of plans) values.add(plan.zone_id);
+    return [...values];
+  }, [operationalResolutionQueue, orders, plans]);
   const sourceMetricsZoneOptions = useMemo(() => {
     const values = new Set<string>();
     for (const order of orders) values.add(order.zone_id);
     for (const plan of plans) values.add(plan.zone_id);
     for (const item of pendingQueue) values.add(item.zone_id);
     for (const item of operationalQueue) values.add(item.zone_id);
+    for (const item of operationalResolutionQueue) values.add(item.zone_id);
     return [...values];
-  }, [operationalQueue, orders, pendingQueue, plans]);
+  }, [operationalQueue, operationalResolutionQueue, orders, pendingQueue, plans]);
   const ordersOperationalReasonOptions = useMemo(() => {
     const values = new Set<string>();
     for (const order of orders) {
@@ -294,6 +314,15 @@ export default function HomePage() {
     unknown.sort();
     return [...OPERATIONAL_REASON_ORDER, ...unknown];
   }, [operationalQueue]);
+  const operationalResolutionQueueReasonOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const item of operationalResolutionQueue) values.add(item.operational_reason);
+    const unknown = [...values].filter(
+      (reason) => !OPERATIONAL_REASON_ORDER.includes(reason as (typeof OPERATIONAL_REASON_ORDER)[number]),
+    );
+    unknown.sort();
+    return [...OPERATIONAL_REASON_ORDER, ...unknown];
+  }, [operationalResolutionQueue]);
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
       if (ordersOperationalStateFilter !== "all" && order.operational_state !== ordersOperationalStateFilter) {
@@ -315,6 +344,12 @@ export default function HomePage() {
       const reason = pendingQueueReason === "all" ? undefined : pendingQueueReason;
       const operational_zone_id = operationalQueueZoneId === "all" ? undefined : operationalQueueZoneId;
       const operational_reason = operationalQueueReason === "all" ? undefined : operationalQueueReason;
+      const operational_resolution_zone_id =
+        operationalResolutionQueueZoneId === "all" ? undefined : operationalResolutionQueueZoneId;
+      const operational_resolution_reason =
+        operationalResolutionQueueReason === "all" ? undefined : operationalResolutionQueueReason;
+      const operational_resolution_severity =
+        operationalResolutionQueueSeverity === "all" ? undefined : operationalResolutionQueueSeverity;
       const source_zone_id = sourceZoneId === "all" ? undefined : sourceZoneId;
       const capacity_zone_id = capacityAlertZoneId === "all" ? undefined : capacityAlertZoneId;
       const level = capacityAlertLevel === "all" ? undefined : capacityAlertLevel;
@@ -326,6 +361,7 @@ export default function HomePage() {
         exceptionsRes,
         pendingQueueRes,
         operationalQueueRes,
+        operationalResolutionQueueRes,
         capacityAlertsRes,
       ] = await Promise.all([
         getDailySummary(activeToken, serviceDate),
@@ -343,6 +379,12 @@ export default function HomePage() {
           zone_id: operational_zone_id,
           reason: operational_reason,
         }),
+        listOperationalResolutionQueue(activeToken, {
+          service_date: serviceDate,
+          zone_id: operational_resolution_zone_id,
+          reason: operational_resolution_reason,
+          severity: operational_resolution_severity,
+        }),
         getPlanCapacityAlerts(activeToken, { service_date: serviceDate, zone_id: capacity_zone_id, level }),
       ]);
       setSummary(summaryRes);
@@ -352,6 +394,7 @@ export default function HomePage() {
       setExceptions(exceptionsRes.items ?? []);
       setPendingQueue(pendingQueueRes.items ?? []);
       setOperationalQueue(operationalQueueRes.items ?? []);
+      setOperationalResolutionQueue(operationalResolutionQueueRes.items ?? []);
       setCapacityAlerts(capacityAlertsRes.items ?? []);
     } catch (e) {
       setError(formatError(e));
@@ -361,6 +404,9 @@ export default function HomePage() {
     capacityAlertZoneId,
     operationalQueueReason,
     operationalQueueZoneId,
+    operationalResolutionQueueReason,
+    operationalResolutionQueueSeverity,
+    operationalResolutionQueueZoneId,
     pendingQueueReason,
     pendingQueueZoneId,
     serviceDate,
@@ -536,6 +582,7 @@ export default function HomePage() {
     setOrders([]);
     setPendingQueue([]);
     setOperationalQueue([]);
+    setOperationalResolutionQueue([]);
     setCapacityAlerts([]);
     setPlans([]);
     setSelectedConsolidationPlanId("");
@@ -1631,6 +1678,108 @@ export default function HomePage() {
                     <td>{item.intake_type}</td>
                     <td>
                       <span className={operationalReasonBadgeClass(item.reason)}>{item.reason}</span>
+                    </td>
+                    <td>{new Date(item.created_at).toLocaleString("es-ES")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="card grid">
+            <h2>Operational Resolution Queue</h2>
+            <div className="row">
+              <label>
+                service_date{" "}
+                <input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} />
+              </label>
+              <label>
+                zone_id{" "}
+                <select
+                  value={operationalResolutionQueueZoneId}
+                  onChange={(e) => setOperationalResolutionQueueZoneId(e.target.value)}
+                >
+                  <option value="all">all</option>
+                  {operationalResolutionQueueZoneOptions.map((zoneId) => (
+                    <option key={zoneId} value={zoneId}>
+                      {zoneId}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                reason{" "}
+                <select
+                  value={operationalResolutionQueueReason}
+                  onChange={(e) =>
+                    setOperationalResolutionQueueReason(e.target.value as "all" | OperationalResolutionQueueReason | string)
+                  }
+                >
+                  <option value="all">all</option>
+                  {operationalResolutionQueueReasonOptions.map((reason) => (
+                    <option key={reason} value={reason}>
+                      {reason}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                severity{" "}
+                <select
+                  value={operationalResolutionQueueSeverity}
+                  onChange={(e) =>
+                    setOperationalResolutionQueueSeverity(
+                      e.target.value as "all" | OperationalResolutionQueueSeverity | string,
+                    )
+                  }
+                >
+                  <option value="all">all</option>
+                  {OPERATIONAL_SEVERITY_ORDER.map((severity) => (
+                    <option key={severity} value={severity}>
+                      {severity}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="secondary" onClick={() => void refreshOps()}>
+                Aplicar filtros
+              </button>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>ref</th>
+                  <th>order_id</th>
+                  <th>customer_id</th>
+                  <th>zone_id</th>
+                  <th>status</th>
+                  <th>intake_type</th>
+                  <th>reason</th>
+                  <th>severity</th>
+                  <th>created_at</th>
+                </tr>
+              </thead>
+              <tbody>
+                {operationalResolutionQueue.length === 0 && (
+                  <tr>
+                    <td colSpan={9} style={{ color: "#6b7280" }}>
+                      Sin items de resolución para los filtros actuales.
+                    </td>
+                  </tr>
+                )}
+                {operationalResolutionQueue.map((item) => (
+                  <tr key={item.order_id}>
+                    <td>{item.external_ref}</td>
+                    <td>{shortId(item.order_id)}</td>
+                    <td>{shortId(item.customer_id)}</td>
+                    <td>{shortId(item.zone_id)}</td>
+                    <td>{item.status}</td>
+                    <td>{item.intake_type}</td>
+                    <td>
+                      <span className={operationalReasonBadgeClass(item.operational_reason)}>{item.operational_reason}</span>
+                    </td>
+                    <td>
+                      <span className={operationalSeverityBadgeClass(item.severity)}>{item.severity}</span>
                     </td>
                     <td>{new Date(item.created_at).toLocaleString("es-ES")}</td>
                   </tr>
