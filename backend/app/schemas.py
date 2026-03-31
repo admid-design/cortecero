@@ -173,6 +173,52 @@ class OperationalResolutionQueueListResponse(BaseModel):
     total: int
 
 
+class OperationalDatasetItemOut(APIModel):
+    order_id: uuid.UUID
+    external_ref: str
+    service_date: date
+    created_at: datetime
+    order_status: str
+    source_channel: str
+    intake_type: Literal["new_order", "same_customer_addon"]
+    is_late: bool
+    customer_id: uuid.UUID
+    customer_name: str
+    zone_id: uuid.UUID
+    zone_name: str
+    operational_state: Literal["eligible", "restricted"]
+    operational_reason: OperationalReasonCode | None
+    operational_reason_category: str | None
+    operational_severity: OperationalReasonSeverity | None
+    operational_catalog_status: OperationalReasonCatalogStatus
+    rule_version: str
+    timezone_used: str
+    timezone_source: OperationalTimezoneSource
+    planned: bool
+    plan_id: uuid.UUID | None
+    plan_status: str | None
+    plan_inclusion_type: Literal["normal", "exception"] | None
+    plan_locked_at: datetime | None
+    plan_vehicle_id: uuid.UUID | None
+    total_weight_kg: Decimal | None
+    plan_total_weight_kg: Decimal | None
+    plan_orders_total: int | None
+    plan_orders_with_weight: int | None
+    plan_orders_missing_weight: int | None
+
+
+class OperationalDatasetExportResponse(BaseModel):
+    date_from: date
+    date_to: date
+    zone_id: uuid.UUID | None
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+    anonymized: bool
+    items: list[OperationalDatasetItemOut]
+
+
 class PlanCreateRequest(BaseModel):
     service_date: date
     zone_id: uuid.UUID

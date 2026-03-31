@@ -10,6 +10,7 @@ from app.routers import (
     audit,
     auth,
     dashboard,
+    exports,
     exceptions,
     orders,
     plans,
@@ -34,6 +35,7 @@ def health() -> dict[str, str]:
 
 app.include_router(auth.router)
 app.include_router(orders.router)
+app.include_router(exports.router)
 app.include_router(plans.router)
 app.include_router(exceptions.router)
 app.include_router(dashboard.router)

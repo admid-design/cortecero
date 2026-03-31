@@ -16,6 +16,7 @@ tags:
   - name: Exceptions
   - name: Dashboard
   - name: Audit
+  - name: Exports
   - name: Admin Zones
   - name: Admin Customers
   - name: Admin Users
@@ -314,6 +315,71 @@ paths:
                 $ref: '#/components/schemas/OperationalSnapshotRunResponse'
         "403":
           description: RBAC_FORBIDDEN
+
+  /exports/operational-dataset:
+    get:
+      tags: [Exports]
+      summary: Export operativo para analítica/IA
+      description: >
+        Export tenant-safe de dataset operativo derivado para una ventana de fechas.
+        Incluye pedido, cliente, zona, explicación operativa y métricas de plan/peso.
+        Soporta paginado y salida `json` o `csv`, sin side effects.
+      parameters:
+        - in: query
+          name: date_from
+          required: true
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: date_to
+          required: true
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: zone_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - in: query
+          name: anonymize
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+      responses:
+        "200":
+          description: Dataset operativo exportado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationalDatasetExportResponse'
+            text/csv:
+              schema:
+                type: string
+        "403":
+          description: RBAC_FORBIDDEN
+        "422":
+          description: Filtro inválido (INVALID_EXPORT_FILTER)
 
   /orders/{order_id}:
     get:
@@ -1533,6 +1599,135 @@ components:
         created_at:
           type: string
           format: date-time
+
+    OperationalDatasetItem:
+      type: object
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        external_ref:
+          type: string
+        service_date:
+          type: string
+          format: date
+        created_at:
+          type: string
+          format: date-time
+        order_status:
+          type: string
+          enum: [ingested, late_pending_exception, ready_for_planning, planned, exception_rejected]
+        source_channel:
+          type: string
+          enum: [sales, office, direct_customer, hotel_direct, other]
+        intake_type:
+          type: string
+          enum: [new_order, same_customer_addon]
+        is_late:
+          type: boolean
+        customer_id:
+          type: string
+          format: uuid
+        customer_name:
+          type: string
+        zone_id:
+          type: string
+          format: uuid
+        zone_name:
+          type: string
+        operational_state:
+          type: string
+          enum: [eligible, restricted]
+        operational_reason:
+          type: string
+          nullable: true
+          enum:
+            - CUSTOMER_DATE_BLOCKED
+            - CUSTOMER_NOT_ACCEPTING_ORDERS
+            - OUTSIDE_CUSTOMER_WINDOW
+            - INSUFFICIENT_LEAD_TIME
+        operational_reason_category:
+          type: string
+          nullable: true
+        operational_severity:
+          type: string
+          nullable: true
+          enum: [critical, high, medium, low]
+        operational_catalog_status:
+          type: string
+          enum: [active, inactive, missing, not_applicable]
+        rule_version:
+          type: string
+        timezone_used:
+          type: string
+        timezone_source:
+          type: string
+          enum: [zone, tenant_default, utc_fallback]
+        planned:
+          type: boolean
+        plan_id:
+          type: string
+          format: uuid
+          nullable: true
+        plan_status:
+          type: string
+          nullable: true
+          enum: [open, locked, dispatched]
+        plan_inclusion_type:
+          type: string
+          nullable: true
+          enum: [normal, exception]
+        plan_locked_at:
+          type: string
+          format: date-time
+          nullable: true
+        plan_vehicle_id:
+          type: string
+          format: uuid
+          nullable: true
+        total_weight_kg:
+          type: number
+          nullable: true
+        plan_total_weight_kg:
+          type: number
+          nullable: true
+        plan_orders_total:
+          type: integer
+          nullable: true
+        plan_orders_with_weight:
+          type: integer
+          nullable: true
+        plan_orders_missing_weight:
+          type: integer
+          nullable: true
+
+    OperationalDatasetExportResponse:
+      type: object
+      properties:
+        date_from:
+          type: string
+          format: date
+        date_to:
+          type: string
+          format: date
+        zone_id:
+          type: string
+          format: uuid
+          nullable: true
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+        anonymized:
+          type: boolean
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperationalDatasetItem'
 
     DashboardSourceMetricsItem:
       type: object
