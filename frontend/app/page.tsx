@@ -70,6 +70,7 @@ import {
 } from "../lib/api";
 import { OperationalQueueCard } from "../components/OperationalQueueCard";
 import { OperationalResolutionQueueCard } from "../components/OperationalResolutionQueueCard";
+import { PendingQueueCard } from "../components/PendingQueueCard";
 
 type ViewMode = "ops" | "admin";
 type AdminSection = "zones" | "customers" | "users" | "tenant";
@@ -1546,72 +1547,17 @@ export default function HomePage() {
             </table>
           </div>
 
-          <div className="card grid">
-            <h2>Pending Queue</h2>
-            <div className="row">
-              <label>
-                service_date{" "}
-                <input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} />
-              </label>
-              <label>
-                zone_id{" "}
-                <select value={pendingQueueZoneId} onChange={(e) => setPendingQueueZoneId(e.target.value)}>
-                  <option value="all">all</option>
-                  {pendingQueueZoneOptions.map((zoneId) => (
-                    <option key={zoneId} value={zoneId}>
-                      {zoneId}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                reason{" "}
-                <select
-                  value={pendingQueueReason}
-                  onChange={(e) => setPendingQueueReason(e.target.value as "all" | PendingQueueReason)}
-                >
-                  <option value="all">all</option>
-                  <option value="LATE_PENDING_EXCEPTION">LATE_PENDING_EXCEPTION</option>
-                  <option value="LOCKED_PLAN_EXCEPTION_REQUIRED">LOCKED_PLAN_EXCEPTION_REQUIRED</option>
-                  <option value="EXCEPTION_REJECTED">EXCEPTION_REJECTED</option>
-                </select>
-              </label>
-              <button className="secondary" onClick={() => void refreshOps()}>
-                Aplicar filtros
-              </button>
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>ref</th>
-                  <th>order_id</th>
-                  <th>zone_id</th>
-                  <th>status</th>
-                  <th>reason</th>
-                  <th>created_at</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingQueue.length === 0 && (
-                  <tr>
-                    <td colSpan={6} style={{ color: "#6b7280" }}>
-                      Sin pendientes para los filtros actuales.
-                    </td>
-                  </tr>
-                )}
-                {pendingQueue.map((item) => (
-                  <tr key={item.order_id}>
-                    <td>{item.external_ref}</td>
-                    <td>{shortId(item.order_id)}</td>
-                    <td>{shortId(item.zone_id)}</td>
-                    <td>{item.status}</td>
-                    <td>{item.reason}</td>
-                    <td>{new Date(item.created_at).toLocaleString("es-ES")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PendingQueueCard
+            serviceDate={serviceDate}
+            onServiceDateChange={setServiceDate}
+            zoneId={pendingQueueZoneId}
+            onZoneIdChange={setPendingQueueZoneId}
+            zoneOptions={pendingQueueZoneOptions}
+            reason={pendingQueueReason}
+            onReasonChange={setPendingQueueReason}
+            items={pendingQueue}
+            onApplyFilters={() => void refreshOps()}
+          />
 
           <OperationalQueueCard
             serviceDate={serviceDate}
