@@ -1,78 +1,239 @@
-# CorteCero R1 Skeleton
+# CorteCero
 
-Skeleton funcional del MVP R1:
+CorteCero es un sistema operativo para gestión de pedidos, planificación, excepciones y control operativo, con arquitectura **backend + frontend + base de datos + OpenAPI + gobernanza documental**.
 
-- Backend `FastAPI + SQLAlchemy + PostgreSQL`.
-- Frontend `Next.js` operativo (login, planes, pedidos, excepciones).
-- Migración SQL inicial `001_init.sql`.
-- Seed demo con tenant, usuarios, zonas, clientes, pedidos, planes y excepciones.
+El objetivo del repo no es solo implementar funcionalidades, sino hacerlo con **trazabilidad**, **contratos explícitos** y una forma de trabajo pensada para reducir improvisación y aumentar consistencia.
 
-## Estructura
+---
 
-- `openapi/openapi-v1.yaml`: contrato API v1.
-- `db/migrations/001_init.sql`: esquema PostgreSQL inicial.
-- `backend/`: API, reglas de negocio, auth/RBAC, seed y scripts.
-- `frontend/`: panel operativo.
-- `ANTIGRAVITY_CONTEXT_MASTER.md`: contexto maestro de producto y ejecución.
+## Estado actual del repositorio
 
-## Arranque rápido (Docker)
+**Estado de fases**
 
-Desde `/Users/samurai_systems/scrapy_databank/cortecero`:
+* R1–R6: cerradas
+* R7: abierta, con implementación congelada mientras se consolida la capa documental y contractual
 
-```bash
-docker compose up --build
+**Capa documental ya instalada**
+
+* Gobernanza de agente: `CLAUDE.md` y `.claude/`
+* Baseline factual del sistema: `docs/as-is.md`
+* Dominio documentado: `docs/domain/`
+* Contratos y reglas: `docs/contracts/`
+
+**Importante**
+Este repositorio ya no debe leerse como un MVP genérico, sino como un sistema con:
+
+* modelo de trabajo explícito
+* gates y criterios de cierre
+* dominio documentado
+* reglas de revisión
+* separación entre contrato vigente, huecos pendientes y decisiones no promulgadas
+
+---
+
+## Arquitectura resumida
+
+### Backend
+
+* FastAPI
+* SQLAlchemy
+* Pydantic
+* JWT auth
+* routers por dominio operativo y admin
+
+### Base de datos
+
+* PostgreSQL
+* migraciones versionadas en `db/migrations/`
+* vocabularios cerrados y constraints explícitos donde aplica
+
+### Frontend
+
+* Next.js
+* cliente tipado contra backend
+* componentes operativos y administrativos
+
+### Contrato API
+
+* OpenAPI versionado en `openapi/openapi-v1.yaml`
+
+### CI/CD
+
+* pytest backend
+* build smoke frontend
+* validación OpenAPI
+
+---
+
+## Fuentes de verdad del proyecto
+
+### 1. Baseline factual del repo
+
+* [`docs/as-is.md`](docs/as-is.md)
+
+Documento principal para entender **qué existe realmente hoy** en:
+
+* DB
+* modelos
+* schemas
+* endpoints
+* frontend
+* tests
+* CI/CD
+* backlog y gates
+* huecos y contradicciones observadas
+
+### 2. Contratos del sistema
+
+* [`docs/contracts/invariants.md`](docs/contracts/invariants.md)
+* [`docs/contracts/acceptance-gates.md`](docs/contracts/acceptance-gates.md)
+* [`docs/contracts/output-templates.md`](docs/contracts/output-templates.md)
+* [`docs/contracts/fail-closed.md`](docs/contracts/fail-closed.md)
+* [`docs/contracts/vocabularies.md`](docs/contracts/vocabularies.md)
+* [`docs/contracts/decision-matrix.md`](docs/contracts/decision-matrix.md)
+
+### 3. Dominio
+
+* [`docs/domain/cortecero/`](docs/domain/cortecero)
+* [`docs/domain/kelko/`](docs/domain/kelko)
+
+### 4. Gobernanza del agente
+
+* [`CLAUDE.md`](CLAUDE.md)
+* `.claude/rules/`
+* `.claude/commands/`
+
+---
+
+## Cómo se trabaja en este repo
+
+Este repo se trabaja con un método explícito.
+
+### Reglas base
+
+* El usuario dirige fase, ticket y prioridad
+* Un bloque por vez
+* Cambio mínimo suficiente
+* No mezclar tickets
+* No abrir fases nuevas por iniciativa propia
+* No declarar cierre de fase por cuenta propia
+* Verificar gate antes de ejecutar
+* Ante ambigüedad: **fail closed**
+
+### Regla de evidencia
+
+Ningún bloque se considera cerrado sin:
+
+* commit o diff real
+* alcance explícito
+* archivos tocados
+* tests/checks relevantes
+* riesgos declarados
+* estado final
+
+### Revisión
+
+La revisión se hace con doble lente:
+
+* **valor operativo**
+* **preparación para IA**
+
+---
+
+## Estructura principal del repositorio
+
+```text
+cortecero/
+├── backend/
+├── frontend/
+├── db/
+├── openapi/
+├── docs/
+│   ├── as-is.md
+│   ├── contracts/
+│   └── domain/
+├── .claude/
+└── CLAUDE.md
 ```
 
-Servicios:
+---
 
-- API: `http://localhost:8000`
-- Swagger: `http://localhost:8000/docs`
-- Frontend: `http://localhost:3000`
-- PostgreSQL: `localhost:5432`
+## Estado funcional actual
 
-El backend arranca con:
+A nivel de sistema, el repo cubre actualmente estas áreas:
 
-1. `scripts/apply_migration.py`
-2. `python -m app.seed`
-3. `uvicorn app.main:app`
+* autenticación
+* ingestión de pedidos
+* colas operativas
+* colas de resolución
+* snapshots operativos
+* planificación
+* excepciones
+* dashboard
+* export operativo
+* auditoría
+* administración de zonas
+* administración de clientes
+* administración de usuarios
+* administración de tenant settings
+* administración de productos
 
-## Credenciales demo
+Además, ya existe soporte documental para inventario y almacenes, aunque no toda esa superficie está cerrada en todas las capas.
 
-- `office@demo.cortecero.app / office123`
-- `logistics@demo.cortecero.app / logistics123`
-- `admin@demo.cortecero.app / admin123`
+Para el detalle factual exacto, consultar:
 
-## Smoke test API
+* [`docs/as-is.md`](docs/as-is.md)
 
-```bash
-# Login
-TOKEN=$(curl -sS -X POST http://localhost:8000/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"tenant_slug":"demo-cortecero","email":"logistics@demo.cortecero.app","password":"logistics123"}' | jq -r .access_token)
+---
 
-# Health
-curl -sS http://localhost:8000/health
+## Lo que este README sí cubre
 
-# Resumen diario (ajusta fecha)
-curl -sS "http://localhost:8000/dashboard/daily-summary?service_date=$(date +%F)" \
-  -H "Authorization: Bearer $TOKEN"
+* propósito del repo
+* arquitectura general
+* estado actual
+* fuentes de verdad
+* método de trabajo
+* puntos de entrada para contributors y agentes
 
-# Pedidos
-curl -sS "http://localhost:8000/orders?service_date=$(date +%F)" \
-  -H "Authorization: Bearer $TOKEN"
-```
+## Lo que este README no cubre
 
-## Test suite crítica (R1)
+* backlog completo por fase
+* detalle exhaustivo de todos los endpoints
+* matrices completas de decisión
+* diseño TO-BE no promulgado
+* work-in-progress no consolidado
 
-```bash
-# Con backend y postgres levantados
-docker compose exec -T backend pytest -q
-```
+Para eso, usar `docs/`.
 
-La suite crea y resetea una base `*_test` automáticamente en PostgreSQL para cada test.
+---
 
-## Notas de alcance
+## Punto de entrada recomendado
 
-- MVP cubre `cut-off`, `late`, `plan lock`, excepciones y auditoría.
-- No incluye optimización de rutas, WMS ni tracking en tiempo real.
-- Todo el modelo es multi-tenant (`tenant_id` en entidades core).
+Si vas a trabajar en este repo, empieza en este orden:
+
+1. [`README.md`](README.md)
+2. [`docs/as-is.md`](docs/as-is.md)
+3. [`docs/contracts/`](docs/contracts)
+4. [`docs/domain/cortecero/`](docs/domain/cortecero)
+5. [`CLAUDE.md`](CLAUDE.md)
+
+---
+
+## Estado documental
+
+Bloques documentales cerrados hasta ahora:
+
+* `DOC-CLAUDE-001`
+* `DOC-REPO-001`
+* `DOC-DOMAIN-001`
+* `DOC-CONTRACTS-001`
+* `DOC-TEMPLATES-001`
+
+Esto significa que la capa de gobernanza ya no es implícita: está versionada y debe tratarse como parte del sistema.
+
+---
+
+## Nota final
+
+CorteCero no debe evolucionar por acumulación de parches.
+Cuando falte diseño, contrato o gate, la acción correcta no es improvisar: es **bloquear, documentar y decidir explícitamente**.
