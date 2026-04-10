@@ -1,10 +1,13 @@
 openapi: 3.1.0
 info:
   title: CorteCero API
-  version: 1.0.0
+  version: 1.1.0
   description: >
     API MVP para control de cut-off, planes diarios por zona, pedidos tardíos,
     excepciones y auditoría.
+    v1.1.0 — Extensión brownfield: Routing POC (Bloques B + D).
+    Añade gestión de choferes, planificación y despacho de rutas, ejecución
+    por conductor (arrive/complete/fail) e incidencias. Multi-tenant estricto.
 
 servers:
   - url: https://api.cortecero.local
@@ -22,6 +25,14 @@ tags:
   - name: Admin Customers
   - name: Admin Users
   - name: Admin Tenant Settings
+  - name: Drivers
+    description: Gestión de choferes del tenant (Routing POC)
+  - name: Routing
+    description: >
+      Planificación y despacho de rutas (Bloque B) y ejecución por conductor
+      (Bloque D). Auth temporal — logistics/admin hasta Bloque D.2.
+  - name: Incidents
+    description: Registro y consulta de incidencias en ruta (Routing POC)
 
 security:
   - bearerAuth: []
@@ -1442,6 +1453,635 @@ paths:
         "422":
           description: Transición inválida
 
+  # -------------------------------------------------------------------------
+  # ROUTING POC — Bloque B: Planificación dispatcher
+  # -------------------------------------------------------------------------
+
+  /drivers:
+    get:
+      tags: [Drivers]
+      summary: Listar choferes
+      description: >
+        Retorna choferes del tenant con filtros opcionales. Sin side effects.
+        Requiere rol office, logistics o admin.
+      parameters:
+        - in: query
+          name: active
+          schema:
+            type: boolean
+          description: Filtrar por estado activo/inactivo
+        - in: query
+          name: vehicle_id
+          schema:
+            type: string
+            format: uuid
+          description: Filtrar por vehículo asignado
+      responses:
+        "200":
+          description: Lista de choferes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriversListResponse'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos
+
+    post:
+      tags: [Drivers]
+      summary: Crear chofer
+      description: >
+        Crea un nuevo chofer en el tenant. El teléfono debe ser único por tenant.
+        El vehicle_id, si se proporciona, debe pertenecer al tenant y estar activo.
+        Requiere rol logistics o admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverCreateRequest'
+      responses:
+        "201":
+          description: Chofer creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverOut'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos (requiere logistics o admin)
+        "404":
+          description: ENTITY_NOT_FOUND — Vehículo no encontrado o inactivo
+        "409":
+          description: RESOURCE_CONFLICT — Ya existe un chofer con ese teléfono
+        "422":
+          description: INVALID_DRIVER — name o phone vacío
+
+  /drivers/{driver_id}:
+    get:
+      tags: [Drivers]
+      summary: Detalle de chofer
+      description: >
+        Retorna los datos de un chofer por ID. Sin side effects.
+        Requiere rol office, logistics o admin.
+      parameters:
+        - in: path
+          name: driver_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Chofer encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverOut'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos
+        "404":
+          description: ENTITY_NOT_FOUND — Chofer no encontrado
+
+    patch:
+      tags: [Drivers]
+      summary: Actualizar chofer
+      description: >
+        Actualiza campos del chofer (partial update). Al menos un campo debe
+        enviarse. El teléfono debe seguir siendo único por tenant.
+        Requiere rol logistics o admin.
+      parameters:
+        - in: path
+          name: driver_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverUpdateRequest'
+      responses:
+        "200":
+          description: Chofer actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverOut'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos (requiere logistics o admin)
+        "404":
+          description: ENTITY_NOT_FOUND — Chofer o vehículo no encontrado
+        "409":
+          description: RESOURCE_CONFLICT — Teléfono duplicado en el tenant
+        "422":
+          description: INVALID_DRIVER — name o phone vacío; o sin cambios a aplicar
+
+  /orders/ready-to-dispatch:
+    get:
+      tags: [Routing]
+      summary: Pedidos listos para asignar a ruta
+      description: >
+        Retorna pedidos en estado `planned` del tenant, opcionalmente filtrados
+        por fecha de servicio. Sin side effects.
+        Requiere rol logistics o admin.
+      parameters:
+        - in: query
+          name: service_date
+          schema:
+            type: string
+            format: date
+          description: Filtrar por fecha de servicio (YYYY-MM-DD)
+      responses:
+        "200":
+          description: Lista de pedidos listos para despacho
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyToDispatchResponse'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos
+
+  /vehicles/available:
+    get:
+      tags: [Routing]
+      summary: Vehículos activos disponibles para planificar
+      description: >
+        Retorna vehículos activos del tenant con su chofer asignado (si existe).
+        Sin side effects. Requiere rol logistics o admin.
+      parameters:
+        - in: query
+          name: service_date
+          schema:
+            type: string
+            format: date
+          description: Reservado para futura comprobación de disponibilidad por fecha
+      responses:
+        "200":
+          description: Lista de vehículos disponibles con chofer asignado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailableVehiclesResponse'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos
+
+  /routes/plan:
+    post:
+      tags: [Routing]
+      summary: Generar plan de rutas
+      description: >
+        Crea una o más rutas para un plan dado. Cada entrada en `routes`
+        produce una `Route` con sus `RouteStop` ordenadas. Actualiza
+        `order.status = assigned`. Si ya existía una ruta activa para el mismo
+        (plan, vehicle), la cancela y crea nueva versión (replanificación).
+        Requiere rol logistics o admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanRoutesRequest'
+      responses:
+        "201":
+          description: Rutas creadas / replanificadas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanRoutesResponse'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos (requiere logistics o admin)
+        "404":
+          description: ENTITY_NOT_FOUND — Plan, vehículo, chofer o pedido no encontrado
+        "409":
+          description: RESOURCE_CONFLICT — Error de integridad al persistir
+        "422":
+          description: >
+            INVALID_PLAN — plan_id, service_date o routes faltante/inválido.
+            INVALID_ROUTE — vehicle_id vacío, order_ids vacío o UUID inválido.
+            INVALID_STATE_TRANSITION — Plan o pedido en estado incorrecto.
+
+  /routes:
+    get:
+      tags: [Routing]
+      summary: Listar rutas
+      description: >
+        Lista rutas del tenant con filtros opcionales. Sin side effects.
+        Ordena por service_date desc, created_at desc.
+        Requiere rol office, logistics o admin.
+      parameters:
+        - in: query
+          name: plan_id
+          schema:
+            type: string
+            format: uuid
+          description: Filtrar por plan
+        - in: query
+          name: vehicle_id
+          schema:
+            type: string
+            format: uuid
+          description: Filtrar por vehículo
+        - in: query
+          name: driver_id
+          schema:
+            type: string
+            format: uuid
+          description: Filtrar por chofer
+        - in: query
+          name: service_date
+          schema:
+            type: string
+            format: date
+          description: Filtrar por fecha de servicio
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [draft, planned, dispatched, in_progress, completed, cancelled]
+          description: Filtrar por estado de ruta
+      responses:
+        "200":
+          description: Lista de rutas con paradas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoutesListResponse'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos
+        "422":
+          description: INVALID_FILTER — Valor de status no reconocido
+
+  /routes/{route_id}:
+    get:
+      tags: [Routing]
+      summary: Detalle de ruta con paradas
+      description: >
+        Retorna la ruta con sus paradas ordenadas por sequence_number.
+        Sin side effects. Requiere rol office, logistics o admin.
+      parameters:
+        - in: path
+          name: route_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Ruta con paradas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteOut'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos
+        "404":
+          description: ENTITY_NOT_FOUND — Ruta no encontrada
+
+  /routes/{route_id}/dispatch:
+    post:
+      tags: [Routing]
+      summary: Despachar ruta al chofer
+      description: >
+        Transición de estado: `planned → dispatched`.
+        Actualiza `order.status = dispatched` para todos los pedidos de la ruta.
+        Requiere rol logistics o admin.
+      parameters:
+        - in: path
+          name: route_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Ruta despachada con paradas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteOut'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos (requiere logistics o admin)
+        "404":
+          description: ENTITY_NOT_FOUND — Ruta no encontrada
+        "409":
+          description: RESOURCE_CONFLICT — Error de integridad
+        "422":
+          description: >
+            INVALID_STATE_TRANSITION — La ruta no está en estado 'planned'
+
+  /routes/{route_id}/move-stop:
+    post:
+      tags: [Routing]
+      summary: Mover parada entre rutas
+      description: >
+        Mueve un pedido (RouteStop) de esta ruta a otra ruta de destino.
+        La parada se elimina de origen y se añade al final de destino.
+        Solo paradas en estado `pending` pueden moverse.
+        Ambas rutas deben estar en `planned` o `dispatched`.
+        No incrementa version de ninguna ruta (ajuste manual del dispatcher).
+        Requiere rol logistics o admin.
+      parameters:
+        - in: path
+          name: route_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID de la ruta origen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveStopRequest'
+      responses:
+        "200":
+          description: Parada movida exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoveStopResponse'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos (requiere logistics o admin)
+        "404":
+          description: ENTITY_NOT_FOUND — Ruta origen, parada o ruta destino no encontrada
+        "409":
+          description: RESOURCE_CONFLICT — Pedido ya existe en la ruta destino
+        "422":
+          description: >
+            INVALID_MOVE — stop_id o target_route_id faltante/inválido.
+            INVALID_STATE_TRANSITION — Parada no está en 'pending' o rutas en estado incompatible.
+
+  /routes/{route_id}/events:
+    get:
+      tags: [Routing]
+      summary: Log de eventos de una ruta
+      description: >
+        Retorna todos los eventos (RouteEvent) de la ruta ordenados
+        cronológicamente. Append-only — no admite DELETE ni UPDATE.
+        Sin side effects. Requiere rol office, logistics o admin.
+      parameters:
+        - in: path
+          name: route_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lista de eventos de la ruta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteEventsListResponse'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos
+        "404":
+          description: ENTITY_NOT_FOUND — Ruta no encontrada
+
+  # -------------------------------------------------------------------------
+  # ROUTING POC — Bloque D: Ejecución conductor (PWA, conectividad intermitente)
+  # Auth temporal: logistics/admin. Bloque D.2 añadirá rol driver.
+  # -------------------------------------------------------------------------
+
+  /stops/{stop_id}/arrive:
+    post:
+      tags: [Routing]
+      summary: Registrar llegada a parada
+      description: >
+        El chofer registra su llegada a la parada.
+        Transición: `pending | en_route → arrived`.
+
+        Primera llegada en ruta `dispatched` dispara `dispatched → in_progress`.
+
+        **Idempotencia:** si se envía `idempotency_key` y ya existe un evento
+        `stop.arrived` con esa clave para esta parada → 200 con estado actual.
+        Si la parada ya está en `arrived` sin clave → 200.
+        Estado terminal o incompatible → 409.
+
+        Auth temporal: logistics/admin (Bloque D.2 añadirá rol driver).
+      parameters:
+        - in: path
+          name: stop_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteStopArriveRequest'
+      responses:
+        "200":
+          description: Llegada registrada (o idempotente)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteStopOut'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos
+        "404":
+          description: ENTITY_NOT_FOUND — Parada o ruta no encontrada
+        "409":
+          description: >
+            INVALID_STATE_TRANSITION — Parada en estado terminal o incompatible.
+            La ruta no está en dispatched ni in_progress.
+
+  /stops/{stop_id}/complete:
+    post:
+      tags: [Routing]
+      summary: Confirmar entrega en parada
+      description: >
+        El chofer confirma que la entrega fue exitosa.
+        Transición: `arrived → completed`.
+        Actualiza `order.status = delivered`.
+        Si todas las paradas de la ruta quedan en estado terminal →
+        ruta pasa automáticamente a `completed`.
+
+        **Idempotencia:** misma `idempotency_key` → 200.
+        Parada ya en `completed` → 200.
+        Estado incompatible → 409.
+
+        Auth temporal: logistics/admin (Bloque D.2 añadirá rol driver).
+      parameters:
+        - in: path
+          name: stop_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteStopCompleteRequest'
+      responses:
+        "200":
+          description: Entrega confirmada (o idempotente)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteStopOut'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos
+        "404":
+          description: ENTITY_NOT_FOUND — Parada o ruta no encontrada
+        "409":
+          description: >
+            INVALID_STATE_TRANSITION — Parada no está en 'arrived' o ruta en estado incompatible.
+
+  /stops/{stop_id}/fail:
+    post:
+      tags: [Routing]
+      summary: Registrar entrega fallida en parada
+      description: >
+        El chofer reporta que la entrega no pudo realizarse.
+        Transición: `arrived → failed`. `failure_reason` es obligatorio.
+        Actualiza `order.status = failed_delivery`.
+        Si todas las paradas quedan en estado terminal →
+        ruta pasa automáticamente a `completed`.
+
+        **Idempotencia:** misma `idempotency_key` → 200.
+        Parada ya en `failed` → 200.
+        Estado incompatible → 409.
+
+        Auth temporal: logistics/admin (Bloque D.2 añadirá rol driver).
+      parameters:
+        - in: path
+          name: stop_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteStopFailRequest'
+      responses:
+        "200":
+          description: Entrega fallida registrada (o idempotente)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteStopOut'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos
+        "404":
+          description: ENTITY_NOT_FOUND — Parada o ruta no encontrada
+        "409":
+          description: >
+            INVALID_STATE_TRANSITION — Parada no está en 'arrived' o ruta en estado incompatible.
+        "422":
+          description: INVALID_DRIVER — failure_reason es obligatorio
+
+  /incidents:
+    post:
+      tags: [Incidents]
+      summary: Registrar incidencia en ruta
+      description: >
+        El chofer reporta una incidencia durante la ejecución de la ruta.
+        `driver_id` se infiere automáticamente de `route.driver_id`.
+        La ruta debe existir y tener un chofer asignado.
+        La ruta debe estar en estado `dispatched`, `in_progress` o `completed`.
+
+        **Idempotencia:** si se envía `idempotency_key` y ya existe un evento
+        `incident.reported` con esa clave para la misma ruta → 200 con la
+        incidencia original. Sin clave o sin coincidencia → 201.
+
+        Auth temporal: logistics/admin (Bloque D.2 añadirá rol driver).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentCreateRequest'
+      responses:
+        "201":
+          description: Incidencia creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentOut'
+        "200":
+          description: Incidencia idempotente — ya existía con esa clave
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentOut'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos
+        "404":
+          description: ENTITY_NOT_FOUND — Ruta o parada no encontrada
+        "409":
+          description: RESOURCE_CONFLICT — Error de integridad al persistir
+        "422":
+          description: >
+            MISSING_DRIVER — La ruta no tiene chofer asignado.
+            INVALID_STATE_TRANSITION — Ruta en estado incompatible.
+
+    get:
+      tags: [Incidents]
+      summary: Listar incidencias
+      description: >
+        Lista incidencias del tenant. Filtrar por route_id es recomendado.
+        Sin side effects. Requiere rol office, logistics o admin.
+      parameters:
+        - in: query
+          name: route_id
+          schema:
+            type: string
+            format: uuid
+          description: Filtrar por ruta (recomendado)
+      responses:
+        "200":
+          description: Lista de incidencias
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentsListResponse'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2579,3 +3219,551 @@ components:
           type: string
         auto_lock_enabled:
           type: boolean
+
+    # -----------------------------------------------------------------------
+    # ROUTING POC — Schemas (v1.1.0)
+    # -----------------------------------------------------------------------
+
+    DriverCreateRequest:
+      type: object
+      required: [name, phone]
+      properties:
+        vehicle_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Vehículo asignado al chofer (debe ser activo y del tenant)
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        phone:
+          type: string
+          minLength: 1
+          maxLength: 20
+          description: Debe ser único por tenant
+
+    DriverUpdateRequest:
+      type: object
+      description: Partial update — al menos un campo debe enviarse
+      properties:
+        vehicle_id:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+          nullable: true
+        phone:
+          type: string
+          minLength: 1
+          maxLength: 20
+          nullable: true
+        is_active:
+          type: boolean
+          nullable: true
+
+    DriverOut:
+      type: object
+      required: [id, name, phone, is_active, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        vehicle_id:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        phone:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    DriversListResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriverOut'
+        total:
+          type: integer
+
+    RouteStopOut:
+      type: object
+      required: [id, route_id, order_id, sequence_number, estimated_service_minutes, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        route_id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+          format: uuid
+        sequence_number:
+          type: integer
+          minimum: 1
+        estimated_arrival_at:
+          type: string
+          format: date-time
+          nullable: true
+        estimated_service_minutes:
+          type: integer
+        status:
+          type: string
+          enum: [pending, en_route, arrived, completed, failed, skipped]
+        arrived_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        failed_at:
+          type: string
+          format: date-time
+          nullable: true
+        failure_reason:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    RouteOut:
+      type: object
+      required: [id, plan_id, vehicle_id, service_date, status, version, created_at, updated_at, stops]
+      properties:
+        id:
+          type: string
+          format: uuid
+        plan_id:
+          type: string
+          format: uuid
+        vehicle_id:
+          type: string
+          format: uuid
+        driver_id:
+          type: string
+          format: uuid
+          nullable: true
+        service_date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [draft, planned, dispatched, in_progress, completed, cancelled]
+        version:
+          type: integer
+          minimum: 1
+          description: Versión de la ruta; se incrementa en replanificación
+        optimization_request_id:
+          type: string
+          nullable: true
+          description: Reservado para Bloque E (Google Route Optimization)
+        optimization_response_json:
+          type: object
+          nullable: true
+          description: Reservado para Bloque E
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        dispatched_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        stops:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteStopOut'
+          description: Paradas ordenadas por sequence_number
+
+    RoutesListResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteOut'
+        total:
+          type: integer
+
+    PlanRoutesRequest:
+      type: object
+      required: [plan_id, service_date, routes]
+      properties:
+        plan_id:
+          type: string
+          format: uuid
+        service_date:
+          type: string
+          format: date
+        routes:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [vehicle_id, order_ids]
+            properties:
+              vehicle_id:
+                type: string
+                format: uuid
+              driver_id:
+                type: string
+                format: uuid
+                nullable: true
+              order_ids:
+                type: array
+                minItems: 1
+                items:
+                  type: string
+                  format: uuid
+
+    PlanRoutesResponse:
+      type: object
+      required: [plan_id, service_date, routes_created]
+      properties:
+        plan_id:
+          type: string
+          format: uuid
+        service_date:
+          type: string
+          format: date
+        routes_created:
+          type: array
+          items:
+            type: object
+            required: [id, vehicle_id, status, version]
+            properties:
+              id:
+                type: string
+                format: uuid
+              vehicle_id:
+                type: string
+                format: uuid
+              driver_id:
+                type: string
+                format: uuid
+                nullable: true
+              status:
+                type: string
+                enum: [planned]
+              version:
+                type: integer
+
+    MoveStopRequest:
+      type: object
+      required: [stop_id, target_route_id]
+      properties:
+        stop_id:
+          type: string
+          format: uuid
+          description: ID de la parada a mover (debe estar en estado 'pending')
+        target_route_id:
+          type: string
+          format: uuid
+          description: ID de la ruta destino
+
+    MoveStopResponse:
+      type: object
+      required: [order_id, from_route_id, to_route_id, new_sequence_number]
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        from_route_id:
+          type: string
+          format: uuid
+        to_route_id:
+          type: string
+          format: uuid
+        new_sequence_number:
+          type: integer
+
+    ReadyToDispatchItem:
+      type: object
+      required: [id, customer_id, service_date, status, zone_id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+        service_date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [planned]
+        total_weight_kg:
+          type: number
+          format: float
+          nullable: true
+        zone_id:
+          type: string
+          format: uuid
+
+    ReadyToDispatchResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReadyToDispatchItem'
+        total:
+          type: integer
+
+    AvailableVehicleItem:
+      type: object
+      required: [id, code, name, active]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          description: Matrícula del vehículo
+        name:
+          type: string
+        capacity_kg:
+          type: number
+          format: float
+          nullable: true
+        active:
+          type: boolean
+        driver:
+          type: object
+          nullable: true
+          description: Chofer asignado al vehículo (si existe)
+          required: [id, name, phone]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            phone:
+              type: string
+
+    AvailableVehiclesResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvailableVehicleItem'
+        total:
+          type: integer
+
+    RouteStopArriveRequest:
+      type: object
+      properties:
+        idempotency_key:
+          type: string
+          nullable: true
+          description: >
+            Clave de idempotencia. Si se envía y coincide con un evento
+            stop.arrived previo para esta parada → respuesta 200 sin efecto.
+
+    RouteStopCompleteRequest:
+      type: object
+      properties:
+        idempotency_key:
+          type: string
+          nullable: true
+          description: >
+            Clave de idempotencia. Si se envía y coincide con un evento
+            stop.completed previo para esta parada → respuesta 200 sin efecto.
+
+    RouteStopFailRequest:
+      type: object
+      required: [failure_reason]
+      properties:
+        failure_reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Motivo de la entrega fallida (obligatorio)
+        idempotency_key:
+          type: string
+          nullable: true
+          description: >
+            Clave de idempotencia. Si coincide con stop.failed previo → 200.
+
+    IncidentCreateRequest:
+      type: object
+      required: [route_id, type, severity, description]
+      properties:
+        route_id:
+          type: string
+          format: uuid
+        route_stop_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Parada específica donde ocurrió la incidencia (opcional)
+        type:
+          type: string
+          enum:
+            - access_blocked
+            - customer_absent
+            - customer_rejected
+            - vehicle_issue
+            - wrong_address
+            - damaged_goods
+            - other
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        description:
+          type: string
+          minLength: 1
+          maxLength: 500
+        idempotency_key:
+          type: string
+          nullable: true
+          description: >
+            Clave de idempotencia. Si coincide con incident.reported previo
+            para la misma ruta → 200 con incidencia original.
+
+    IncidentOut:
+      type: object
+      required: [id, route_id, driver_id, type, severity, description, status, reported_at, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        route_id:
+          type: string
+          format: uuid
+        route_stop_id:
+          type: string
+          format: uuid
+          nullable: true
+        driver_id:
+          type: string
+          format: uuid
+          description: Inferido de route.driver_id al crear
+        type:
+          type: string
+          enum:
+            - access_blocked
+            - customer_absent
+            - customer_rejected
+            - vehicle_issue
+            - wrong_address
+            - damaged_goods
+            - other
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        description:
+          type: string
+        status:
+          type: string
+          enum: [open, reviewed, resolved]
+        reported_at:
+          type: string
+          format: date-time
+        reviewed_at:
+          type: string
+          format: date-time
+          nullable: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        resolution_note:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    IncidentsListResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncidentOut'
+        total:
+          type: integer
+
+    RouteEventOut:
+      type: object
+      required: [id, route_id, event_type, actor_type, ts, metadata_json]
+      properties:
+        id:
+          type: string
+          format: uuid
+        route_id:
+          type: string
+          format: uuid
+        route_stop_id:
+          type: string
+          format: uuid
+          nullable: true
+        event_type:
+          type: string
+          description: >
+            Valores posibles: route.planned, route.dispatched, route.started,
+            route.completed, route.cancelled, stop.arrived, stop.completed,
+            stop.failed, stop.skipped, stop.en_route, incident.reported
+        actor_type:
+          type: string
+          enum: [dispatcher, driver, system]
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+        ts:
+          type: string
+          format: date-time
+          description: Timestamp del evento (UTC)
+        metadata_json:
+          type: object
+          description: Metadatos del evento (incluye idempotency_key cuando aplica)
+
+    RouteEventsListResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteEventOut'
+        total:
+          type: integer
