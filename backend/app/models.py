@@ -43,6 +43,10 @@ class OrderStatus(str, enum.Enum):
     ready_for_planning = "ready_for_planning"
     planned = "planned"
     exception_rejected = "exception_rejected"
+    assigned = "assigned"
+    dispatched = "dispatched"
+    delivered = "delivered"
+    failed_delivery = "failed_delivery"
 
 
 class OrderIntakeType(str, enum.Enum):
@@ -146,6 +150,9 @@ class Customer(Base):
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     cutoff_override_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    lat: Mapped[float | None] = mapped_column(Numeric(9, 6), nullable=True)
+    lng: Mapped[float | None] = mapped_column(Numeric(9, 6), nullable=True)
+    delivery_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (
@@ -390,4 +397,188 @@ class OrderOperationalSnapshot(Base):
 
     __table_args__ = (
         ForeignKeyConstraint(["order_id", "tenant_id"], ["orders.id", "orders.tenant_id"], ondelete="CASCADE"),
+    )
+
+
+# ============================================================================
+# ROUTING POC ENTITIES: Driver, Route, RouteStop, Incident, RouteEvent
+# ============================================================================
+
+
+class RouteStatus(str, enum.Enum):
+    draft = "draft"
+    planned = "planned"
+    dispatched = "dispatched"
+    in_progress = "in_progress"
+    completed = "completed"
+    cancelled = "cancelled"
+
+
+class RouteStopStatus(str, enum.Enum):
+    pending = "pending"
+    en_route = "en_route"
+    arrived = "arrived"
+    completed = "completed"
+    failed = "failed"
+    skipped = "skipped"
+
+
+class IncidentType(str, enum.Enum):
+    access_blocked = "access_blocked"
+    customer_absent = "customer_absent"
+    customer_rejected = "customer_rejected"
+    vehicle_issue = "vehicle_issue"
+    wrong_address = "wrong_address"
+    damaged_goods = "damaged_goods"
+    other = "other"
+
+
+class IncidentSeverity(str, enum.Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+    critical = "critical"
+
+
+class IncidentStatus(str, enum.Enum):
+    open = "open"
+    reviewed = "reviewed"
+    resolved = "resolved"
+
+
+class RouteEventType(str, enum.Enum):
+    route_created = "route.created"
+    route_planned = "route.planned"
+    route_dispatched = "route.dispatched"
+    route_started = "route.started"
+    route_completed = "route.completed"
+    route_cancelled = "route.cancelled"
+    stop_en_route = "stop.en_route"
+    stop_arrived = "stop.arrived"
+    stop_completed = "stop.completed"
+    stop_failed = "stop.failed"
+    stop_skipped = "stop.skipped"
+    incident_reported = "incident.reported"
+    incident_reviewed = "incident.reviewed"
+    incident_resolved = "incident.resolved"
+    order_returned_to_planning = "order.returned_to_planning"
+
+
+class RouteEventActorType(str, enum.Enum):
+    dispatcher = "dispatcher"
+    driver = "driver"
+    system = "system"
+
+
+class Driver(Base):
+    __tablename__ = "drivers"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    vehicle_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    phone: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "phone", name="uq_drivers_tenant_phone"),
+        ForeignKeyConstraint(["vehicle_id", "tenant_id"], ["vehicles.id", "vehicles.tenant_id"], ondelete="SET NULL"),
+    )
+
+
+class Route(Base):
+    __tablename__ = "routes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    plan_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    vehicle_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    driver_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    service_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[RouteStatus] = mapped_column(Enum(RouteStatus, name="route_status"), nullable=False, default=RouteStatus.draft)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    optimization_request_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    optimization_response_json: Mapped[dict | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        ForeignKeyConstraint(["plan_id", "tenant_id"], ["plans.id", "plans.tenant_id"], ondelete="CASCADE"),
+        ForeignKeyConstraint(["vehicle_id", "tenant_id"], ["vehicles.id", "vehicles.tenant_id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["driver_id", "tenant_id"], ["drivers.id", "drivers.tenant_id"], ondelete="SET NULL"),
+    )
+
+
+class RouteStop(Base):
+    __tablename__ = "route_stops"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    route_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    estimated_arrival_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    estimated_service_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    status: Mapped[RouteStopStatus] = mapped_column(Enum(RouteStopStatus, name="route_stop_status"), nullable=False, default=RouteStopStatus.pending)
+    arrived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("route_id", "order_id", name="uq_route_stops_route_order"),
+        UniqueConstraint("route_id", "sequence_number", name="uq_route_stops_route_sequence"),
+        ForeignKeyConstraint(["route_id", "tenant_id"], ["routes.id", "routes.tenant_id"], ondelete="CASCADE"),
+        ForeignKeyConstraint(["order_id", "tenant_id"], ["orders.id", "orders.tenant_id"], ondelete="RESTRICT"),
+    )
+
+
+class Incident(Base):
+    __tablename__ = "incidents"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    route_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    route_stop_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    driver_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    type: Mapped[IncidentType] = mapped_column(Enum(IncidentType, name="incident_type"), nullable=False)
+    severity: Mapped[IncidentSeverity] = mapped_column(Enum(IncidentSeverity, name="incident_severity"), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[IncidentStatus] = mapped_column(Enum(IncidentStatus, name="incident_status"), nullable=False, default=IncidentStatus.open)
+    reported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(["route_id", "tenant_id"], ["routes.id", "routes.tenant_id"], ondelete="CASCADE"),
+        ForeignKeyConstraint(["route_stop_id", "tenant_id"], ["route_stops.id", "route_stops.tenant_id"], ondelete="SET NULL"),
+        ForeignKeyConstraint(["driver_id", "tenant_id"], ["drivers.id", "drivers.tenant_id"], ondelete="RESTRICT"),
+    )
+
+
+class RouteEvent(Base):
+    __tablename__ = "route_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    route_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    route_stop_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    event_type: Mapped[RouteEventType] = mapped_column(Enum(RouteEventType, name="route_event_type"), nullable=False)
+    actor_type: Mapped[RouteEventActorType] = mapped_column(Enum(RouteEventActorType, name="route_event_actor_type"), nullable=False)
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    metadata_json: Mapped[dict] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=False, default={})
+
+    __table_args__ = (
+        ForeignKeyConstraint(["route_id", "tenant_id"], ["routes.id", "routes.tenant_id"], ondelete="CASCADE"),
+        ForeignKeyConstraint(["route_stop_id", "tenant_id"], ["route_stops.id", "route_stops.tenant_id"], ondelete="CASCADE"),
     )

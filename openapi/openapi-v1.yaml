@@ -1088,7 +1088,9 @@ paths:
         "409":
           description: Conflicto de nombre
         "422":
-          description: Transición inválida
+          description: >
+            Transición inválida; o INVALID_GEO si lat/lng no se envían como par atómico,
+            o lat fuera de [-90,90], o lng fuera de [-180,180]
 
   /admin/customers/{customer_id}/operational-profile:
     get:
@@ -2975,6 +2977,9 @@ components:
 
     CustomerUpdateRequest:
       type: object
+      description: >
+        Partial update del cliente. lat y lng deben enviarse juntos (par atómico)
+        o ambos null para borrar coordenadas. Enviar solo uno → 422 INVALID_GEO.
       properties:
         zone_id:
           type: string
@@ -2987,6 +2992,21 @@ components:
           type: string
           format: time
           nullable: true
+        lat:
+          type: number
+          format: double
+          nullable: true
+          description: Latitud WGS-84 (-90 a 90). Debe enviarse junto con lng.
+        lng:
+          type: number
+          format: double
+          nullable: true
+          description: Longitud WGS-84 (-180 a 180). Debe enviarse junto con lat.
+        delivery_address:
+          type: string
+          maxLength: 500
+          nullable: true
+          description: Dirección legible del punto de entrega
 
     Customer:
       type: object
@@ -3005,6 +3025,20 @@ components:
           type: string
           format: time
           nullable: true
+        lat:
+          type: number
+          format: double
+          nullable: true
+          description: Latitud WGS-84 del punto de entrega
+        lng:
+          type: number
+          format: double
+          nullable: true
+          description: Longitud WGS-84 del punto de entrega
+        delivery_address:
+          type: string
+          nullable: true
+          description: Dirección legible del punto de entrega
         active:
           type: boolean
         created_at:

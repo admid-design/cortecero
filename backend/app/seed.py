@@ -113,10 +113,29 @@ def seed() -> None:
             db.add(zone_b)
             db.flush()
 
+        # Coordenadas reales de puntos de entrega en Mallorca (Bloque G).
+        # Centro = Palma centro urbano; Costa = costa norte/este.
+        # Fuente: Google Maps, puntos representativos de polígonos y comercios.
+        _customer_geo = [
+            # Centro (zone_a) — Palma
+            ("Cliente 01", 39.5696,  2.6502, "Passeig del Born 12, Palma"),
+            ("Cliente 02", 39.5753,  2.6541, "Plaça d'Espanya 5, Palma"),
+            ("Cliente 03", 39.5820,  2.6618, "Polígon Son Castelló, Palma"),
+            ("Cliente 04", 39.6172,  2.6496, "Camí Vell de Bunyola 39, Palma"),
+            ("Cliente 05", 39.5564,  2.6267, "C/ Arxiduc Lluís Salvador 8, Palma"),
+            # Costa (zone_b) — norte
+            ("Cliente 06", 39.8531,  3.1207, "Plaça Constitució 3, Alcúdia"),
+            ("Cliente 07", 39.7590,  3.1543, "Av. Diagonal, Can Picafort"),
+            ("Cliente 08", 39.7089,  3.4593, "C/ Leonor Servera 42, Cala Ratjada"),
+            ("Cliente 09", 39.7989,  3.1210, "C/ Marjals 7, Playa de Muro"),
+            ("Cliente 10", 39.9121,  3.0762, "Passeig Anglada Camarassa, Pto Pollensa"),
+        ]
+
         customers = []
         for idx in range(10):
             zone = zone_a if idx < 5 else zone_b
             name = f"Cliente {idx + 1:02d}"
+            _, lat_val, lng_val, addr = _customer_geo[idx]
             customer = db.scalar(select(Customer).where(Customer.tenant_id == tenant.id, Customer.name == name))
             if not customer:
                 customer = Customer(
@@ -126,6 +145,9 @@ def seed() -> None:
                     name=name,
                     priority=0,
                     cutoff_override_time=None,
+                    lat=lat_val,
+                    lng=lng_val,
+                    delivery_address=addr,
                     active=True,
                     created_at=now_utc(),
                 )

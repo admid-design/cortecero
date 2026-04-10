@@ -492,6 +492,25 @@ def update_customer(
     if "cutoff_override_time" in payload.model_fields_set:
         row.cutoff_override_time = payload.cutoff_override_time
 
+    # Geo fields — lat/lng deben enviarse juntos (par atómico) o ambos null
+    lat_set = "lat" in payload.model_fields_set
+    lng_set = "lng" in payload.model_fields_set
+    if lat_set != lng_set:
+        raise unprocessable("INVALID_GEO", "lat y lng deben enviarse juntos")
+    if lat_set and lng_set:
+        if payload.lat is not None and payload.lng is not None:
+            lat_f = float(payload.lat)
+            lng_f = float(payload.lng)
+            if not (-90.0 <= lat_f <= 90.0):
+                raise unprocessable("INVALID_GEO", "lat debe estar entre -90 y 90")
+            if not (-180.0 <= lng_f <= 180.0):
+                raise unprocessable("INVALID_GEO", "lng debe estar entre -180 y 180")
+        row.lat = payload.lat
+        row.lng = payload.lng
+
+    if "delivery_address" in payload.model_fields_set:
+        row.delivery_address = payload.delivery_address
+
     try:
         db.commit()
     except IntegrityError as exc:

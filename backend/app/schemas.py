@@ -482,6 +482,9 @@ class CustomerUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
     priority: int | None = None
     cutoff_override_time: time | None = None
+    lat: Decimal | None = None
+    lng: Decimal | None = None
+    delivery_address: str | None = Field(default=None, max_length=500)
 
 
 class CustomerOut(APIModel):
@@ -490,6 +493,9 @@ class CustomerOut(APIModel):
     name: str
     priority: int
     cutoff_override_time: time | None
+    lat: float | None
+    lng: float | None
+    delivery_address: str | None
     active: bool
     created_at: datetime
 
@@ -588,3 +594,140 @@ class TenantSettingsUpdateRequest(BaseModel):
     default_cutoff_time: time | None = None
     default_timezone: str | None = Field(default=None, min_length=1, max_length=120)
     auto_lock_enabled: bool | None = None
+
+
+# ============================================================================
+# ROUTING POC SCHEMAS
+# ============================================================================
+
+
+class DriverCreateRequest(BaseModel):
+    vehicle_id: uuid.UUID | None = None
+    name: str = Field(min_length=1, max_length=160)
+    phone: str = Field(min_length=1, max_length=20)
+
+
+class DriverUpdateRequest(BaseModel):
+    vehicle_id: uuid.UUID | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    phone: str | None = Field(default=None, min_length=1, max_length=20)
+    is_active: bool | None = None
+
+
+class DriverOut(APIModel):
+    id: uuid.UUID
+    vehicle_id: uuid.UUID | None
+    name: str
+    phone: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class DriversListResponse(BaseModel):
+    items: list[DriverOut]
+    total: int
+
+
+class RouteCreateRequest(BaseModel):
+    plan_id: uuid.UUID
+    vehicle_id: uuid.UUID
+    service_date: date
+
+
+class RouteStopOut(APIModel):
+    id: uuid.UUID
+    route_id: uuid.UUID
+    order_id: uuid.UUID
+    sequence_number: int
+    estimated_arrival_at: datetime | None
+    estimated_service_minutes: int
+    status: Literal["pending", "en_route", "arrived", "completed", "failed", "skipped"]
+    arrived_at: datetime | None
+    completed_at: datetime | None
+    failed_at: datetime | None
+    failure_reason: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RouteOut(APIModel):
+    id: uuid.UUID
+    plan_id: uuid.UUID
+    vehicle_id: uuid.UUID
+    driver_id: uuid.UUID | None
+    service_date: date
+    status: Literal["draft", "planned", "dispatched", "in_progress", "completed", "cancelled"]
+    version: int
+    optimization_request_id: str | None
+    optimization_response_json: dict | None
+    created_at: datetime
+    updated_at: datetime
+    dispatched_at: datetime | None
+    completed_at: datetime | None
+    stops: list[RouteStopOut] = Field(default_factory=list)
+
+
+class RoutesListResponse(BaseModel):
+    items: list[RouteOut]
+    total: int
+
+
+class RouteStopArriveRequest(BaseModel):
+    idempotency_key: str | None = None
+
+
+class RouteStopCompleteRequest(BaseModel):
+    idempotency_key: str | None = None
+
+
+class RouteStopFailRequest(BaseModel):
+    failure_reason: str = Field(min_length=1, max_length=500)
+    idempotency_key: str | None = None
+
+
+class IncidentCreateRequest(BaseModel):
+    route_id: uuid.UUID
+    route_stop_id: uuid.UUID | None = None
+    type: Literal["access_blocked", "customer_absent", "customer_rejected", "vehicle_issue", "wrong_address", "damaged_goods", "other"]
+    severity: Literal["low", "medium", "high", "critical"]
+    description: str = Field(min_length=1, max_length=500)
+    idempotency_key: str | None = None
+
+
+class IncidentOut(APIModel):
+    id: uuid.UUID
+    route_id: uuid.UUID
+    route_stop_id: uuid.UUID | None
+    driver_id: uuid.UUID
+    type: str
+    severity: str
+    description: str
+    status: Literal["open", "reviewed", "resolved"]
+    reported_at: datetime
+    reviewed_at: datetime | None
+    resolved_at: datetime | None
+    resolution_note: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class IncidentsListResponse(BaseModel):
+    items: list[IncidentOut]
+    total: int
+
+
+class RouteEventOut(APIModel):
+    id: uuid.UUID
+    route_id: uuid.UUID
+    route_stop_id: uuid.UUID | None
+    event_type: str
+    actor_type: Literal["dispatcher", "driver", "system"]
+    actor_id: uuid.UUID | None
+    ts: datetime
+    metadata_json: dict
+
+
+class RouteEventsListResponse(BaseModel):
+    items: list[RouteEventOut]
+    total: int
