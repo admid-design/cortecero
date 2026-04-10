@@ -25,6 +25,19 @@ from app.models import (
     Zone,
     InclusionType,
     AuditLog,
+    Vehicle,
+    Driver,
+    Route,
+    RouteStatus,
+    RouteStop,
+    RouteStopStatus,
+    Incident,
+    IncidentType,
+    IncidentSeverity,
+    IncidentStatus,
+    RouteEvent,
+    RouteEventType,
+    RouteEventActorType,
 )
 from app.security import hash_password
 
@@ -295,12 +308,177 @@ def seed() -> None:
             )
         )
 
+        # ========================================================================
+        # ROUTING POC SEED DATA — Flota real Kelko Mallorca
+        # Fuente: Kelko - Flota Vehiculos.xlsx + Scan_fichatec.vehiculs.pdf
+        # Turno: 07:00–15:00 | Almacén: 39.6578°N, 2.7384°E (Binissalem)
+        # ========================================================================
+
+        # ------------------------------------------------------------------
+        # Vehículos reales Kelko
+        # code = matrícula | name = descripción operativa
+        # capacity_kg = carga útil (MTMA – tara) según ficha técnica / flota
+        # Nota ZBE Palma (restricciones DGT):
+        #   - 7157CMP: PROHIBIDO zona ZBE Palma (sin etiqueta ambiental)
+        #   - 4093DWM: restringido desde 2027 (etiqueta C)
+        # ------------------------------------------------------------------
+        vehicles = {}
+        for code, name, capacity in [
+            # Camiones grandes (carnet C, turno completo)
+            ("0866GFC", "IVECO ML140E22 14T – Tito",        7580.0),   # tara 6420, MTMA 14000
+            ("0698FPH", "IVECO ML100E22 10T – Amengual",    4975.0),   # tara 5025, MTMA 10000
+            ("5520MPL", "DAF 12T – Dani",                   6145.0),   # MTMA ~12000
+            # Furgonetas (carnet B)
+            ("7822HXS", "Furgoneta 2T – Marcelo",           1500.0),
+            ("4093DWM", "Furgoneta 2T – Tomeu",             1400.0),   # ZBE restringida desde 2027
+            # Vehículo reserva/incidencias
+            ("7157CMP", "Camión reserva – ZBE prohibido",   3500.0),   # NO apto zona ZBE Palma
+        ]:
+            vehicle = db.scalar(select(Vehicle).where(Vehicle.tenant_id == tenant.id, Vehicle.code == code))
+            if not vehicle:
+                vehicle = Vehicle(
+                    id=uuid.uuid4(),
+                    tenant_id=tenant.id,
+                    code=code,
+                    name=name,
+                    capacity_kg=capacity,
+                    active=(code != "7157CMP"),  # reserva fuera de rotación activa
+                    created_at=now_utc(),
+                )
+                db.add(vehicle)
+                db.flush()
+            vehicles[code] = vehicle
+
+        # ------------------------------------------------------------------
+        # Choferes reales Kelko
+        # Fuente: hoja "Choferes" de Kelko - Flota Vehiculos.xlsx
+        # phone = placeholder operativo (formato ES)
+        # ADR: Tito y Amengual certificados para mercancías peligrosas
+        # ------------------------------------------------------------------
+        drivers = {}
+        for drv_key, name, phone, vehicle_code in [
+            # Carnet C (camiones)
+            ("tito",      "Tito",      "600100101", "0866GFC"),
+            ("amengual",  "Amengual",  "600100102", "0698FPH"),
+            ("dani",      "Dani",      "600100103", "5520MPL"),
+            ("juan",      "Juan",      "600100104", None),         # carnet C, sin camión fijo
+            # Carnet B (furgonetas)
+            ("marcelo",   "Marcelo",   "600100105", "7822HXS"),
+            ("tomeu",     "Tomeu",     "600100106", "4093DWM"),
+        ]:
+            driver = db.scalar(select(Driver).where(Driver.tenant_id == tenant.id, Driver.phone == phone))
+            if not driver:
+                v_id = vehicles[vehicle_code].id if vehicle_code else None
+                driver = Driver(
+                    id=uuid.uuid4(),
+                    tenant_id=tenant.id,
+                    vehicle_id=v_id,
+                    name=name,
+                    phone=phone,
+                    is_active=True,
+                    created_at=now_utc(),
+                    updated_at=now_utc(),
+                )
+                db.add(driver)
+                db.flush()
+            drivers[drv_key] = driver
+
+        # ------------------------------------------------------------------
+        # Zonas operativas Kelko — calendario invierno (vigente actual)
+        # Fuente: Kelko - Rutas Invierno _ Verano.xlsx
+        # Invierno (nov–feb): 3 zonas/día
+        # Verano  (mar–oct): 7 zonas/día
+        # ------------------------------------------------------------------
+        kelko_zones = {}
+        for z_name, cutoff_str, tz in [
+            ("Palma",                   "09:30", "Europe/Madrid"),
+            ("Alcudia",                 "09:00", "Europe/Madrid"),
+            ("Cala Ratjada-Cala Millor-Bares", "09:00", "Europe/Madrid"),
+            # Zonas verano (inactivas en temporada baja)
+            ("Can Picafort",            "09:00", "Europe/Madrid"),
+            ("Playas de Muro",          "09:00", "Europe/Madrid"),
+            ("Pto Alcudia",             "09:00", "Europe/Madrid"),
+            ("Pto Pollensa",            "09:00", "Europe/Madrid"),
+        ]:
+            zone = db.scalar(select(Zone).where(Zone.tenant_id == tenant.id, Zone.name == z_name))
+            if not zone:
+                zone = Zone(
+                    id=uuid.uuid4(),
+                    tenant_id=tenant.id,
+                    name=z_name,
+                    default_cutoff_time=datetime.strptime(cutoff_str, "%H:%M").time(),
+                    timezone=tz,
+                    active=True,
+                    created_at=now_utc(),
+                )
+                db.add(zone)
+                db.flush()
+            kelko_zones[z_name] = zone
+
+        # ------------------------------------------------------------------
+        # Rutas draft para el día actual — una por zona activa (invierno)
+        # Se crean solo si existe un plan locked para esa zona
+        # ------------------------------------------------------------------
+        routes = {}
+        route_service_date = datetime.now(UTC).date()
+        active_zone_driver_vehicle = [
+            ("Palma",                           "tito",     "0866GFC"),
+            ("Alcudia",                         "amengual", "0698FPH"),
+            ("Cala Ratjada-Cala Millor-Bares",  "dani",     "5520MPL"),
+        ]
+        for i, (z_name, drv_key, v_code) in enumerate(active_zone_driver_vehicle):
+            zone_obj = kelko_zones.get(z_name)
+            if not zone_obj:
+                continue
+            plan = db.scalar(
+                select(Plan).where(
+                    Plan.tenant_id == tenant.id,
+                    Plan.service_date == route_service_date,
+                    Plan.zone_id == zone_obj.id,
+                    Plan.status == PlanStatus.locked,
+                )
+            )
+            if plan:
+                route_key = f"RT-{route_service_date.isoformat()}-{z_name}"
+                route = db.scalar(
+                    select(Route).where(
+                        Route.tenant_id == tenant.id,
+                        Route.plan_id == plan.id,
+                        Route.vehicle_id == vehicles[v_code].id,
+                    )
+                )
+                if not route:
+                    route = Route(
+                        id=uuid.uuid4(),
+                        tenant_id=tenant.id,
+                        plan_id=plan.id,
+                        vehicle_id=vehicles[v_code].id,
+                        driver_id=drivers[drv_key].id,
+                        service_date=route_service_date,
+                        status=RouteStatus.draft,
+                        version=1,
+                        optimization_request_id=None,
+                        optimization_response_json=None,
+                        created_at=now_utc(),
+                        updated_at=now_utc(),
+                        dispatched_at=None,
+                        completed_at=None,
+                    )
+                    db.add(route)
+                    db.flush()
+                routes[route_key] = route
+
         db.commit()
         print("Seed OK")
         print("Users:")
         print(" - office@demo.cortecero.app / office123")
         print(" - logistics@demo.cortecero.app / logistics123")
         print(" - admin@demo.cortecero.app / admin123")
+        print("Routing POC — Flota Kelko:")
+        print(f" - {len(vehicles)} vehículos ({sum(1 for v in vehicles.values() if v.active)} activos)")
+        print(f" - {len(drivers)} choferes")
+        print(f" - {len(kelko_zones)} zonas operativas")
+        print(f" - {len(routes)} rutas draft creadas")
     finally:
         db.close()
 
