@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     # Dejar vacío para usar MockRouteOptimizationProvider (E.1, tests, dev).
     google_route_optimization_project_id: str = ""
     google_route_optimization_location: str = "global"
+    google_route_optimization_timeout_seconds: float = 30.0
 
     # Coordenadas del depósito de salida (WGS-84).
     # Usadas por el proveedor de optimización como punto de inicio/fin de la ruta.

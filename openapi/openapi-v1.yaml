@@ -1,14 +1,16 @@
 openapi: 3.1.0
 info:
   title: CorteCero API
-  version: 1.4.0
+  version: 1.5.0
   description: >
     API MVP para control de cut-off, planes diarios por zona, pedidos tardíos,
     excepciones y auditoría.
     v1.1.0 — Extensión brownfield: Routing POC (Bloques B + D).
     Añade gestión de choferes, planificación y despacho de rutas, ejecución
     por conductor (arrive/complete/fail/skip), incidencias y vistas driver
-    (Bloque C). Multi-tenant estricto.
+    (Bloque C). Bloque E.2 habilita proveedor real Google Route Optimization
+    con autenticación ADC y fallback a mock en entornos sin credenciales.
+    Multi-tenant estricto.
 
 servers:
   - url: https://api.cortecero.local
@@ -1878,6 +1880,11 @@ paths:
         Llama al proveedor de optimización configurado para calcular la secuencia
         óptima de paradas. Transición de estado: draft → planned.
 
+        Selección de proveedor:
+          - Si `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID` está configurado:
+            proveedor real Google Route Optimization (ADC/service account).
+          - Si está vacío: proveedor mock (entornos dev/tests).
+
         Precondiciones:
           - La ruta debe existir y pertenecer al tenant del token.
           - La ruta debe estar en estado 'draft'.
@@ -3688,11 +3695,11 @@ components:
         optimization_request_id:
           type: string
           nullable: true
-          description: Reservado para Bloque E (Google Route Optimization)
+          description: Identificador de ejecución devuelto por el proveedor de optimización
         optimization_response_json:
           type: object
           nullable: true
-          description: Reservado para Bloque E
+          description: Payload raw del proveedor de optimización persistido para trazabilidad
         created_at:
           type: string
           format: date-time

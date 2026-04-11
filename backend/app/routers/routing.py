@@ -34,6 +34,7 @@ from app.config import settings
 from app.db import get_db
 from app.deps import CurrentUser, require_roles
 from app.errors import conflict, forbidden, not_found, unprocessable
+from app.optimization.google_provider import GoogleRouteOptimizationProvider
 from app.optimization.mock_provider import MockRouteOptimizationProvider
 from app.optimization.protocol import OptimizationRequest, OptimizationWaypoint, RouteOptimizationProvider
 from app.models import (
@@ -523,7 +524,14 @@ def dispatch_route(
 
 
 def _get_optimization_provider() -> RouteOptimizationProvider:
-    # E.1: proveedor mock por defecto. E.2 integrará proveedor real.
+    # E.2: si hay project_id configurado, usar proveedor real de Google.
+    # Si no, mantener mock (tests/dev sin credenciales).
+    if settings.google_route_optimization_project_id.strip():
+        return GoogleRouteOptimizationProvider(
+            project_id=settings.google_route_optimization_project_id,
+            location=settings.google_route_optimization_location,
+            timeout_seconds=settings.google_route_optimization_timeout_seconds,
+        )
     return MockRouteOptimizationProvider()
 
 
