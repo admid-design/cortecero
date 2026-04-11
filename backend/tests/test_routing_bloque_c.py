@@ -188,18 +188,26 @@ def _create_route_with_stops(
 
     zone, customer, vehicle = _ensure_base_entities(db_session, tenant)
 
-    plan = Plan(
-        id=uuid.uuid4(),
-        tenant_id=tenant.id,
-        service_date=svc_date,
-        zone_id=zone.id,
-        status=PlanStatus.locked,
-        version=1,
-        created_at=now,
-        updated_at=now,
+    plan = db_session.scalar(
+        select(Plan).where(
+            Plan.tenant_id == tenant.id,
+            Plan.service_date == svc_date,
+            Plan.zone_id == zone.id,
+        )
     )
-    db_session.add(plan)
-    db_session.flush()
+    if plan is None:
+        plan = Plan(
+            id=uuid.uuid4(),
+            tenant_id=tenant.id,
+            service_date=svc_date,
+            zone_id=zone.id,
+            status=PlanStatus.locked,
+            version=1,
+            created_at=now,
+            updated_at=now,
+        )
+        db_session.add(plan)
+        db_session.flush()
 
     route = Route(
         id=uuid.uuid4(),
@@ -471,7 +479,7 @@ def test_skip_happy_path_driver_route_started_and_event(client, db_session):
     db_session.expire_all()
     updated_route = db_session.get(Route, route.id)
     assert updated_route is not None
-    assert updated_route.status == RouteStatus.in_progress
+    assert updated_route.status == RouteStatus.completed
 
     started_events = list(
         db_session.scalars(
@@ -489,8 +497,17 @@ def test_skip_happy_path_driver_route_started_and_event(client, db_session):
             )
         )
     )
+    completed_events = list(
+        db_session.scalars(
+            select(RouteEvent).where(
+                RouteEvent.route_id == route.id,
+                RouteEvent.event_type == RouteEventType.route_completed,
+            )
+        )
+    )
     assert len(started_events) == 1
     assert len(skipped_events) == 1
+    assert len(completed_events) == 1
 
 
 def test_skip_idempotency_same_key_no_duplicate_event(client, db_session):
