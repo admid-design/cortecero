@@ -686,6 +686,17 @@ class RouteStopFailRequest(BaseModel):
     idempotency_key: str | None = None
 
 
+class RouteStopSkipRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)
+    idempotency_key: str | None = None
+
+
+class RouteNextStopResponse(BaseModel):
+    route_id: uuid.UUID
+    next_stop: RouteStopOut | None = None
+    remaining_stops: int
+
+
 class IncidentCreateRequest(BaseModel):
     route_id: uuid.UUID
     route_stop_id: uuid.UUID | None = None
@@ -693,6 +704,10 @@ class IncidentCreateRequest(BaseModel):
     severity: Literal["low", "medium", "high", "critical"]
     description: str = Field(min_length=1, max_length=500)
     idempotency_key: str | None = None
+
+
+class IncidentResolveRequest(BaseModel):
+    resolution_note: str = Field(min_length=1, max_length=1000)
 
 
 class IncidentOut(APIModel):

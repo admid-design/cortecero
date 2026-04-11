@@ -1,13 +1,14 @@
 openapi: 3.1.0
 info:
   title: CorteCero API
-  version: 1.3.0
+  version: 1.4.0
   description: >
     API MVP para control de cut-off, planes diarios por zona, pedidos tardíos,
     excepciones y auditoría.
     v1.1.0 — Extensión brownfield: Routing POC (Bloques B + D).
     Añade gestión de choferes, planificación y despacho de rutas, ejecución
-    por conductor (arrive/complete/fail) e incidencias. Multi-tenant estricto.
+    por conductor (arrive/complete/fail/skip), incidencias y vistas driver
+    (Bloque C). Multi-tenant estricto.
 
 servers:
   - url: https://api.cortecero.local
@@ -30,7 +31,7 @@ tags:
   - name: Routing
     description: >
       Planificación y despacho de rutas (Bloque B) y ejecución por conductor
-      (Bloque D). Auth temporal — logistics/admin hasta Bloque D.2.
+      (Bloques D + C). Auth real de conductor habilitada en D.2.
   - name: Incidents
     description: Registro y consulta de incidencias en ruta (Routing POC)
 
@@ -1730,6 +1731,47 @@ paths:
         "422":
           description: INVALID_FILTER — Valor de status no reconocido
 
+  /driver/routes:
+    get:
+      tags: [Routing]
+      summary: Listar rutas operativas para conductor
+      description: >
+        Lista rutas del tenant para operación de conductor.
+
+        Scope por rol:
+          - `driver`: solo rutas donde `route.driver_id` coincide con su ficha de chofer activa.
+          - `logistics` y `admin`: sin recorte por chofer.
+
+        Sin side effects.
+      parameters:
+        - in: query
+          name: service_date
+          schema:
+            type: string
+            format: date
+          description: Filtrar por fecha de servicio
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [draft, planned, dispatched, in_progress, completed, cancelled]
+          description: Filtrar por estado de ruta
+      responses:
+        "200":
+          description: Lista de rutas operativas para conductor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoutesListResponse'
+        "401":
+          description: No autenticado
+        "403":
+          description: >
+            RBAC_FORBIDDEN — Rol sin permisos.
+            DRIVER_NOT_LINKED — Usuario driver sin ficha de chofer activa.
+        "422":
+          description: INVALID_FILTER — Valor de status no reconocido
+
   /routes/{route_id}:
     get:
       tags: [Routing]
@@ -1755,6 +1797,42 @@ paths:
           description: No autenticado
         "403":
           description: Rol sin permisos
+        "404":
+          description: ENTITY_NOT_FOUND — Ruta no encontrada
+
+  /routes/{route_id}/next-stop:
+    get:
+      tags: [Routing]
+      summary: Siguiente parada pendiente de la ruta
+      description: >
+        Retorna la primera parada de la ruta cuyo estado no es terminal
+        (`completed`, `failed`, `skipped`) y la cantidad de paradas restantes.
+        No tiene side effects.
+
+        Requiere rol `driver`, `logistics` o `admin`.
+        Para `driver`, el acceso está limitado a rutas donde `route.driver_id`
+        coincide con su identidad de conductor.
+      parameters:
+        - in: path
+          name: route_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Próxima parada y conteo de paradas pendientes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteNextStopResponse'
+        "401":
+          description: No autenticado
+        "403":
+          description: >
+            RBAC_FORBIDDEN — Rol sin permisos.
+            DRIVER_NOT_LINKED — Usuario driver sin ficha de chofer activa.
+            DRIVER_SCOPE_FORBIDDEN — Ruta asignada a otro chofer.
         "404":
           description: ENTITY_NOT_FOUND — Ruta no encontrada
 
@@ -2078,6 +2156,54 @@ paths:
         "422":
           description: INVALID_DRIVER — failure_reason es obligatorio
 
+  /stops/{stop_id}/skip:
+    post:
+      tags: [Routing]
+      summary: Omitir parada en ejecución
+      description: >
+        Omite una parada durante la ejecución de ruta.
+        Transición: `pending | en_route | arrived → skipped`.
+
+        Si la ruta está en `dispatched`, esta transición también marca inicio
+        de ejecución (`route.started`) y pasa la ruta a `in_progress`.
+        Si todas las paradas quedan terminales, la ruta se auto-completa.
+
+        Requiere rol `driver`, `logistics` o `admin`.
+        Para `driver`, el acceso está limitado a rutas donde `route.driver_id`
+        coincide con su identidad de conductor.
+      parameters:
+        - in: path
+          name: stop_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteStopSkipRequest'
+      responses:
+        "200":
+          description: Parada omitida (o idempotente)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteStopOut'
+        "401":
+          description: No autenticado
+        "403":
+          description: >
+            RBAC_FORBIDDEN — Rol sin permisos.
+            DRIVER_NOT_LINKED — Usuario driver sin ficha de chofer activa.
+            DRIVER_SCOPE_FORBIDDEN — Ruta asignada a otro chofer.
+        "404":
+          description: ENTITY_NOT_FOUND — Parada o ruta no encontrada
+        "409":
+          description: >
+            INVALID_STATE_TRANSITION — Estado incompatible de parada o ruta.
+
   /incidents:
     post:
       tags: [Incidents]
@@ -2154,6 +2280,86 @@ paths:
           description: No autenticado
         "403":
           description: Rol sin permisos
+
+  /incidents/{incident_id}/review:
+    post:
+      tags: [Incidents]
+      summary: Revisar incidencia
+      description: >
+        Marca una incidencia como `reviewed`.
+        Transición válida: `open → reviewed`.
+
+        Comportamiento:
+          - Si ya está en `reviewed`: 200 idempotente.
+          - Si ya está en `resolved`: 409 INVALID_STATE_TRANSITION.
+
+        Requiere rol `logistics` o `admin`.
+      parameters:
+        - in: path
+          name: incident_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Incidencia revisada (o idempotente)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentOut'
+        "401":
+          description: No autenticado
+        "403":
+          description: RBAC_FORBIDDEN — Rol sin permisos
+        "404":
+          description: ENTITY_NOT_FOUND — Incidencia no encontrada
+        "409":
+          description: INVALID_STATE_TRANSITION — Incidencia ya resuelta
+
+  /incidents/{incident_id}/resolve:
+    post:
+      tags: [Incidents]
+      summary: Resolver incidencia
+      description: >
+        Marca una incidencia como `resolved`.
+        Transición válida: `reviewed → resolved`.
+
+        Comportamiento:
+          - Si ya está en `resolved`: 200 idempotente.
+          - Si está en `open`: 409 INVALID_STATE_TRANSITION.
+
+        Requiere rol `logistics` o `admin`.
+      parameters:
+        - in: path
+          name: incident_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentResolveRequest'
+      responses:
+        "200":
+          description: Incidencia resuelta (o idempotente)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentOut'
+        "401":
+          description: No autenticado
+        "403":
+          description: RBAC_FORBIDDEN — Rol sin permisos
+        "404":
+          description: ENTITY_NOT_FOUND — Incidencia no encontrada
+        "409":
+          description: INVALID_STATE_TRANSITION — Solo incidencias reviewed pueden resolverse
+        "422":
+          description: INVALID_INPUT — resolution_note es obligatorio
 
 components:
   securitySchemes:
@@ -3723,6 +3929,37 @@ components:
           description: >
             Clave de idempotencia. Si coincide con stop.failed previo → 200.
 
+    RouteStopSkipRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          nullable: true
+          maxLength: 500
+          description: Motivo opcional de la omisión de parada
+        idempotency_key:
+          type: string
+          nullable: true
+          description: >
+            Clave de idempotencia. Si coincide con stop.skipped previo → 200.
+
+    RouteNextStopResponse:
+      type: object
+      required: [route_id, remaining_stops]
+      properties:
+        route_id:
+          type: string
+          format: uuid
+        next_stop:
+          allOf:
+            - $ref: '#/components/schemas/RouteStopOut'
+          nullable: true
+          description: Primera parada no terminal de la ruta (null si no quedan)
+        remaining_stops:
+          type: integer
+          minimum: 0
+          description: Número de paradas no terminales pendientes
+
     IncidentCreateRequest:
       type: object
       required: [route_id, type, severity, description]
@@ -3758,6 +3995,16 @@ components:
           description: >
             Clave de idempotencia. Si coincide con incident.reported previo
             para la misma ruta → 200 con incidencia original.
+
+    IncidentResolveRequest:
+      type: object
+      required: [resolution_note]
+      properties:
+        resolution_note:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: Nota de resolución obligatoria
 
     IncidentOut:
       type: object
@@ -3846,7 +4093,8 @@ components:
           description: >
             Valores posibles: route.created, route.planned, route.dispatched, route.started,
             route.completed, route.cancelled, stop.arrived, stop.completed,
-            stop.failed, stop.skipped, stop.en_route, incident.reported
+            stop.failed, stop.skipped, stop.en_route, incident.reported,
+            incident.reviewed, incident.resolved
         actor_type:
           type: string
           enum: [dispatcher, driver, system]

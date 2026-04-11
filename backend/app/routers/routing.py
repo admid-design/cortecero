@@ -58,15 +58,18 @@ from app.models import (
     Vehicle,
 )
 from app.schemas import (
+    IncidentResolveRequest,
     IncidentCreateRequest,
     IncidentOut,
     IncidentsListResponse,
+    RouteNextStopResponse,
     RouteEventsListResponse,
     RouteEventOut,
     RouteOut,
     RouteStopArriveRequest,
     RouteStopCompleteRequest,
     RouteStopFailRequest,
+    RouteStopSkipRequest,
     RouteStopOut,
     RoutesListResponse,
 )
@@ -883,6 +886,76 @@ def get_route_events(
 
 
 # ============================================================================
+# BLOQUE C — VISTAS/ACCIONES CONDUCTOR
+# ============================================================================
+
+
+@router.get("/driver/routes", response_model=RoutesListResponse)
+def list_driver_routes(
+    service_date: date | None = None,
+    status: str | None = None,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.driver, UserRole.logistics, UserRole.admin)),
+) -> RoutesListResponse:
+    """
+    Lista rutas operativas para conductor.
+    - role=driver: scope por chofer activo vinculado al usuario.
+    - role=logistics/admin: lectura sin recorte por chofer.
+    """
+    query = (
+        select(Route)
+        .where(Route.tenant_id == current.tenant_id)
+        .order_by(Route.service_date.desc(), Route.created_at.desc())
+    )
+
+    if current.role == UserRole.driver:
+        driver = _resolve_current_driver(db, current)
+        assert driver is not None
+        query = query.where(Route.driver_id == driver.id)
+
+    if service_date is not None:
+        query = query.where(Route.service_date == service_date)
+    if status is not None:
+        try:
+            status_enum = RouteStatus(status)
+            query = query.where(Route.status == status_enum)
+        except ValueError as exc:
+            raise unprocessable("INVALID_FILTER", f"status '{status}' no es válido") from exc
+
+    rows = list(db.scalars(query))
+    return RoutesListResponse(items=[_serialize_route(db, current.tenant_id, row) for row in rows], total=len(rows))
+
+
+@router.get("/routes/{route_id}/next-stop", response_model=RouteNextStopResponse)
+def get_next_stop(
+    route_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.driver, UserRole.logistics, UserRole.admin)),
+) -> RouteNextStopResponse:
+    """
+    Devuelve la siguiente parada no terminal de una ruta.
+    No tiene side effects.
+    """
+    route = db.scalar(
+        select(Route).where(Route.id == route_id, Route.tenant_id == current.tenant_id)
+    )
+    if not route:
+        raise not_found("ENTITY_NOT_FOUND", "Ruta no encontrada")
+    _assert_driver_scope_for_route(db, current, route)
+
+    stops = list(
+        db.scalars(
+            select(RouteStop)
+            .where(RouteStop.route_id == route.id, RouteStop.tenant_id == current.tenant_id)
+            .order_by(RouteStop.sequence_number, RouteStop.id)
+        )
+    )
+    remaining = [stop for stop in stops if stop.status not in _STOP_TERMINAL]
+    next_stop = _serialize_stop(remaining[0]) if remaining else None
+    return RouteNextStopResponse(route_id=route.id, next_stop=next_stop, remaining_stops=len(remaining))
+
+
+# ============================================================================
 # BLOQUE D — EJECUCIÓN CONDUCTOR
 # ============================================================================
 
@@ -1333,6 +1406,95 @@ def stop_fail(
 
 
 # ============================================================================
+# POST /stops/{stopId}/skip
+# ============================================================================
+
+
+@router.post("/stops/{stop_id}/skip", response_model=RouteStopOut)
+def stop_skip(
+    stop_id: uuid.UUID,
+    payload: RouteStopSkipRequest,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.driver, UserRole.logistics, UserRole.admin)),
+) -> RouteStopOut:
+    """
+    Marca una parada como omitida por ejecución.
+    Transiciones válidas: pending | en_route | arrived → skipped.
+    """
+    stop = _get_stop_guarded(db, current.tenant_id, stop_id)
+    route = _get_route_for_stop(db, current.tenant_id, stop, require_executable=False)
+    _assert_driver_scope_for_route(db, current, route)
+    now = datetime.now(UTC)
+
+    if payload.idempotency_key:
+        existing = _find_idempotent_event(
+            db,
+            tenant_id=current.tenant_id,
+            stop_id=stop_id,
+            event_type=RouteEventType.stop_skipped,
+            idempotency_key=payload.idempotency_key,
+        )
+        if existing:
+            db.refresh(stop)
+            return RouteStopOut.model_validate(stop)
+
+    if stop.status == RouteStopStatus.skipped:
+        return RouteStopOut.model_validate(stop)
+
+    _assert_route_execution_state(route)
+
+    if stop.status not in (RouteStopStatus.pending, RouteStopStatus.en_route, RouteStopStatus.arrived):
+        raise conflict(
+            "INVALID_STATE_TRANSITION",
+            f"La parada está en estado '{stop.status.value}'. No se puede omitir.",
+        )
+
+    if route.status == RouteStatus.dispatched:
+        route.status = RouteStatus.in_progress
+        route.updated_at = now
+        _emit_event(
+            db,
+            tenant_id=current.tenant_id,
+            route_id=route.id,
+            event_type=RouteEventType.route_started,
+            actor_type=RouteEventActorType.driver,
+            actor_id=current.id,
+            metadata={"first_stop_id": str(stop_id)},
+        )
+
+    stop.status = RouteStopStatus.skipped
+    stop.updated_at = now
+
+    _emit_event(
+        db,
+        tenant_id=current.tenant_id,
+        route_id=route.id,
+        route_stop_id=stop_id,
+        event_type=RouteEventType.stop_skipped,
+        actor_type=RouteEventActorType.driver,
+        actor_id=current.id,
+        metadata={
+            "idempotency_key": payload.idempotency_key or "",
+            "order_id": str(stop.order_id),
+            "reason": payload.reason or "",
+            "sequence_number": stop.sequence_number,
+        },
+    )
+
+    db.flush()
+    _auto_complete_route_if_done(db, current.tenant_id, route, current.id, now)
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise conflict("RESOURCE_CONFLICT", "No se pudo omitir la parada") from exc
+
+    db.refresh(stop)
+    return RouteStopOut.model_validate(stop)
+
+
+# ============================================================================
 # POST /incidents
 # ============================================================================
 
@@ -1482,3 +1644,94 @@ def list_incidents(
         items=[IncidentOut.model_validate(r) for r in rows],
         total=len(rows),
     )
+
+
+@router.post("/incidents/{incident_id}/review", response_model=IncidentOut)
+def review_incident(
+    incident_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+) -> IncidentOut:
+    incident = db.scalar(
+        select(Incident).where(Incident.id == incident_id, Incident.tenant_id == current.tenant_id)
+    )
+    if not incident:
+        raise not_found("ENTITY_NOT_FOUND", "Incidencia no encontrada")
+
+    if incident.status == IncidentStatus.resolved:
+        raise conflict("INVALID_STATE_TRANSITION", "No se puede revisar una incidencia ya resuelta")
+    if incident.status == IncidentStatus.reviewed:
+        return IncidentOut.model_validate(incident)
+
+    now = datetime.now(UTC)
+    incident.status = IncidentStatus.reviewed
+    incident.reviewed_at = now
+    incident.updated_at = now
+
+    _emit_event(
+        db,
+        tenant_id=current.tenant_id,
+        route_id=incident.route_id,
+        route_stop_id=incident.route_stop_id,
+        event_type=RouteEventType.incident_reviewed,
+        actor_type=RouteEventActorType.dispatcher,
+        actor_id=current.id,
+        metadata={"incident_id": str(incident.id)},
+    )
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise conflict("RESOURCE_CONFLICT", "No se pudo revisar la incidencia") from exc
+
+    db.refresh(incident)
+    return IncidentOut.model_validate(incident)
+
+
+@router.post("/incidents/{incident_id}/resolve", response_model=IncidentOut)
+def resolve_incident(
+    incident_id: uuid.UUID,
+    payload: IncidentResolveRequest,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+) -> IncidentOut:
+    incident = db.scalar(
+        select(Incident).where(Incident.id == incident_id, Incident.tenant_id == current.tenant_id)
+    )
+    if not incident:
+        raise not_found("ENTITY_NOT_FOUND", "Incidencia no encontrada")
+
+    if incident.status == IncidentStatus.resolved:
+        return IncidentOut.model_validate(incident)
+    if incident.status != IncidentStatus.reviewed:
+        raise conflict(
+            "INVALID_STATE_TRANSITION",
+            "Solo incidencias en estado 'reviewed' pueden resolverse",
+        )
+
+    now = datetime.now(UTC)
+    incident.status = IncidentStatus.resolved
+    incident.resolved_at = now
+    incident.resolution_note = payload.resolution_note
+    incident.updated_at = now
+
+    _emit_event(
+        db,
+        tenant_id=current.tenant_id,
+        route_id=incident.route_id,
+        route_stop_id=incident.route_stop_id,
+        event_type=RouteEventType.incident_resolved,
+        actor_type=RouteEventActorType.dispatcher,
+        actor_id=current.id,
+        metadata={"incident_id": str(incident.id)},
+    )
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise conflict("RESOURCE_CONFLICT", "No se pudo resolver la incidencia") from exc
+
+    db.refresh(incident)
+    return IncidentOut.model_validate(incident)
