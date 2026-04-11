@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.deps import CurrentUser, require_roles
-from app.errors import conflict, not_found, unprocessable
+from app.errors import conflict, forbidden, not_found, unprocessable
 from app.optimization.mock_provider import MockRouteOptimizationProvider
 from app.optimization.protocol import OptimizationRequest, OptimizationWaypoint, RouteOptimizationProvider
 from app.models import (
@@ -903,19 +903,62 @@ def _get_stop_guarded(db: Session, tenant_id: uuid.UUID, stop_id: uuid.UUID) -> 
     return stop
 
 
-def _get_route_for_stop(db: Session, tenant_id: uuid.UUID, stop: RouteStop) -> Route:
-    """Obtiene la ruta de una parada y verifica que esté en estado ejecutable."""
+def _get_route_for_stop(
+    db: Session,
+    tenant_id: uuid.UUID,
+    stop: RouteStop,
+    *,
+    require_executable: bool = True,
+) -> Route:
+    """Obtiene la ruta de una parada y opcionalmente valida estado ejecutable."""
     route = db.scalar(
         select(Route).where(Route.id == stop.route_id, Route.tenant_id == tenant_id)
     )
     if not route:
         raise not_found("ENTITY_NOT_FOUND", "Ruta de la parada no encontrada")
-    if route.status not in (RouteStatus.dispatched, RouteStatus.in_progress):
+    if require_executable and route.status not in (RouteStatus.dispatched, RouteStatus.in_progress):
         raise conflict(
             "INVALID_STATE_TRANSITION",
             f"La ruta está en estado '{route.status.value}'. Solo se admiten transiciones en rutas despachadas o en progreso.",
         )
     return route
+
+
+def _resolve_current_driver(db: Session, current: CurrentUser) -> Driver | None:
+    if current.role != UserRole.driver:
+        return None
+    driver = db.scalar(
+        select(Driver).where(
+            Driver.id == current.id,
+            Driver.tenant_id == current.tenant_id,
+            Driver.is_active.is_(True),
+        )
+    )
+    if not driver:
+        raise forbidden(
+            "DRIVER_NOT_LINKED",
+            "Usuario con rol driver sin ficha de chofer activa",
+        )
+    return driver
+
+
+def _assert_driver_scope_for_route(db: Session, current: CurrentUser, route: Route) -> None:
+    driver = _resolve_current_driver(db, current)
+    if driver is None:
+        return
+    if route.driver_id is None or route.driver_id != driver.id:
+        raise forbidden(
+            "DRIVER_SCOPE_FORBIDDEN",
+            "No puedes operar rutas asignadas a otro chofer",
+        )
+
+
+def _assert_route_execution_state(route: Route) -> None:
+    if route.status not in (RouteStatus.dispatched, RouteStatus.in_progress):
+        raise conflict(
+            "INVALID_STATE_TRANSITION",
+            f"La ruta está en estado '{route.status.value}'. Solo se admiten transiciones en rutas despachadas o en progreso.",
+        )
 
 
 def _find_idempotent_event(
@@ -981,7 +1024,7 @@ def stop_arrive(
     stop_id: uuid.UUID,
     payload: RouteStopArriveRequest,
     db: Session = Depends(get_db),
-    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+    current: CurrentUser = Depends(require_roles(UserRole.driver, UserRole.logistics, UserRole.admin)),
 ) -> RouteStopOut:
     """
     El chofer llega a la parada.
@@ -993,7 +1036,8 @@ def stop_arrive(
       - Estado terminal o incompatible → 409.
     """
     stop = _get_stop_guarded(db, current.tenant_id, stop_id)
-    route = _get_route_for_stop(db, current.tenant_id, stop)
+    route = _get_route_for_stop(db, current.tenant_id, stop, require_executable=False)
+    _assert_driver_scope_for_route(db, current, route)
     now = datetime.now(UTC)
 
     # Idempotencia: clave duplicada
@@ -1012,6 +1056,8 @@ def stop_arrive(
     # Idempotencia: estado ya aplicado sin clave
     if stop.status == RouteStopStatus.arrived:
         return RouteStopOut.model_validate(stop)
+
+    _assert_route_execution_state(route)
 
     # Conflicto de estado
     if stop.status not in (RouteStopStatus.pending, RouteStopStatus.en_route):
@@ -1073,7 +1119,7 @@ def stop_complete(
     stop_id: uuid.UUID,
     payload: RouteStopCompleteRequest,
     db: Session = Depends(get_db),
-    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+    current: CurrentUser = Depends(require_roles(UserRole.driver, UserRole.logistics, UserRole.admin)),
 ) -> RouteStopOut:
     """
     El chofer confirma la entrega.
@@ -1087,6 +1133,8 @@ def stop_complete(
       - Estado incompatible → 409.
     """
     stop = _get_stop_guarded(db, current.tenant_id, stop_id)
+    route = _get_route_for_stop(db, current.tenant_id, stop, require_executable=False)
+    _assert_driver_scope_for_route(db, current, route)
     now = datetime.now(UTC)
 
     # Idempotencia: clave duplicada
@@ -1106,7 +1154,7 @@ def stop_complete(
     if stop.status == RouteStopStatus.completed:
         return RouteStopOut.model_validate(stop)
 
-    route = _get_route_for_stop(db, current.tenant_id, stop)
+    _assert_route_execution_state(route)
 
     # Conflicto de estado
     if stop.status != RouteStopStatus.arrived:
@@ -1181,7 +1229,7 @@ def stop_fail(
     stop_id: uuid.UUID,
     payload: RouteStopFailRequest,
     db: Session = Depends(get_db),
-    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+    current: CurrentUser = Depends(require_roles(UserRole.driver, UserRole.logistics, UserRole.admin)),
 ) -> RouteStopOut:
     """
     El chofer reporta entrega fallida.
@@ -1196,6 +1244,8 @@ def stop_fail(
       - Estado incompatible → 409.
     """
     stop = _get_stop_guarded(db, current.tenant_id, stop_id)
+    route = _get_route_for_stop(db, current.tenant_id, stop, require_executable=False)
+    _assert_driver_scope_for_route(db, current, route)
     now = datetime.now(UTC)
 
     # Idempotencia: clave duplicada
@@ -1215,7 +1265,7 @@ def stop_fail(
     if stop.status == RouteStopStatus.failed:
         return RouteStopOut.model_validate(stop)
 
-    route = _get_route_for_stop(db, current.tenant_id, stop)
+    _assert_route_execution_state(route)
 
     # Conflicto de estado
     if stop.status != RouteStopStatus.arrived:
@@ -1292,7 +1342,7 @@ def create_incident(
     payload: IncidentCreateRequest,
     response: Response,
     db: Session = Depends(get_db),
-    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+    current: CurrentUser = Depends(require_roles(UserRole.driver, UserRole.logistics, UserRole.admin)),
 ) -> IncidentOut:
     """
     El chofer registra una incidencia en ruta.
@@ -1314,6 +1364,7 @@ def create_incident(
             "INVALID_STATE_TRANSITION",
             f"No se pueden registrar incidencias en rutas en estado '{route.status.value}'.",
         )
+    _assert_driver_scope_for_route(db, current, route)
 
     # Verificar parada si se proporciona
     if payload.route_stop_id is not None:

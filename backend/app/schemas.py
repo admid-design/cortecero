@@ -554,7 +554,7 @@ class CustomerOperationalExceptionsListResponse(BaseModel):
 class UserCreateRequest(BaseModel):
     email: EmailStr
     full_name: str = Field(min_length=1, max_length=160)
-    role: Literal["office", "logistics", "admin"]
+    role: Literal["office", "logistics", "admin", "driver"]
     password: str = Field(min_length=8, max_length=128)
     is_active: bool = True
 
@@ -562,7 +562,7 @@ class UserCreateRequest(BaseModel):
 class UserUpdateRequest(BaseModel):
     email: EmailStr | None = None
     full_name: str | None = Field(default=None, min_length=1, max_length=160)
-    role: Literal["office", "logistics", "admin"] | None = None
+    role: Literal["office", "logistics", "admin", "driver"] | None = None
     password: str | None = Field(default=None, min_length=8, max_length=128)
     is_active: bool | None = None
 

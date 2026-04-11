@@ -29,6 +29,7 @@ class UserRole(str, enum.Enum):
     office = "office"
     logistics = "logistics"
     admin = "admin"
+    driver = "driver"
 
 
 class PlanStatus(str, enum.Enum):
