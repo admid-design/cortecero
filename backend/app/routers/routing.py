@@ -30,10 +30,14 @@ from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import get_db
 from app.deps import CurrentUser, require_roles
 from app.errors import conflict, not_found, unprocessable
+from app.optimization.mock_provider import MockRouteOptimizationProvider
+from app.optimization.protocol import OptimizationRequest, OptimizationWaypoint, RouteOptimizationProvider
 from app.models import (
+    Customer,
     Driver,
     Incident,
     IncidentSeverity,
@@ -223,7 +227,7 @@ def plan_routes(
     Genera rutas para un plan dado.
     Recibe: plan_id, lista de (vehicle_id, order_ids, driver_id opcional)
     Cada ítem genera una Route con sus RouteStops en orden.
-    Persiste plan versionado con status=planned.
+    Persiste rutas en status=draft (optimizables antes de despacho).
     Actualiza order.status = assigned.
 
     Payload esperado:
@@ -359,7 +363,8 @@ def plan_routes(
                     f"Pedido {order_uuid} en estado '{order.status.value}' no puede asignarse a ruta",
                 )
 
-        # Crear ruta
+        # Crear ruta en estado draft; la optimización aplica secuencia final
+        # y transiciona la ruta a planned.
         route = Route(
             id=uuid.uuid4(),
             tenant_id=current.tenant_id,
@@ -367,7 +372,7 @@ def plan_routes(
             vehicle_id=vehicle_uuid,
             driver_id=driver_uuid,
             service_date=svc_date,
-            status=RouteStatus.planned,
+            status=RouteStatus.draft,
             version=next_version,
             optimization_request_id=None,
             optimization_response_json=None,
@@ -407,12 +412,12 @@ def plan_routes(
                 order.status = OrderStatus.assigned
                 order.updated_at = now
 
-        # Emitir evento route.planned
+        # Emitir evento route.created (route.planned se emite tras optimize)
         _emit_event(
             db,
             tenant_id=current.tenant_id,
             route_id=route.id,
-            event_type=RouteEventType.route_planned,
+            event_type=RouteEventType.route_created,
             actor_type=RouteEventActorType.dispatcher,
             actor_id=current.id,
             metadata={
@@ -504,6 +509,130 @@ def dispatch_route(
     except IntegrityError as exc:
         db.rollback()
         raise conflict("RESOURCE_CONFLICT", "No se pudo despachar la ruta") from exc
+
+    db.refresh(route)
+    return _serialize_route(db, current.tenant_id, route)
+
+
+# ============================================================================
+# POST /routes/{routeId}/optimize
+# ============================================================================
+
+
+def _get_optimization_provider() -> RouteOptimizationProvider:
+    # E.1: proveedor mock por defecto. E.2 integrará proveedor real.
+    return MockRouteOptimizationProvider()
+
+
+@router.post("/routes/{route_id}/optimize", response_model=RouteOut)
+def optimize_route(
+    route_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+) -> RouteOut:
+    route = db.scalar(
+        select(Route).where(Route.id == route_id, Route.tenant_id == current.tenant_id)
+    )
+    if not route:
+        raise not_found("ENTITY_NOT_FOUND", "Ruta no encontrada")
+    if route.status != RouteStatus.draft:
+        raise conflict(
+            "INVALID_STATE_TRANSITION",
+            f"Solo rutas en estado 'draft' pueden optimizarse. Estado actual: '{route.status.value}'",
+        )
+
+    stops = list(
+        db.scalars(
+            select(RouteStop)
+            .where(RouteStop.route_id == route_id, RouteStop.tenant_id == current.tenant_id)
+            .order_by(RouteStop.sequence_number, RouteStop.id)
+        )
+    )
+    if not stops:
+        raise unprocessable("INVALID_ROUTE", "La ruta no tiene paradas")
+
+    missing_geo: list[str] = []
+    waypoints: list[OptimizationWaypoint] = []
+    for stop in stops:
+        order = db.scalar(
+            select(Order).where(Order.id == stop.order_id, Order.tenant_id == current.tenant_id)
+        )
+        if not order:
+            raise not_found("ENTITY_NOT_FOUND", f"Pedido {stop.order_id} no encontrado")
+
+        customer = db.scalar(
+            select(Customer).where(
+                Customer.id == order.customer_id,
+                Customer.tenant_id == current.tenant_id,
+            )
+        )
+        if not customer or customer.lat is None or customer.lng is None:
+            missing_geo.append(str(order.id))
+            continue
+
+        waypoints.append(
+            OptimizationWaypoint(
+                order_id=order.id,
+                lat=float(customer.lat),
+                lng=float(customer.lng),
+                service_minutes=stop.estimated_service_minutes,
+            )
+        )
+
+    if missing_geo:
+        raise unprocessable(
+            "MISSING_GEO",
+            f"Los siguientes pedidos tienen cliente sin coordenadas: {', '.join(missing_geo)}",
+        )
+
+    request = OptimizationRequest(
+        route_id=route.id,
+        depot_lat=settings.route_optimization_depot_lat,
+        depot_lng=settings.route_optimization_depot_lng,
+        waypoints=waypoints,
+    )
+    provider = _get_optimization_provider()
+    try:
+        result = provider.optimize(request)
+    except Exception as exc:
+        raise conflict(
+            "OPTIMIZATION_PROVIDER_ERROR",
+            f"El proveedor de optimización falló: {exc}",
+        ) from exc
+
+    now = datetime.now(UTC)
+    stops_by_order_id = {str(stop.order_id): stop for stop in stops}
+    for optimized_stop in result.stops:
+        db_stop = stops_by_order_id.get(str(optimized_stop.order_id))
+        if not db_stop:
+            continue
+        db_stop.sequence_number = optimized_stop.sequence_number
+        db_stop.estimated_arrival_at = optimized_stop.estimated_arrival_at
+        db_stop.updated_at = now
+
+    route.status = RouteStatus.planned
+    route.optimization_request_id = result.request_id
+    route.optimization_response_json = result.response_json
+    route.updated_at = now
+
+    _emit_event(
+        db,
+        tenant_id=current.tenant_id,
+        route_id=route.id,
+        event_type=RouteEventType.route_planned,
+        actor_type=RouteEventActorType.system,
+        actor_id=None,
+        metadata={
+            "optimization_request_id": result.request_id,
+            "stop_count": len(result.stops),
+        },
+    )
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise conflict("RESOURCE_CONFLICT", "No se pudo persistir la optimización") from exc
 
     db.refresh(route)
     return _serialize_route(db, current.tenant_id, route)

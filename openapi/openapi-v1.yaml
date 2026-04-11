@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CorteCero API
-  version: 1.1.0
+  version: 1.2.0
   description: >
     API MVP para control de cut-off, planes diarios por zona, pedidos tardíos,
     excepciones y auditoría.
@@ -1791,6 +1791,57 @@ paths:
         "422":
           description: >
             INVALID_STATE_TRANSITION — La ruta no está en estado 'planned'
+
+  /routes/{route_id}/optimize:
+    post:
+      tags: [Routing]
+      summary: Optimizar ruta (draft → planned)
+      description: >
+        Llama al proveedor de optimización configurado para calcular la secuencia
+        óptima de paradas. Transición de estado: draft → planned.
+
+        Precondiciones:
+          - La ruta debe existir y pertenecer al tenant del token.
+          - La ruta debe estar en estado 'draft'.
+          - Todos los clientes de los pedidos de la ruta deben tener lat y lng definidos.
+
+        Efectos:
+          - Reordena RouteStop.sequence_number según el resultado del optimizador.
+          - Popula RouteStop.estimated_arrival_at en cada parada.
+          - Persiste optimization_request_id y optimization_response_json en Route.
+          - Emite evento route.planned (actor_type: system).
+      operationId: optimizeRoute
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: route_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Ruta optimizada y en estado 'planned'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RouteOut"
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol sin permisos (requiere logistics o admin)
+        "404":
+          description: ENTITY_NOT_FOUND — Ruta no encontrada
+        "409":
+          description: >
+            INVALID_STATE_TRANSITION — La ruta no está en estado 'draft'.
+            OPTIMIZATION_PROVIDER_ERROR — El proveedor de optimización falló.
+        "422":
+          description: >
+            MISSING_GEO — Uno o más pedidos tienen cliente sin coordenadas (lat/lng).
+            El campo detail.message lista los order_ids afectados.
+            INVALID_ROUTE — La ruta no tiene paradas.
 
   /routes/{route_id}/move-stop:
     post:
@@ -3773,7 +3824,7 @@ components:
         event_type:
           type: string
           description: >
-            Valores posibles: route.planned, route.dispatched, route.started,
+            Valores posibles: route.created, route.planned, route.dispatched, route.started,
             route.completed, route.cancelled, stop.arrived, stop.completed,
             stop.failed, stop.skipped, stop.en_route, incident.reported
         actor_type:
