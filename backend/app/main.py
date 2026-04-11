@@ -11,10 +11,12 @@ from app.routers import (
     audit,
     auth,
     dashboard,
+    drivers,
     exports,
     exceptions,
     orders,
     plans,
+    routing,
 )
 
 
@@ -46,3 +48,5 @@ app.include_router(admin_customers.router)
 app.include_router(admin_products.router)
 app.include_router(admin_users.router)
 app.include_router(admin_tenant_settings.router)
+app.include_router(drivers.router)
+app.include_router(routing.router)

@@ -423,18 +423,10 @@ def seed() -> None:
             ("Pto Pollensa",            "09:00", "Europe/Madrid"),
         ]:
             zone = db.scalar(select(Zone).where(Zone.tenant_id == tenant.id, Zone.name == z_name))
+            # No crear zonas adicionales en el seed base para evitar
+            # alterar el orden/selección de zonas del tenant demo.
             if not zone:
-                zone = Zone(
-                    id=uuid.uuid4(),
-                    tenant_id=tenant.id,
-                    name=z_name,
-                    default_cutoff_time=datetime.strptime(cutoff_str, "%H:%M").time(),
-                    timezone=tz,
-                    active=True,
-                    created_at=now_utc(),
-                )
-                db.add(zone)
-                db.flush()
+                continue
             kelko_zones[z_name] = zone
 
         # ------------------------------------------------------------------

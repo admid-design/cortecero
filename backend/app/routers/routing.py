@@ -958,7 +958,6 @@ def stop_complete(
       - Estado incompatible → 409.
     """
     stop = _get_stop_guarded(db, current.tenant_id, stop_id)
-    route = _get_route_for_stop(db, current.tenant_id, stop)
     now = datetime.now(UTC)
 
     # Idempotencia: clave duplicada
@@ -978,11 +977,27 @@ def stop_complete(
     if stop.status == RouteStopStatus.completed:
         return RouteStopOut.model_validate(stop)
 
+    route = _get_route_for_stop(db, current.tenant_id, stop)
+
     # Conflicto de estado
     if stop.status != RouteStopStatus.arrived:
         raise conflict(
             "INVALID_STATE_TRANSITION",
             f"La parada está en estado '{stop.status.value}'. Solo se puede completar desde 'arrived'.",
+        )
+
+    # Si la ruta aún está en dispatched, la ejecución real empieza en la primera transición de parada.
+    if route.status == RouteStatus.dispatched:
+        route.status = RouteStatus.in_progress
+        route.updated_at = now
+        _emit_event(
+            db,
+            tenant_id=current.tenant_id,
+            route_id=route.id,
+            event_type=RouteEventType.route_started,
+            actor_type=RouteEventActorType.driver,
+            actor_id=current.id,
+            metadata={"first_stop_id": str(stop_id)},
         )
 
     # Transición stop
@@ -1052,7 +1067,6 @@ def stop_fail(
       - Estado incompatible → 409.
     """
     stop = _get_stop_guarded(db, current.tenant_id, stop_id)
-    route = _get_route_for_stop(db, current.tenant_id, stop)
     now = datetime.now(UTC)
 
     # Idempotencia: clave duplicada
@@ -1072,11 +1086,27 @@ def stop_fail(
     if stop.status == RouteStopStatus.failed:
         return RouteStopOut.model_validate(stop)
 
+    route = _get_route_for_stop(db, current.tenant_id, stop)
+
     # Conflicto de estado
     if stop.status != RouteStopStatus.arrived:
         raise conflict(
             "INVALID_STATE_TRANSITION",
             f"La parada está en estado '{stop.status.value}'. Solo se puede fallar desde 'arrived'.",
+        )
+
+    # Si la ruta aún está en dispatched, la ejecución real empieza en la primera transición de parada.
+    if route.status == RouteStatus.dispatched:
+        route.status = RouteStatus.in_progress
+        route.updated_at = now
+        _emit_event(
+            db,
+            tenant_id=current.tenant_id,
+            route_id=route.id,
+            event_type=RouteEventType.route_started,
+            actor_type=RouteEventActorType.driver,
+            actor_id=current.id,
+            metadata={"first_stop_id": str(stop_id)},
         )
 
     # Transición stop
