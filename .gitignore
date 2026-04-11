@@ -11,5 +11,10 @@ frontend/.next/
 backend/.env
 frontend/.env.local
 
+# Private local data (never commit)
+backend/private/
+backend/private_data/
+backend/app/seed_private.py
+
 # OS
 .DS_Store

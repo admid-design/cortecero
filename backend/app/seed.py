@@ -113,22 +113,21 @@ def seed() -> None:
             db.add(zone_b)
             db.flush()
 
-        # Coordenadas reales de puntos de entrega en Mallorca (Bloque G).
-        # Centro = Palma centro urbano; Costa = costa norte/este.
-        # Fuente: Google Maps, puntos representativos de polígonos y comercios.
+        # Dataset geográfico sintético para demo/local.
+        # No contiene ubicaciones ni direcciones reales de clientes.
         _customer_geo = [
-            # Centro (zone_a) — Palma
-            ("Cliente 01", 39.5696,  2.6502, "Passeig del Born 12, Palma"),
-            ("Cliente 02", 39.5753,  2.6541, "Plaça d'Espanya 5, Palma"),
-            ("Cliente 03", 39.5820,  2.6618, "Polígon Son Castelló, Palma"),
-            ("Cliente 04", 39.6172,  2.6496, "Camí Vell de Bunyola 39, Palma"),
-            ("Cliente 05", 39.5564,  2.6267, "C/ Arxiduc Lluís Salvador 8, Palma"),
-            # Costa (zone_b) — norte
-            ("Cliente 06", 39.8531,  3.1207, "Plaça Constitució 3, Alcúdia"),
-            ("Cliente 07", 39.7590,  3.1543, "Av. Diagonal, Can Picafort"),
-            ("Cliente 08", 39.7089,  3.4593, "C/ Leonor Servera 42, Cala Ratjada"),
-            ("Cliente 09", 39.7989,  3.1210, "C/ Marjals 7, Playa de Muro"),
-            ("Cliente 10", 39.9121,  3.0762, "Passeig Anglada Camarassa, Pto Pollensa"),
+            # Centro (zone_a)
+            ("Cliente 01", 40.1010, -3.7020, "Avenida Demo Centro 1"),
+            ("Cliente 02", 40.1040, -3.6990, "Calle Demo Centro 2"),
+            ("Cliente 03", 40.1080, -3.7050, "Parque Empresarial Centro 3"),
+            ("Cliente 04", 40.1120, -3.6960, "Ronda Demo Centro 4"),
+            ("Cliente 05", 40.0990, -3.7080, "Plaza Demo Centro 5"),
+            # Costa (zone_b)
+            ("Cliente 06", 39.8040, -0.0770, "Avenida Demo Costa 6"),
+            ("Cliente 07", 39.8090, -0.0810, "Calle Demo Costa 7"),
+            ("Cliente 08", 39.8130, -0.0720, "Puerto Demo Costa 8"),
+            ("Cliente 09", 39.7980, -0.0860, "Poligono Demo Costa 9"),
+            ("Cliente 10", 39.8180, -0.0690, "Paseo Demo Costa 10"),
         ]
 
         customers = []
@@ -331,30 +330,23 @@ def seed() -> None:
         )
 
         # ========================================================================
-        # ROUTING POC SEED DATA — Flota real Kelko Mallorca
-        # Fuente: Kelko - Flota Vehiculos.xlsx + Scan_fichatec.vehiculs.pdf
-        # Turno: 07:00–15:00 | Almacén: 39.6578°N, 2.7384°E (Binissalem)
+        # ROUTING POC SEED DATA — Flota demo sintética
+        # Dataset no identificable para desarrollo local y tests.
         # ========================================================================
 
         # ------------------------------------------------------------------
-        # Vehículos reales Kelko
-        # code = matrícula | name = descripción operativa
-        # capacity_kg = carga útil (MTMA – tara) según ficha técnica / flota
-        # Nota ZBE Palma (restricciones DGT):
-        #   - 7157CMP: PROHIBIDO zona ZBE Palma (sin etiqueta ambiental)
-        #   - 4093DWM: restringido desde 2027 (etiqueta C)
+        # Vehículos demo
+        # code = identificador interno sintético
+        # capacity_kg = capacidad de carga en kg (dataset de ejemplo)
         # ------------------------------------------------------------------
         vehicles = {}
         for code, name, capacity in [
-            # Camiones grandes (carnet C, turno completo)
-            ("0866GFC", "IVECO ML140E22 14T – Tito",        7580.0),   # tara 6420, MTMA 14000
-            ("0698FPH", "IVECO ML100E22 10T – Amengual",    4975.0),   # tara 5025, MTMA 10000
-            ("5520MPL", "DAF 12T – Dani",                   6145.0),   # MTMA ~12000
-            # Furgonetas (carnet B)
-            ("7822HXS", "Furgoneta 2T – Marcelo",           1500.0),
-            ("4093DWM", "Furgoneta 2T – Tomeu",             1400.0),   # ZBE restringida desde 2027
-            # Vehículo reserva/incidencias
-            ("7157CMP", "Camión reserva – ZBE prohibido",   3500.0),   # NO apto zona ZBE Palma
+            ("VH-001", "Camion Demo A 14T", 7600.0),
+            ("VH-002", "Camion Demo B 10T", 5000.0),
+            ("VH-003", "Camion Demo C 12T", 6100.0),
+            ("VH-004", "Furgon Demo D 2T", 1500.0),
+            ("VH-005", "Furgon Demo E 2T", 1400.0),
+            ("VH-006", "Vehiculo Reserva Demo", 3500.0),
         ]:
             vehicle = db.scalar(select(Vehicle).where(Vehicle.tenant_id == tenant.id, Vehicle.code == code))
             if not vehicle:
@@ -364,7 +356,7 @@ def seed() -> None:
                     code=code,
                     name=name,
                     capacity_kg=capacity,
-                    active=(code != "7157CMP"),  # reserva fuera de rotación activa
+                    active=(code != "VH-006"),  # reserva fuera de rotación activa
                     created_at=now_utc(),
                 )
                 db.add(vehicle)
@@ -372,21 +364,17 @@ def seed() -> None:
             vehicles[code] = vehicle
 
         # ------------------------------------------------------------------
-        # Choferes reales Kelko
-        # Fuente: hoja "Choferes" de Kelko - Flota Vehiculos.xlsx
-        # phone = placeholder operativo (formato ES)
-        # ADR: Tito y Amengual certificados para mercancías peligrosas
+        # Conductores demo
+        # phone = identificador telefónico sintético de ejemplo
         # ------------------------------------------------------------------
         drivers = {}
         for drv_key, name, phone, vehicle_code in [
-            # Carnet C (camiones)
-            ("tito",      "Tito",      "600100101", "0866GFC"),
-            ("amengual",  "Amengual",  "600100102", "0698FPH"),
-            ("dani",      "Dani",      "600100103", "5520MPL"),
-            ("juan",      "Juan",      "600100104", None),         # carnet C, sin camión fijo
-            # Carnet B (furgonetas)
-            ("marcelo",   "Marcelo",   "600100105", "7822HXS"),
-            ("tomeu",     "Tomeu",     "600100106", "4093DWM"),
+            ("driver_a", "Driver A", "700000101", "VH-001"),
+            ("driver_b", "Driver B", "700000102", "VH-002"),
+            ("driver_c", "Driver C", "700000103", "VH-003"),
+            ("driver_d", "Driver D", "700000104", None),
+            ("driver_e", "Driver E", "700000105", "VH-004"),
+            ("driver_f", "Driver F", "700000106", "VH-005"),
         ]:
             driver = db.scalar(select(Driver).where(Driver.tenant_id == tenant.id, Driver.phone == phone))
             if not driver:
@@ -406,42 +394,35 @@ def seed() -> None:
             drivers[drv_key] = driver
 
         # ------------------------------------------------------------------
-        # Zonas operativas Kelko — calendario invierno (vigente actual)
-        # Fuente: Kelko - Rutas Invierno _ Verano.xlsx
-        # Invierno (nov–feb): 3 zonas/día
-        # Verano  (mar–oct): 7 zonas/día
+        # Zonas de referencia sintéticas para ruteo demo.
+        # Solo se usan si ya existen en el tenant (no se crean automáticamente).
         # ------------------------------------------------------------------
-        kelko_zones = {}
+        routing_demo_zones = {}
         for z_name, cutoff_str, tz in [
-            ("Palma",                   "09:30", "Europe/Madrid"),
-            ("Alcudia",                 "09:00", "Europe/Madrid"),
-            ("Cala Ratjada-Cala Millor-Bares", "09:00", "Europe/Madrid"),
-            # Zonas verano (inactivas en temporada baja)
-            ("Can Picafort",            "09:00", "Europe/Madrid"),
-            ("Playas de Muro",          "09:00", "Europe/Madrid"),
-            ("Pto Alcudia",             "09:00", "Europe/Madrid"),
-            ("Pto Pollensa",            "09:00", "Europe/Madrid"),
+            ("Centro", "10:00", "Europe/Madrid"),
+            ("Costa", "09:30", "Europe/Madrid"),
+            ("Periferia", "09:00", "Europe/Madrid"),
         ]:
             zone = db.scalar(select(Zone).where(Zone.tenant_id == tenant.id, Zone.name == z_name))
             # No crear zonas adicionales en el seed base para evitar
             # alterar el orden/selección de zonas del tenant demo.
             if not zone:
                 continue
-            kelko_zones[z_name] = zone
+            routing_demo_zones[z_name] = zone
 
         # ------------------------------------------------------------------
-        # Rutas draft para el día actual — una por zona activa (invierno)
+        # Rutas draft demo para el día actual.
         # Se crean solo si existe un plan locked para esa zona
         # ------------------------------------------------------------------
         routes = {}
         route_service_date = datetime.now(UTC).date()
         active_zone_driver_vehicle = [
-            ("Palma",                           "tito",     "0866GFC"),
-            ("Alcudia",                         "amengual", "0698FPH"),
-            ("Cala Ratjada-Cala Millor-Bares",  "dani",     "5520MPL"),
+            ("Centro", "driver_a", "VH-001"),
+            ("Costa", "driver_b", "VH-002"),
+            ("Periferia", "driver_c", "VH-003"),
         ]
         for i, (z_name, drv_key, v_code) in enumerate(active_zone_driver_vehicle):
-            zone_obj = kelko_zones.get(z_name)
+            zone_obj = routing_demo_zones.get(z_name)
             if not zone_obj:
                 continue
             plan = db.scalar(
@@ -488,10 +469,10 @@ def seed() -> None:
         print(" - office@demo.cortecero.app / office123")
         print(" - logistics@demo.cortecero.app / logistics123")
         print(" - admin@demo.cortecero.app / admin123")
-        print("Routing POC — Flota Kelko:")
+        print("Routing POC — Flota demo:")
         print(f" - {len(vehicles)} vehículos ({sum(1 for v in vehicles.values() if v.active)} activos)")
         print(f" - {len(drivers)} choferes")
-        print(f" - {len(kelko_zones)} zonas operativas")
+        print(f" - {len(routing_demo_zones)} zonas de referencia")
         print(f" - {len(routes)} rutas draft creadas")
     finally:
         db.close()
