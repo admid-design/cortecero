@@ -1,4 +1,4 @@
-export type UserRole = "office" | "logistics" | "admin";
+export type UserRole = "office" | "logistics" | "admin" | "driver";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -356,6 +356,56 @@ export type RouteNextStopResponse = {
   remaining_stops: number;
 };
 
+// ── Driver stop actions ─────────────────────────────────────────────────────
+export type RouteStopArriveRequest = { idempotency_key?: string | null };
+export type RouteStopCompleteRequest = { idempotency_key?: string | null };
+export type RouteStopFailRequest = { failure_reason: string; idempotency_key?: string | null };
+export type RouteStopSkipRequest = { reason?: string | null; idempotency_key?: string | null };
+
+// ── Incidents ───────────────────────────────────────────────────────────────
+export type IncidentType =
+  | "access_blocked"
+  | "customer_absent"
+  | "customer_rejected"
+  | "vehicle_issue"
+  | "wrong_address"
+  | "damaged_goods"
+  | "other";
+
+export type IncidentSeverity = "low" | "medium" | "high" | "critical";
+export type IncidentStatus = "open" | "reviewed" | "resolved";
+
+export type IncidentCreateRequest = {
+  route_id: string;
+  route_stop_id?: string | null;
+  type: IncidentType;
+  severity: IncidentSeverity;
+  description: string;
+  idempotency_key?: string | null;
+};
+
+export type IncidentOut = {
+  id: string;
+  route_id: string;
+  route_stop_id: string | null;
+  driver_id: string;
+  type: IncidentType;
+  severity: IncidentSeverity;
+  description: string;
+  status: IncidentStatus;
+  reported_at: string;
+  reviewed_at: string | null;
+  resolved_at: string | null;
+  resolution_note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IncidentsListResponse = {
+  items: IncidentOut[];
+  total: number;
+};
+
 export type PlanCapacityAlert = {
   plan_id: string;
   service_date: string;
@@ -621,6 +671,52 @@ export async function listRouteEvents(token: string, routeId: string): Promise<L
 
 export async function getRouteNextStop(token: string, routeId: string): Promise<RouteNextStopResponse> {
   return request<RouteNextStopResponse>(`/routes/${routeId}/next-stop`, { token });
+}
+
+// ── Driver-scoped route listing ─────────────────────────────────────────────
+export async function getDriverRoutes(
+  token: string,
+  params: { service_date?: string; status?: RoutingRouteStatus } = {},
+): Promise<ListResponse<RoutingRoute>> {
+  return request<ListResponse<RoutingRoute>>(`/driver/routes${buildQuery(params)}`, { token });
+}
+
+// ── Stop execution actions ──────────────────────────────────────────────────
+export async function arriveStop(
+  token: string,
+  stopId: string,
+  payload: RouteStopArriveRequest = {},
+): Promise<RoutingRouteStop> {
+  return request<RoutingRouteStop>(`/stops/${stopId}/arrive`, { token, method: "POST", body: payload });
+}
+
+export async function completeStop(
+  token: string,
+  stopId: string,
+  payload: RouteStopCompleteRequest = {},
+): Promise<RoutingRouteStop> {
+  return request<RoutingRouteStop>(`/stops/${stopId}/complete`, { token, method: "POST", body: payload });
+}
+
+export async function failStop(
+  token: string,
+  stopId: string,
+  payload: RouteStopFailRequest,
+): Promise<RoutingRouteStop> {
+  return request<RoutingRouteStop>(`/stops/${stopId}/fail`, { token, method: "POST", body: payload });
+}
+
+export async function skipStop(
+  token: string,
+  stopId: string,
+  payload: RouteStopSkipRequest = {},
+): Promise<RoutingRouteStop> {
+  return request<RoutingRouteStop>(`/stops/${stopId}/skip`, { token, method: "POST", body: payload });
+}
+
+// ── Incidents ───────────────────────────────────────────────────────────────
+export async function createIncident(token: string, payload: IncidentCreateRequest): Promise<IncidentOut> {
+  return request<IncidentOut>("/incidents", { token, method: "POST", body: payload });
 }
 
 export async function optimizeRoute(token: string, routeId: string): Promise<RoutingRoute> {

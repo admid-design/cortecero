@@ -4,8 +4,17 @@ import { useCallback, useMemo, useState } from "react";
 
 import {
   type AdminUser,
+  type IncidentCreateRequest,
+  type RouteNextStopResponse,
   APIError,
   formatError,
+  arriveStop,
+  completeStop,
+  failStop,
+  skipStop,
+  createIncident,
+  getDriverRoutes,
+  getRouteNextStop,
   approveException,
   createAdminCustomer,
   createAdminCustomerOperationalException,
@@ -86,6 +95,7 @@ import {
   type Zone,
 } from "../lib/api";
 import { DispatcherRoutingCard } from "../components/DispatcherRoutingCard";
+import { DriverRoutingCard } from "../components/DriverRoutingCard";
 import { OperationalQueueCard } from "../components/OperationalQueueCard";
 import { OperationalResolutionQueueCard } from "../components/OperationalResolutionQueueCard";
 import { OrderOperationalSnapshotsCard } from "../components/OrderOperationalSnapshotsCard";
@@ -110,7 +120,12 @@ function decodeRoleFromToken(token: string): UserRole | null {
     if (!payload) return null;
     const decoded = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
     const parsed = JSON.parse(decoded) as { role?: string };
-    if (parsed.role === "office" || parsed.role === "logistics" || parsed.role === "admin") {
+    if (
+      parsed.role === "office" ||
+      parsed.role === "logistics" ||
+      parsed.role === "admin" ||
+      parsed.role === "driver"
+    ) {
       return parsed.role;
     }
     return null;
@@ -297,8 +312,21 @@ export default function HomePage() {
   const [tenantTimezone, setTenantTimezone] = useState("Europe/Madrid");
   const [tenantAutoLock, setTenantAutoLock] = useState(false);
 
+  // ── Driver PWA state ──────────────────────────────────────────────────────
+  const [driverRoutes, setDriverRoutes] = useState<RoutingRoute[]>([]);
+  const [driverLoading, setDriverLoading] = useState(false);
+  const [selectedDriverRouteId, setSelectedDriverRouteId] = useState("");
+  const [selectedDriverRoute, setSelectedDriverRoute] = useState<RoutingRoute | null>(null);
+  const [driverNextStop, setDriverNextStop] = useState<RouteNextStopResponse | null>(null);
+  const [driverNextStopLoading, setDriverNextStopLoading] = useState(false);
+  const [driverActionLoadingStopId, setDriverActionLoadingStopId] = useState<string | null>(null);
+  const [driverIncidentLoading, setDriverIncidentLoading] = useState(false);
+  const [driverError, setDriverError] = useState<string | null>(null);
+  const [driverSuccess, setDriverSuccess] = useState<string | null>(null);
+
   const isAuthenticated = useMemo(() => token.length > 0, [token]);
   const isAdmin = useMemo(() => role === "admin", [role]);
+  const isDriver = useMemo(() => role === "driver", [role]);
   const canManageRouting = useMemo(() => role === "logistics" || role === "admin", [role]);
   const canViewRouting = useMemo(() => role === "office" || role === "logistics" || role === "admin", [role]);
   const canEditOrderWeight = useMemo(() => role === "logistics" || role === "admin", [role]);
@@ -700,6 +728,134 @@ export default function HomePage() {
     }
   }, [token]);
 
+  // ── Driver actions ────────────────────────────────────────────────────────
+
+  async function refreshDriver(tok?: string) {
+    const t = tok ?? token;
+    if (!t) return;
+    setDriverLoading(true);
+    setDriverError(null);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const res = await getDriverRoutes(t, { service_date: today });
+      setDriverRoutes(res.items);
+    } catch (e) {
+      setDriverError(formatError(e));
+    } finally {
+      setDriverLoading(false);
+    }
+  }
+
+  async function onSelectDriverRoute(routeId: string) {
+    setSelectedDriverRouteId(routeId);
+    const route = driverRoutes.find((r) => r.id === routeId) ?? null;
+    setSelectedDriverRoute(route);
+    setDriverNextStop(null);
+    if (!routeId || !route) return;
+    setDriverNextStopLoading(true);
+    try {
+      const ns = await getRouteNextStop(token, routeId);
+      setDriverNextStop(ns);
+    } catch {
+      // non-fatal: banner stays empty
+    } finally {
+      setDriverNextStopLoading(false);
+    }
+  }
+
+  async function onDriverArrive(stopId: string) {
+    setDriverActionLoadingStopId(stopId);
+    setDriverError(null);
+    setDriverSuccess(null);
+    try {
+      const updated = await arriveStop(token, stopId);
+      setDriverSuccess(`Parada #${updated.sequence_number}: llegada registrada.`);
+      await refreshDriverRouteAndNextStop();
+    } catch (e) {
+      setDriverError(formatError(e));
+    } finally {
+      setDriverActionLoadingStopId(null);
+    }
+  }
+
+  async function onDriverComplete(stopId: string) {
+    setDriverActionLoadingStopId(stopId);
+    setDriverError(null);
+    setDriverSuccess(null);
+    try {
+      const updated = await completeStop(token, stopId);
+      setDriverSuccess(`Parada #${updated.sequence_number}: entrega completada.`);
+      await refreshDriverRouteAndNextStop();
+    } catch (e) {
+      setDriverError(formatError(e));
+    } finally {
+      setDriverActionLoadingStopId(null);
+    }
+  }
+
+  async function onDriverFail(stopId: string, reason: string) {
+    setDriverActionLoadingStopId(stopId);
+    setDriverError(null);
+    setDriverSuccess(null);
+    try {
+      const updated = await failStop(token, stopId, { failure_reason: reason });
+      setDriverSuccess(`Parada #${updated.sequence_number}: falla registrada.`);
+      await refreshDriverRouteAndNextStop();
+    } catch (e) {
+      setDriverError(formatError(e));
+    } finally {
+      setDriverActionLoadingStopId(null);
+    }
+  }
+
+  async function onDriverSkip(stopId: string) {
+    setDriverActionLoadingStopId(stopId);
+    setDriverError(null);
+    setDriverSuccess(null);
+    try {
+      const updated = await skipStop(token, stopId);
+      setDriverSuccess(`Parada #${updated.sequence_number}: omitida.`);
+      await refreshDriverRouteAndNextStop();
+    } catch (e) {
+      setDriverError(formatError(e));
+    } finally {
+      setDriverActionLoadingStopId(null);
+    }
+  }
+
+  async function onDriverReportIncident(payload: IncidentCreateRequest) {
+    setDriverIncidentLoading(true);
+    setDriverError(null);
+    setDriverSuccess(null);
+    try {
+      await createIncident(token, payload);
+      setDriverSuccess("Incidencia reportada correctamente.");
+    } catch (e) {
+      setDriverError(formatError(e));
+    } finally {
+      setDriverIncidentLoading(false);
+    }
+  }
+
+  async function refreshDriverRouteAndNextStop() {
+    await refreshDriver();
+    if (selectedDriverRouteId) {
+      try {
+        const ns = await getRouteNextStop(token, selectedDriverRouteId);
+        setDriverNextStop(ns);
+        // Sync selected route from fresh list
+        const fresh = await getDriverRoutes(token, {
+          service_date: new Date().toISOString().slice(0, 10),
+        });
+        const route = fresh.items.find((r) => r.id === selectedDriverRouteId) ?? null;
+        setSelectedDriverRoute(route);
+        setDriverRoutes(fresh.items);
+      } catch {
+        // non-fatal
+      }
+    }
+  }
+
   async function onLogin() {
     setError("");
     try {
@@ -722,8 +878,12 @@ export default function HomePage() {
       setPlanConsolidationLoading(false);
       resetOperationalProfileForm();
       resetOperationalExceptionsState();
-      await refreshOps(auth.access_token);
-      await refreshDispatcher(auth.access_token, nextRole);
+      if (nextRole === "driver") {
+        await refreshDriver(auth.access_token);
+      } else {
+        await refreshOps(auth.access_token);
+        await refreshDispatcher(auth.access_token, nextRole);
+      }
       if (nextRole === "admin") {
         await refreshZones(auth.access_token);
         await refreshCustomers(auth.access_token);
@@ -786,6 +946,17 @@ export default function HomePage() {
     setTenantSettings(null);
     resetOperationalProfileForm();
     resetOperationalExceptionsState();
+    // Driver state reset
+    setDriverRoutes([]);
+    setDriverLoading(false);
+    setSelectedDriverRouteId("");
+    setSelectedDriverRoute(null);
+    setDriverNextStop(null);
+    setDriverNextStopLoading(false);
+    setDriverActionLoadingStopId(null);
+    setDriverIncidentLoading(false);
+    setDriverError(null);
+    setDriverSuccess(null);
     setViewMode("ops");
     setAutoLockResult(null);
     setAutoLockRunning(false);
@@ -1409,7 +1580,29 @@ export default function HomePage() {
         </div>
       )}
 
-      {isAuthenticated && (
+      {isAuthenticated && isDriver && (
+        <DriverRoutingCard
+          loading={driverLoading}
+          routes={driverRoutes}
+          selectedRouteId={selectedDriverRouteId}
+          onSelectedRouteIdChange={(id) => void onSelectDriverRoute(id)}
+          selectedRoute={selectedDriverRoute}
+          nextStopResponse={driverNextStop}
+          nextStopLoading={driverNextStopLoading}
+          actionLoadingStopId={driverActionLoadingStopId}
+          incidentLoading={driverIncidentLoading}
+          errorMessage={driverError}
+          successMessage={driverSuccess}
+          onRefresh={() => void refreshDriver()}
+          onArrive={(stopId) => void onDriverArrive(stopId)}
+          onComplete={(stopId) => void onDriverComplete(stopId)}
+          onFail={(stopId, reason) => void onDriverFail(stopId, reason)}
+          onSkip={(stopId) => void onDriverSkip(stopId)}
+          onReportIncident={(payload) => void onDriverReportIncident(payload)}
+        />
+      )}
+
+      {isAuthenticated && !isDriver && (
         <div className="card row">
           <button className={viewMode === "ops" ? "tab active" : "tab"} onClick={() => setViewMode("ops")}>
             Operación
@@ -1428,7 +1621,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {isAuthenticated && viewMode === "ops" && (
+      {isAuthenticated && !isDriver && viewMode === "ops" && (
         <>
           <div className="card row">
             <input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} />
@@ -2079,7 +2272,7 @@ export default function HomePage() {
         </>
       )}
 
-      {isAuthenticated && viewMode === "admin" && (
+      {isAuthenticated && !isDriver && viewMode === "admin" && (
         <>
           {!isAdmin && (
             <div className="card" style={{ borderColor: "#fca5a5", color: "#991b1b" }}>
