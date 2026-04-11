@@ -16,19 +16,25 @@ import {
   deactivateAdminCustomer,
   deleteAdminCustomerOperationalException,
   deactivateAdminZone,
+  dispatchRoute,
   getDailySummary,
   getPlanCapacityAlerts,
   getPlanCustomerConsolidation,
   getAdminCustomerOperationalProfile,
   getSourceMetrics,
   getAdminTenantSettings,
+  getRoute,
   includeOrderInPlan,
+  listAvailableVehicles,
   listOrderOperationalSnapshots,
   listOperationalQueue,
   listOperationalResolutionQueue,
   listPendingQueue,
   listAdminCustomers,
   listAdminCustomerOperationalExceptions,
+  listReadyToDispatchOrders,
+  listRouteEvents,
+  listRoutes,
   listAdminUsers,
   listAdminZones,
   listExceptions,
@@ -36,6 +42,9 @@ import {
   listPlans,
   lockPlan,
   login,
+  moveRouteStop,
+  optimizeRoute,
+  planRoutes,
   rejectException,
   runAutoLock,
   updatePlanVehicle,
@@ -46,6 +55,7 @@ import {
   updateAdminUser,
   updateAdminZone,
   type AutoLockRunResponse,
+  type AvailableVehicleItem,
   type CapacityAlertLevel,
   type Customer,
   type CustomerOperationalException,
@@ -67,10 +77,15 @@ import {
   type Plan,
   type PlanCapacityAlert,
   type PlanCustomerConsolidationResponse,
+  type ReadyToDispatchItem,
+  type RouteEventItem,
+  type RoutingRoute,
+  type RoutingRouteStatus,
   type TenantSettings,
   type UserRole,
   type Zone,
 } from "../lib/api";
+import { DispatcherRoutingCard } from "../components/DispatcherRoutingCard";
 import { OperationalQueueCard } from "../components/OperationalQueueCard";
 import { OperationalResolutionQueueCard } from "../components/OperationalResolutionQueueCard";
 import { OrderOperationalSnapshotsCard } from "../components/OrderOperationalSnapshotsCard";
@@ -176,6 +191,26 @@ export default function HomePage() {
   const [planConsolidation, setPlanConsolidation] = useState<PlanCustomerConsolidationResponse | null>(null);
   const [planConsolidationLoading, setPlanConsolidationLoading] = useState(false);
   const [exceptions, setExceptions] = useState<ExceptionItem[]>([]);
+  const [dispatcherReadyOrders, setDispatcherReadyOrders] = useState<ReadyToDispatchItem[]>([]);
+  const [dispatcherVehicles, setDispatcherVehicles] = useState<AvailableVehicleItem[]>([]);
+  const [dispatcherRoutes, setDispatcherRoutes] = useState<RoutingRoute[]>([]);
+  const [dispatcherRouteStatus, setDispatcherRouteStatus] = useState<"all" | RoutingRouteStatus>("all");
+  const [dispatcherLoading, setDispatcherLoading] = useState(false);
+  const [dispatcherRouteDetailLoading, setDispatcherRouteDetailLoading] = useState(false);
+  const [selectedDispatcherRouteId, setSelectedDispatcherRouteId] = useState("");
+  const [selectedDispatcherRoute, setSelectedDispatcherRoute] = useState<RoutingRoute | null>(null);
+  const [selectedDispatcherRouteEvents, setSelectedDispatcherRouteEvents] = useState<RouteEventItem[]>([]);
+  const [dispatcherPlanId, setDispatcherPlanId] = useState("");
+  const [dispatcherPlanVehicleId, setDispatcherPlanVehicleId] = useState("");
+  const [dispatcherPlanDriverId, setDispatcherPlanDriverId] = useState("");
+  const [dispatcherPlanOrderIds, setDispatcherPlanOrderIds] = useState("");
+  const [dispatcherPlanCreating, setDispatcherPlanCreating] = useState(false);
+  const [dispatcherOptimizingRouteId, setDispatcherOptimizingRouteId] = useState<string | null>(null);
+  const [dispatcherDispatchingRouteId, setDispatcherDispatchingRouteId] = useState<string | null>(null);
+  const [dispatcherMoveSourceRouteId, setDispatcherMoveSourceRouteId] = useState("");
+  const [dispatcherMoveStopId, setDispatcherMoveStopId] = useState("");
+  const [dispatcherMoveTargetRouteId, setDispatcherMoveTargetRouteId] = useState("");
+  const [dispatcherMovingStop, setDispatcherMovingStop] = useState(false);
   const [pendingQueueZoneId, setPendingQueueZoneId] = useState("all");
   const [pendingQueueReason, setPendingQueueReason] = useState<"all" | PendingQueueReason>("all");
   const [operationalQueueZoneId, setOperationalQueueZoneId] = useState("all");
@@ -264,6 +299,8 @@ export default function HomePage() {
 
   const isAuthenticated = useMemo(() => token.length > 0, [token]);
   const isAdmin = useMemo(() => role === "admin", [role]);
+  const canManageRouting = useMemo(() => role === "logistics" || role === "admin", [role]);
+  const canViewRouting = useMemo(() => role === "office" || role === "logistics" || role === "admin", [role]);
   const canEditOrderWeight = useMemo(() => role === "logistics" || role === "admin", [role]);
   const canRunAutoLock = useMemo(() => role === "logistics" || role === "admin", [role]);
   const canAssignPlanVehicle = useMemo(() => role === "logistics" || role === "admin", [role]);
@@ -429,6 +466,101 @@ export default function HomePage() {
     token,
   ]);
 
+  const loadDispatcherRouteDetail = useCallback(
+    async (routeId: string, authToken?: string) => {
+      const activeToken = authToken ?? token;
+      if (!activeToken || !routeId) return;
+      setDispatcherRouteDetailLoading(true);
+      try {
+        const [routeRes, eventsRes] = await Promise.all([
+          getRoute(activeToken, routeId),
+          listRouteEvents(activeToken, routeId),
+        ]);
+        setSelectedDispatcherRoute(routeRes);
+        setSelectedDispatcherRouteEvents(eventsRes.items ?? []);
+        setDispatcherMoveSourceRouteId(routeRes.id);
+      } catch (e) {
+        setError(formatError(e));
+        setSelectedDispatcherRoute(null);
+        setSelectedDispatcherRouteEvents([]);
+      } finally {
+        setDispatcherRouteDetailLoading(false);
+      }
+    },
+    [token],
+  );
+
+  const refreshDispatcher = useCallback(
+    async (authToken?: string, roleOverride?: UserRole | null) => {
+      const activeToken = authToken ?? token;
+      const activeRole = roleOverride ?? role;
+      const canView = activeRole === "office" || activeRole === "logistics" || activeRole === "admin";
+      const canManage = activeRole === "logistics" || activeRole === "admin";
+      if (!activeToken || !canView) return;
+      setDispatcherLoading(true);
+      setError("");
+      try {
+        const status = dispatcherRouteStatus === "all" ? undefined : dispatcherRouteStatus;
+        const routesRes = await listRoutes(activeToken, {
+          service_date: serviceDate,
+          status,
+        });
+        const routes = routesRes.items ?? [];
+        setDispatcherRoutes(routes);
+
+        if (canManage) {
+          const [readyRes, vehiclesRes] = await Promise.all([
+            listReadyToDispatchOrders(activeToken, { service_date: serviceDate }),
+            listAvailableVehicles(activeToken, { service_date: serviceDate }),
+          ]);
+          setDispatcherReadyOrders(readyRes.items ?? []);
+          setDispatcherVehicles(vehiclesRes.items ?? []);
+        } else {
+          setDispatcherReadyOrders([]);
+          setDispatcherVehicles([]);
+        }
+
+        if (selectedDispatcherRouteId) {
+          const existsInList = routes.some((route) => route.id === selectedDispatcherRouteId);
+          if (existsInList) {
+            await loadDispatcherRouteDetail(selectedDispatcherRouteId, activeToken);
+          } else {
+            setSelectedDispatcherRouteId("");
+            setSelectedDispatcherRoute(null);
+            setSelectedDispatcherRouteEvents([]);
+            setDispatcherMoveSourceRouteId("");
+          }
+        }
+      } catch (e) {
+        setError(formatError(e));
+      } finally {
+        setDispatcherLoading(false);
+      }
+    },
+    [
+      dispatcherRouteStatus,
+      loadDispatcherRouteDetail,
+      role,
+      selectedDispatcherRouteId,
+      serviceDate,
+      token,
+    ],
+  );
+
+  const onSelectDispatcherRoute = useCallback(
+    (routeId: string) => {
+      setSelectedDispatcherRouteId(routeId);
+      if (!routeId) {
+        setSelectedDispatcherRoute(null);
+        setSelectedDispatcherRouteEvents([]);
+        setDispatcherMoveSourceRouteId("");
+        return;
+      }
+      void loadDispatcherRouteDetail(routeId);
+    },
+    [loadDispatcherRouteDetail],
+  );
+
   const onSnapshotOrderChange = useCallback((orderId: string) => {
     setSelectedSnapshotOrderId(orderId);
     setOrderOperationalSnapshots([]);
@@ -591,6 +723,7 @@ export default function HomePage() {
       resetOperationalProfileForm();
       resetOperationalExceptionsState();
       await refreshOps(auth.access_token);
+      await refreshDispatcher(auth.access_token, nextRole);
       if (nextRole === "admin") {
         await refreshZones(auth.access_token);
         await refreshCustomers(auth.access_token);
@@ -627,6 +760,26 @@ export default function HomePage() {
     setPlanConsolidation(null);
     setPlanConsolidationLoading(false);
     setExceptions([]);
+    setDispatcherReadyOrders([]);
+    setDispatcherVehicles([]);
+    setDispatcherRoutes([]);
+    setDispatcherRouteStatus("all");
+    setDispatcherLoading(false);
+    setDispatcherRouteDetailLoading(false);
+    setSelectedDispatcherRouteId("");
+    setSelectedDispatcherRoute(null);
+    setSelectedDispatcherRouteEvents([]);
+    setDispatcherPlanId("");
+    setDispatcherPlanVehicleId("");
+    setDispatcherPlanDriverId("");
+    setDispatcherPlanOrderIds("");
+    setDispatcherPlanCreating(false);
+    setDispatcherOptimizingRouteId(null);
+    setDispatcherDispatchingRouteId(null);
+    setDispatcherMoveSourceRouteId("");
+    setDispatcherMoveStopId("");
+    setDispatcherMoveTargetRouteId("");
+    setDispatcherMovingStop(false);
     setZones([]);
     setCustomers([]);
     setUsers([]);
@@ -747,6 +900,111 @@ export default function HomePage() {
       setError(formatError(e));
     } finally {
       setPlanConsolidationLoading(false);
+    }
+  }
+
+  async function onCreateDispatcherRoutePlan() {
+    if (!token || !canManageRouting) return;
+    const nextPlanId = dispatcherPlanId.trim();
+    const nextVehicleId = dispatcherPlanVehicleId.trim();
+    const nextDriverId = dispatcherPlanDriverId.trim();
+    const orderIds = dispatcherPlanOrderIds
+      .split(/[\s,]+/g)
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+
+    if (!nextPlanId) {
+      setError("plan_id es obligatorio para planificar ruta");
+      return;
+    }
+    if (!nextVehicleId) {
+      setError("vehicle_id es obligatorio para planificar ruta");
+      return;
+    }
+    if (orderIds.length === 0) {
+      setError("Debes informar al menos un order_id");
+      return;
+    }
+
+    setDispatcherPlanCreating(true);
+    setError("");
+    try {
+      await planRoutes(token, {
+        plan_id: nextPlanId,
+        service_date: serviceDate,
+        routes: [
+          {
+            vehicle_id: nextVehicleId,
+            driver_id: nextDriverId || null,
+            order_ids: orderIds,
+          },
+        ],
+      });
+      setDispatcherPlanOrderIds("");
+      await refreshDispatcher();
+      await refreshOps();
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setDispatcherPlanCreating(false);
+    }
+  }
+
+  async function onOptimizeDispatcherRoute(routeId: string) {
+    if (!token || !canManageRouting) return;
+    setDispatcherOptimizingRouteId(routeId);
+    setError("");
+    try {
+      await optimizeRoute(token, routeId);
+      await refreshDispatcher();
+      await refreshOps();
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setDispatcherOptimizingRouteId(null);
+    }
+  }
+
+  async function onDispatchDispatcherRoute(routeId: string) {
+    if (!token || !canManageRouting) return;
+    setDispatcherDispatchingRouteId(routeId);
+    setError("");
+    try {
+      await dispatchRoute(token, routeId);
+      await refreshDispatcher();
+      await refreshOps();
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setDispatcherDispatchingRouteId(null);
+    }
+  }
+
+  async function onMoveDispatcherStop() {
+    if (!token || !canManageRouting) return;
+    const sourceRouteId = dispatcherMoveSourceRouteId.trim();
+    const stopId = dispatcherMoveStopId.trim();
+    const targetRouteId = dispatcherMoveTargetRouteId.trim();
+
+    if (!sourceRouteId || !stopId || !targetRouteId) {
+      setError("source_route_id, stop_id y target_route_id son obligatorios");
+      return;
+    }
+
+    setDispatcherMovingStop(true);
+    setError("");
+    try {
+      await moveRouteStop(token, sourceRouteId, {
+        stop_id: stopId,
+        target_route_id: targetRouteId,
+      });
+      setDispatcherMoveStopId("");
+      await refreshDispatcher();
+      await refreshOps();
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setDispatcherMovingStop(false);
     }
   }
 
@@ -1265,6 +1523,52 @@ export default function HomePage() {
               </tbody>
             </table>
           </div>
+
+          {canViewRouting ? (
+            <DispatcherRoutingCard
+              serviceDate={serviceDate}
+              onServiceDateChange={setServiceDate}
+              routeStatus={dispatcherRouteStatus}
+              onRouteStatusChange={setDispatcherRouteStatus}
+              loading={dispatcherLoading}
+              canManage={canManageRouting}
+              readyOrders={dispatcherReadyOrders}
+              availableVehicles={dispatcherVehicles}
+              routes={dispatcherRoutes}
+              selectedRouteId={selectedDispatcherRouteId}
+              onSelectedRouteIdChange={onSelectDispatcherRoute}
+              selectedRoute={selectedDispatcherRoute}
+              routeEvents={selectedDispatcherRouteEvents}
+              routeDetailLoading={dispatcherRouteDetailLoading}
+              planId={dispatcherPlanId}
+              onPlanIdChange={setDispatcherPlanId}
+              planVehicleId={dispatcherPlanVehicleId}
+              onPlanVehicleIdChange={setDispatcherPlanVehicleId}
+              planDriverId={dispatcherPlanDriverId}
+              onPlanDriverIdChange={setDispatcherPlanDriverId}
+              planOrderIds={dispatcherPlanOrderIds}
+              onPlanOrderIdsChange={setDispatcherPlanOrderIds}
+              creatingPlan={dispatcherPlanCreating}
+              optimizingRouteId={dispatcherOptimizingRouteId}
+              dispatchingRouteId={dispatcherDispatchingRouteId}
+              moveSourceRouteId={dispatcherMoveSourceRouteId}
+              onMoveSourceRouteIdChange={setDispatcherMoveSourceRouteId}
+              moveStopId={dispatcherMoveStopId}
+              onMoveStopIdChange={setDispatcherMoveStopId}
+              moveTargetRouteId={dispatcherMoveTargetRouteId}
+              onMoveTargetRouteIdChange={setDispatcherMoveTargetRouteId}
+              movingStop={dispatcherMovingStop}
+              onRefresh={() => void refreshDispatcher()}
+              onCreatePlan={() => void onCreateDispatcherRoutePlan()}
+              onOptimizeRoute={(routeId) => void onOptimizeDispatcherRoute(routeId)}
+              onDispatchRoute={(routeId) => void onDispatchDispatcherRoute(routeId)}
+              onMoveStop={() => void onMoveDispatcherStop()}
+            />
+          ) : (
+            <div className="card" style={{ borderColor: "#fca5a5", color: "#991b1b" }}>
+              RBAC_FORBIDDEN: El panel dispatcher requiere rol office/logistics/admin.
+            </div>
+          )}
 
           <div className="grid cols-2">
             <div className="card grid">

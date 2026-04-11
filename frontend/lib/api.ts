@@ -240,6 +240,122 @@ export type Plan = {
   orders: PlanOrder[];
 };
 
+export type RoutingRouteStatus = "draft" | "planned" | "dispatched" | "in_progress" | "completed" | "cancelled";
+export type RouteStopStatus = "pending" | "en_route" | "arrived" | "completed" | "failed" | "skipped";
+export type RouteEventActorType = "dispatcher" | "driver" | "system";
+
+export type ReadyToDispatchItem = {
+  id: string;
+  customer_id: string;
+  service_date: string;
+  status: "planned";
+  total_weight_kg: number | null;
+  zone_id: string;
+};
+
+export type AvailableVehicleDriver = {
+  id: string;
+  name: string;
+  phone: string;
+};
+
+export type AvailableVehicleItem = {
+  id: string;
+  code: string;
+  name: string;
+  capacity_kg: number | null;
+  active: boolean;
+  driver: AvailableVehicleDriver | null;
+};
+
+export type RoutingRouteStop = {
+  id: string;
+  route_id: string;
+  order_id: string;
+  sequence_number: number;
+  estimated_arrival_at: string | null;
+  estimated_service_minutes: number;
+  status: RouteStopStatus;
+  arrived_at: string | null;
+  completed_at: string | null;
+  failed_at: string | null;
+  failure_reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RoutingRoute = {
+  id: string;
+  plan_id: string;
+  vehicle_id: string;
+  driver_id: string | null;
+  service_date: string;
+  status: RoutingRouteStatus;
+  version: number;
+  optimization_request_id: string | null;
+  optimization_response_json: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  dispatched_at: string | null;
+  completed_at: string | null;
+  stops: RoutingRouteStop[];
+};
+
+export type PlanRouteInput = {
+  vehicle_id: string;
+  driver_id?: string | null;
+  order_ids: string[];
+};
+
+export type PlanRoutesRequest = {
+  plan_id: string;
+  service_date: string;
+  routes: PlanRouteInput[];
+};
+
+export type PlanRoutesCreatedItem = {
+  id: string;
+  vehicle_id: string;
+  driver_id: string | null;
+  status: string;
+  version: number;
+};
+
+export type PlanRoutesResponse = {
+  plan_id: string;
+  service_date: string;
+  routes_created: PlanRoutesCreatedItem[];
+};
+
+export type RouteMoveStopRequest = {
+  stop_id: string;
+  target_route_id: string;
+};
+
+export type RouteMoveStopResponse = {
+  order_id: string;
+  from_route_id: string;
+  to_route_id: string;
+  new_sequence_number: number;
+};
+
+export type RouteEventItem = {
+  id: string;
+  route_id: string;
+  route_stop_id: string | null;
+  event_type: string;
+  actor_type: RouteEventActorType;
+  actor_id: string | null;
+  ts: string;
+  metadata_json: Record<string, unknown>;
+};
+
+export type RouteNextStopResponse = {
+  route_id: string;
+  next_stop: RoutingRouteStop | null;
+  remaining_stops: number;
+};
+
 export type PlanCapacityAlert = {
   plan_id: string;
   service_date: string;
@@ -462,6 +578,69 @@ export async function listOrders(token: string, serviceDate: string): Promise<Li
 
 export async function listPlans(token: string, serviceDate: string): Promise<ListResponse<Plan>> {
   return request<ListResponse<Plan>>(`/plans${buildQuery({ service_date: serviceDate })}`, { token });
+}
+
+export async function listReadyToDispatchOrders(
+  token: string,
+  params: { service_date?: string } = {},
+): Promise<ListResponse<ReadyToDispatchItem>> {
+  return request<ListResponse<ReadyToDispatchItem>>(`/orders/ready-to-dispatch${buildQuery(params)}`, { token });
+}
+
+export async function listAvailableVehicles(
+  token: string,
+  params: { service_date?: string } = {},
+): Promise<ListResponse<AvailableVehicleItem>> {
+  return request<ListResponse<AvailableVehicleItem>>(`/vehicles/available${buildQuery(params)}`, { token });
+}
+
+export async function planRoutes(token: string, payload: PlanRoutesRequest): Promise<PlanRoutesResponse> {
+  return request<PlanRoutesResponse>("/routes/plan", { token, method: "POST", body: payload });
+}
+
+export async function listRoutes(
+  token: string,
+  params: {
+    plan_id?: string;
+    vehicle_id?: string;
+    driver_id?: string;
+    service_date?: string;
+    status?: RoutingRouteStatus;
+  } = {},
+): Promise<ListResponse<RoutingRoute>> {
+  return request<ListResponse<RoutingRoute>>(`/routes${buildQuery(params)}`, { token });
+}
+
+export async function getRoute(token: string, routeId: string): Promise<RoutingRoute> {
+  return request<RoutingRoute>(`/routes/${routeId}`, { token });
+}
+
+export async function listRouteEvents(token: string, routeId: string): Promise<ListResponse<RouteEventItem>> {
+  return request<ListResponse<RouteEventItem>>(`/routes/${routeId}/events`, { token });
+}
+
+export async function getRouteNextStop(token: string, routeId: string): Promise<RouteNextStopResponse> {
+  return request<RouteNextStopResponse>(`/routes/${routeId}/next-stop`, { token });
+}
+
+export async function optimizeRoute(token: string, routeId: string): Promise<RoutingRoute> {
+  return request<RoutingRoute>(`/routes/${routeId}/optimize`, { token, method: "POST" });
+}
+
+export async function dispatchRoute(token: string, routeId: string): Promise<RoutingRoute> {
+  return request<RoutingRoute>(`/routes/${routeId}/dispatch`, { token, method: "POST" });
+}
+
+export async function moveRouteStop(
+  token: string,
+  routeId: string,
+  payload: RouteMoveStopRequest,
+): Promise<RouteMoveStopResponse> {
+  return request<RouteMoveStopResponse>(`/routes/${routeId}/move-stop`, {
+    token,
+    method: "POST",
+    body: payload,
+  });
 }
 
 export async function getPlanCapacityAlerts(
