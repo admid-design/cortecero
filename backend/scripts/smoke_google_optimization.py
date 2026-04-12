@@ -34,6 +34,7 @@ import json
 import os
 import sys
 import time
+from collections import Counter, defaultdict
 from datetime import date, datetime, timezone
 
 try:
@@ -53,6 +54,8 @@ ROUTE_ID       = os.getenv("CORTECERO_ROUTE_ID", "")
 LIST_ROUTES    = os.getenv("SMOKE_LIST_ROUTES", "").strip() in ("1", "true", "yes")
 CREATE_ROUTE   = os.getenv("SMOKE_CREATE_ROUTE", "").strip() in ("1", "true", "yes")
 ORDER_LIMIT    = int(os.getenv("SMOKE_ORDER_LIMIT", "5"))
+MIN_STOPS      = int(os.getenv("SMOKE_MIN_STOPS", "2"))
+PREFERRED_STOPS = int(os.getenv("SMOKE_PREFERRED_STOPS", "3"))
 
 DIV  = "=" * 72
 DIV2 = "-" * 72
@@ -104,21 +107,108 @@ def get_route(session: requests.Session, token: str, route_id: str) -> dict:
         bail(f"GET /routes/{route_id} falló ({r.status_code}): {r.text}")
     return r.json()
 
+
+def list_ready_to_dispatch_orders(session: requests.Session, token: str) -> list[dict]:
+    headers = {"Authorization": f"Bearer {token}"}
+    r = session.get(f"{BASE_URL}/orders/ready-to-dispatch", headers=headers, timeout=20)
+    if r.status_code != 200:
+        bail(f"GET /orders/ready-to-dispatch falló ({r.status_code}): {r.text}")
+    return r.json().get("items", [])
+
+
+def list_customers_geo_map(session: requests.Session, token: str) -> dict[str, bool]:
+    headers = {"Authorization": f"Bearer {token}"}
+    r = session.get(f"{BASE_URL}/admin/customers", params={"active": "true"}, headers=headers, timeout=20)
+    if r.status_code != 200:
+        bail(f"GET /admin/customers falló ({r.status_code}): {r.text}")
+    items = r.json().get("items", [])
+    geo_map: dict[str, bool] = {}
+    for row in items:
+        customer_id = str(row.get("id"))
+        has_geo = row.get("lat") is not None and row.get("lng") is not None
+        geo_map[customer_id] = has_geo
+    return geo_map
+
+
+def _resolve_best_group_with_geo(
+    orders: list[dict],
+    customer_geo_map: dict[str, bool],
+) -> tuple[tuple[str, str], list[dict]] | None:
+    grouped: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    skipped_missing_geo = 0
+
+    for order in orders:
+        customer_id = str(order.get("customer_id"))
+        if not customer_geo_map.get(customer_id, False):
+            skipped_missing_geo += 1
+            continue
+        key = (str(order["service_date"]), str(order["zone_id"]))
+        grouped[key].append(order)
+
+    if not grouped:
+        print(
+            "[SETUP] No hay pedidos 'ready-to-dispatch' con geocoordenadas completas "
+            f"(descartados por MISSING_GEO: {skipped_missing_geo})."
+        )
+        return None
+
+    print("\n[SETUP] Grupos aptos por (service_date, zone_id) con geo completo:")
+    group_sizes = Counter({key: len(rows) for key, rows in grouped.items()})
+    for (svc_date, zone_id), count in group_sizes.most_common():
+        print(f"  - {svc_date} | {zone_id} -> {count} órdenes")
+
+    min_required = max(2, MIN_STOPS)
+    preferred = max(min_required, PREFERRED_STOPS)
+
+    preferred_groups = [
+        (key, rows) for key, rows in grouped.items() if len(rows) >= preferred
+    ]
+    if preferred_groups:
+        best_key, best_rows = max(preferred_groups, key=lambda item: len(item[1]))
+        return best_key, best_rows
+
+    min_groups = [
+        (key, rows) for key, rows in grouped.items() if len(rows) >= min_required
+    ]
+    if min_groups:
+        best_key, best_rows = max(min_groups, key=lambda item: len(item[1]))
+        return best_key, best_rows
+
+    print(
+        "[SETUP] Ningún grupo alcanza el mínimo de paradas para smoke real: "
+        f"min_required={min_required}, preferred={preferred}."
+    )
+    return None
+
 # ---------------------------------------------------------------------------
 # Crear ruta draft desde órdenes ready-to-dispatch (modo SMOKE_CREATE_ROUTE)
 # ---------------------------------------------------------------------------
 def create_draft_route(session: requests.Session, token: str) -> str:
     headers = {"Authorization": f"Bearer {token}"}
     print(f"\n[SETUP] Buscando órdenes ready-to-dispatch...")
-    r = session.get(f"{BASE_URL}/planning/orders/ready-to-dispatch", headers=headers, timeout=15)
-    if r.status_code != 200:
-        bail(f"GET /planning/orders/ready-to-dispatch falló ({r.status_code}): {r.text}")
-    orders = r.json().get("items", [])
+    orders = list_ready_to_dispatch_orders(session, token)
     if not orders:
         bail("No hay órdenes en estado 'planned'. El tenant necesita datos de prueba.")
-    print(f"[SETUP] {len(orders)} órdenes disponibles. Usando primeras {ORDER_LIMIT}.")
-    selected = orders[:ORDER_LIMIT]
+    print(f"[SETUP] {len(orders)} órdenes disponibles en ready-to-dispatch.")
+
+    customer_geo_map = list_customers_geo_map(session, token)
+    best_group = _resolve_best_group_with_geo(orders, customer_geo_map)
+    if not best_group:
+        bail(
+            "No hay dataset apto para smoke real.\n"
+            "Criterio actual: órdenes ready-to-dispatch con customer.lat/lng y "
+            f"grupo (service_date+zone_id) con al menos {max(2, MIN_STOPS)} paradas."
+        )
+    group_key, group_orders = best_group
+    svc_date, zone_id = group_key
+    min_required = max(2, MIN_STOPS)
+    limit_effective = max(min_required, ORDER_LIMIT)
+    selected = group_orders[:limit_effective]
     order_ids = [o["id"] for o in selected]
+    print(
+        f"[SETUP] Grupo seleccionado: service_date={svc_date} zone_id={zone_id} | "
+        f"{len(group_orders)} candidatas geo-ok -> usando {len(order_ids)}"
+    )
 
     print(f"[SETUP] Buscando vehículos disponibles...")
     r = session.get(f"{BASE_URL}/vehicles/available", headers=headers, timeout=15)
@@ -129,20 +219,6 @@ def create_draft_route(session: requests.Session, token: str) -> str:
         bail("No hay vehículos disponibles.")
     vehicle = vehicles[0]
     print(f"[SETUP] Vehículo seleccionado: {vehicle['code']} ({vehicle['id']})")
-
-    # Resolver plan_id: /planning/orders/ready-to-dispatch devuelve service_date y
-    # zone_id pero no plan_id. Agrupamos las órdenes seleccionadas por (service_date,
-    # zone_id) y elegimos el grupo mayoritario para tener paradas homogéneas. Luego
-    # consultamos GET /plans?service_date=...&zone_id=...&status=locked.
-    from collections import Counter
-    group_key = Counter(
-        (o["service_date"], o["zone_id"]) for o in selected
-    ).most_common(1)[0][0]
-    svc_date, zone_id = group_key
-    # Filtrar selected al grupo ganador para que todas las órdenes sean del mismo plan
-    selected = [o for o in selected if o["service_date"] == svc_date and o["zone_id"] == zone_id]
-    order_ids = [o["id"] for o in selected]
-    print(f"[SETUP] Grupo: service_date={svc_date} zone_id={zone_id} ({len(order_ids)} órdenes)")
 
     print(f"[SETUP] Buscando plan locked para service_date={svc_date} zone_id={zone_id}...")
     r = session.get(
@@ -178,7 +254,7 @@ def create_draft_route(session: requests.Session, token: str) -> str:
     if r.status_code not in (200, 201):
         bail(f"POST /routes/plan falló ({r.status_code}): {r.text}")
     body = r.json()
-    created = body.get("routes", body.get("items", []))
+    created = body.get("routes_created", body.get("routes", body.get("items", [])))
     if not created:
         bail(f"POST /routes/plan no devolvió rutas: {body}")
     route_id = created[0]["id"]
