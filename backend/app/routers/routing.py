@@ -600,6 +600,7 @@ def optimize_route(
         route_id=route.id,
         depot_lat=settings.route_optimization_depot_lat,
         depot_lng=settings.route_optimization_depot_lng,
+        service_date=route.service_date,
         waypoints=waypoints,
     )
     provider = _get_optimization_provider()
@@ -613,6 +614,17 @@ def optimize_route(
 
     now = datetime.now(UTC)
     stops_by_order_id = {str(stop.order_id): stop for stop in stops}
+
+    # Evita colisiones temporales del unique(route_id, sequence_number)
+    # durante reordenaciones (swap 1<->2, etc.) aplicando un desplazamiento
+    # intermedio y luego los valores finales.
+    max_sequence = max((stop.sequence_number for stop in stops), default=0)
+    temp_offset = max_sequence + len(stops) + 1000
+    for db_stop in stops:
+        db_stop.sequence_number = db_stop.sequence_number + temp_offset
+        db_stop.updated_at = now
+    db.flush()
+
     for optimized_stop in result.stops:
         db_stop = stops_by_order_id.get(str(optimized_stop.order_id))
         if not db_stop:

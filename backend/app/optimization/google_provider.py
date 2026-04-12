@@ -11,7 +11,7 @@ No persiste secretos ni credenciales en el repo.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 
 import httpx
 from google.auth import default as google_auth_default
@@ -36,6 +36,10 @@ def _parse_rfc3339(value: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
+def _to_rfc3339_utc(value: datetime) -> str:
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
 class GoogleRouteOptimizationProvider(RouteOptimizationProvider):
     def __init__(self, *, project_id: str, location: str = "global", timeout_seconds: float = 30.0) -> None:
         if not project_id.strip():
@@ -53,11 +57,28 @@ class GoogleRouteOptimizationProvider(RouteOptimizationProvider):
         return credentials.token
 
     def _build_parent(self) -> str:
-        if self.location:
-            return f"projects/{self.project_id}/locations/{self.location}"
+        location = self.location.strip().lower()
+        if location and location != "global":
+            return f"projects/{self.project_id}/locations/{self.location.strip()}"
         return f"projects/{self.project_id}"
 
+    def _build_global_window(self, request: OptimizationRequest) -> tuple[datetime, datetime]:
+        now = datetime.now(UTC)
+        min_start = now + timedelta(minutes=5)
+
+        if request.service_date is not None:
+            service_start = datetime.combine(request.service_date, time(hour=7), tzinfo=UTC)
+            service_end = datetime.combine(request.service_date, time(hour=19), tzinfo=UTC)
+        else:
+            service_start = now
+            service_end = now + timedelta(hours=12)
+
+        global_start = service_start if service_start > min_start else min_start
+        global_end = service_end if service_end > global_start else (global_start + timedelta(hours=12))
+        return global_start, global_end
+
     def _build_body(self, request: OptimizationRequest) -> dict:
+        global_start, global_end = self._build_global_window(request)
         shipments = []
         for waypoint in request.waypoints:
             shipments.append(
@@ -66,10 +87,8 @@ class GoogleRouteOptimizationProvider(RouteOptimizationProvider):
                     "deliveries": [
                         {
                             "arrivalLocation": {
-                                "latLng": {
-                                    "latitude": waypoint.lat,
-                                    "longitude": waypoint.lng,
-                                }
+                                "latitude": waypoint.lat,
+                                "longitude": waypoint.lng,
                             },
                             "duration": f"{max(1, waypoint.service_minutes) * 60}s",
                         }
@@ -78,21 +97,19 @@ class GoogleRouteOptimizationProvider(RouteOptimizationProvider):
             )
 
         model = {
+            "globalStartTime": _to_rfc3339_utc(global_start),
+            "globalEndTime": _to_rfc3339_utc(global_end),
             "shipments": shipments,
             "vehicles": [
                 {
                     "label": "vehicle-0",
                     "startLocation": {
-                        "latLng": {
-                            "latitude": request.depot_lat,
-                            "longitude": request.depot_lng,
-                        }
+                        "latitude": request.depot_lat,
+                        "longitude": request.depot_lng,
                     },
                     "endLocation": {
-                        "latLng": {
-                            "latitude": request.depot_lat,
-                            "longitude": request.depot_lng,
-                        }
+                        "latitude": request.depot_lat,
+                        "longitude": request.depot_lng,
                     },
                 }
             ],

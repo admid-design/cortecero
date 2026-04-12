@@ -27,6 +27,8 @@ services:
       JWT_ALGORITHM: HS256
       JWT_ACCESS_TOKEN_MINUTES: "720"
       CORS_ORIGINS: http://localhost:3000
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/route-optimization-sa.json
+      GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID: samurai-system
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,6 +37,7 @@ services:
       - "8000:8000"
     volumes:
       - ./db:/app/db
+      - ${HOME}/.config/kelko/google/route-optimization-sa.json:/run/secrets/route-optimization-sa.json:ro
 
   frontend:
     build:

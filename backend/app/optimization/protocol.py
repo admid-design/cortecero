@@ -15,7 +15,7 @@ Proveedores previstos en E.2:
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from typing import Protocol
 
 
@@ -42,6 +42,7 @@ class OptimizationRequest:
     route_id: uuid.UUID
     depot_lat: float
     depot_lng: float
+    service_date: date | None = None
     waypoints: list[OptimizationWaypoint] = field(default_factory=list)
 
 
