@@ -634,7 +634,7 @@ export async function listReadyToDispatchOrders(
   token: string,
   params: { service_date?: string } = {},
 ): Promise<ListResponse<ReadyToDispatchItem>> {
-  return request<ListResponse<ReadyToDispatchItem>>(`/orders/ready-to-dispatch${buildQuery(params)}`, { token });
+  return request<ListResponse<ReadyToDispatchItem>>(`/planning/orders/ready-to-dispatch${buildQuery(params)}`, { token });
 }
 
 export async function listAvailableVehicles(

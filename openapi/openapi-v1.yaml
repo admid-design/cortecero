@@ -1590,7 +1590,7 @@ paths:
         "422":
           description: INVALID_DRIVER — name o phone vacío; o sin cambios a aplicar
 
-  /orders/ready-to-dispatch:
+  /planning/orders/ready-to-dispatch:
     get:
       tags: [Routing]
       summary: Pedidos listos para asignar a ruta
