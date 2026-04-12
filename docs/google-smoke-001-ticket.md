@@ -38,6 +38,7 @@ export GOOGLE_ROUTE_OPTIMIZATION_TIMEOUT_SECONDS=30
 
 # Config smoke test
 export CORTECERO_BASE_URL=http://localhost:8000
+# Nota: endpoint renombrado a /planning/orders/ready-to-dispatch (BUG-ROUTING-READY-DISPATCH-001)
 export CORTECERO_TENANT_SLUG=demo-cortecero
 export CORTECERO_EMAIL=logistics@demo.cortecero.app
 export CORTECERO_PASSWORD=logistics123

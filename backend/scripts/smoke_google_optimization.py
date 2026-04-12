@@ -110,9 +110,9 @@ def get_route(session: requests.Session, token: str, route_id: str) -> dict:
 def create_draft_route(session: requests.Session, token: str) -> str:
     headers = {"Authorization": f"Bearer {token}"}
     print(f"\n[SETUP] Buscando órdenes ready-to-dispatch...")
-    r = session.get(f"{BASE_URL}/orders/ready-to-dispatch", headers=headers, timeout=15)
+    r = session.get(f"{BASE_URL}/planning/orders/ready-to-dispatch", headers=headers, timeout=15)
     if r.status_code != 200:
-        bail(f"GET /orders/ready-to-dispatch falló ({r.status_code}): {r.text}")
+        bail(f"GET /planning/orders/ready-to-dispatch falló ({r.status_code}): {r.text}")
     orders = r.json().get("items", [])
     if not orders:
         bail("No hay órdenes en estado 'planned'. El tenant necesita datos de prueba.")
@@ -138,7 +138,7 @@ def create_draft_route(session: requests.Session, token: str) -> str:
     if not plan_id:
         # Fallback: el usuario debe proporcionar un plan_id
         bail(
-            "El endpoint /orders/ready-to-dispatch no devuelve plan_id. "
+            "El endpoint /planning/orders/ready-to-dispatch no devuelve plan_id. "
             "Usa CORTECERO_ROUTE_ID con una ruta draft existente, "
             "o crea la ruta manualmente desde el dispatcher y pasa CORTECERO_ROUTE_ID."
         )

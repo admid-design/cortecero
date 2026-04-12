@@ -1,7 +1,7 @@
 """
 Routing POC — Bloques B + D
 Bloque B — Planificación (dispatcher):
-  GET  /orders/ready-to-dispatch         — pedidos listos para asignar a ruta
+  GET  /planning/orders/ready-to-dispatch — pedidos listos para asignar a ruta
   GET  /vehicles/available               — camiones disponibles para planificar
   POST /routes/plan                      — generar plan de rutas
   POST /routes/{routeId}/dispatch        — despachar ruta a chofer
@@ -127,11 +127,11 @@ def _emit_event(
 
 
 # ============================================================================
-# GET /orders/ready-to-dispatch
+# GET /planning/orders/ready-to-dispatch
 # ============================================================================
 
 
-@router.get("/orders/ready-to-dispatch", response_model=dict)
+@router.get("/planning/orders/ready-to-dispatch", response_model=dict)
 def get_orders_ready_to_dispatch(
     service_date: date | None = None,
     db: Session = Depends(get_db),
