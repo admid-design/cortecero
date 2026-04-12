@@ -110,9 +110,9 @@ def get_route(session: requests.Session, token: str, route_id: str) -> dict:
 
 def list_ready_to_dispatch_orders(session: requests.Session, token: str) -> list[dict]:
     headers = {"Authorization": f"Bearer {token}"}
-    r = session.get(f"{BASE_URL}/orders/ready-to-dispatch", headers=headers, timeout=20)
+    r = session.get(f"{BASE_URL}/planning/orders/ready-to-dispatch", headers=headers, timeout=20)
     if r.status_code != 200:
-        bail(f"GET /orders/ready-to-dispatch falló ({r.status_code}): {r.text}")
+        bail(f"GET /planning/orders/ready-to-dispatch falló ({r.status_code}): {r.text}")
     return r.json().get("items", [])
 
 
