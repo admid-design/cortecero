@@ -109,10 +109,19 @@ def _build_route_stop_for_driver(
     stop_status: RouteStopStatus,
 ) -> tuple[Route, RouteStop]:
     now = datetime.now(UTC)
-    svc_date = date.today() + timedelta(days=(uuid.uuid4().int % 400) + 1)
 
     zone = db_session.scalar(select(Zone).where(Zone.tenant_id == tenant.id))
     assert zone is not None
+    svc_date = date.today() + timedelta(days=1)
+    while db_session.scalar(
+        select(Plan.id).where(
+            Plan.tenant_id == tenant.id,
+            Plan.zone_id == zone.id,
+            Plan.service_date == svc_date,
+        )
+    ):
+        svc_date = svc_date + timedelta(days=1)
+
     customer = db_session.scalar(select(Customer).where(Customer.tenant_id == tenant.id))
     assert customer is not None
     vehicle = db_session.scalar(
