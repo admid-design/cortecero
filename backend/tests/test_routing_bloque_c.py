@@ -67,36 +67,46 @@ def _create_driver_user(
     email: str,
     password: str = "driver123",
 ) -> Driver:
+    """Crea un par (User con role=driver, Driver) con vínculo explícito via user_id.
+
+    Actualizado en PILOT-HARDEN-001: User y Driver tienen UUIDs independientes;
+    Driver.user_id → User.id (migration 018_driver_user_id).
+    """
     now = datetime.now(UTC)
     vehicle = db_session.scalar(
         select(Vehicle).where(Vehicle.tenant_id == tenant.id, Vehicle.active.is_(True))
     )
     assert vehicle is not None
 
-    driver = Driver(
+    name = f"Driver {email.split('@')[0]}"
+
+    # 1. Crear la cuenta de acceso (User) — UUID propio
+    user = User(
         id=uuid.uuid4(),
         tenant_id=tenant.id,
-        vehicle_id=vehicle.id,
-        name=f"Driver {email.split('@')[0]}",
-        phone=f"+34000{str(uuid.uuid4().int)[:8]}",
-        is_active=True,
-        created_at=now,
-        updated_at=now,
-    )
-    db_session.add(driver)
-    db_session.flush()
-
-    user = User(
-        id=driver.id,
-        tenant_id=tenant.id,
         email=email,
-        full_name=driver.name,
+        full_name=name,
         password_hash=hash_password(password),
         role=UserRole.driver,
         is_active=True,
         created_at=now,
     )
     db_session.add(user)
+    db_session.flush()  # user.id disponible antes del driver
+
+    # 2. Crear la ficha operativa (Driver) con vínculo explícito user_id → user.id
+    driver = Driver(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        user_id=user.id,        # vínculo explícito (018_driver_user_id)
+        vehicle_id=vehicle.id,
+        name=name,
+        phone=f"+34000{str(uuid.uuid4().int)[:8]}",
+        is_active=True,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(driver)
     db_session.commit()
     db_session.refresh(driver)
     return driver
