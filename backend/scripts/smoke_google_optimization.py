@@ -130,18 +130,37 @@ def create_draft_route(session: requests.Session, token: str) -> str:
     vehicle = vehicles[0]
     print(f"[SETUP] Vehículo seleccionado: {vehicle['code']} ({vehicle['id']})")
 
-    # Necesitamos el plan_id desde la primera orden (zone_id → buscar plan locked)
-    # Usamos la fecha de servicio del primer pedido como fecha de ruta
-    svc_date = selected[0]["service_date"]
-    plan_id = selected[0].get("plan_id")  # puede no venir en este endpoint
+    # Resolver plan_id: /planning/orders/ready-to-dispatch devuelve service_date y
+    # zone_id pero no plan_id. Agrupamos las órdenes seleccionadas por (service_date,
+    # zone_id) y elegimos el grupo mayoritario para tener paradas homogéneas. Luego
+    # consultamos GET /plans?service_date=...&zone_id=...&status=locked.
+    from collections import Counter
+    group_key = Counter(
+        (o["service_date"], o["zone_id"]) for o in selected
+    ).most_common(1)[0][0]
+    svc_date, zone_id = group_key
+    # Filtrar selected al grupo ganador para que todas las órdenes sean del mismo plan
+    selected = [o for o in selected if o["service_date"] == svc_date and o["zone_id"] == zone_id]
+    order_ids = [o["id"] for o in selected]
+    print(f"[SETUP] Grupo: service_date={svc_date} zone_id={zone_id} ({len(order_ids)} órdenes)")
 
-    if not plan_id:
-        # Fallback: el usuario debe proporcionar un plan_id
+    print(f"[SETUP] Buscando plan locked para service_date={svc_date} zone_id={zone_id}...")
+    r = session.get(
+        f"{BASE_URL}/plans",
+        params={"service_date": svc_date, "zone_id": zone_id, "status": "locked"},
+        headers=headers, timeout=15,
+    )
+    if r.status_code != 200:
+        bail(f"GET /plans falló ({r.status_code}): {r.text}")
+    plans = r.json().get("items", [])
+    if not plans:
         bail(
-            "El endpoint /planning/orders/ready-to-dispatch no devuelve plan_id. "
-            "Usa CORTECERO_ROUTE_ID con una ruta draft existente, "
-            "o crea la ruta manualmente desde el dispatcher y pasa CORTECERO_ROUTE_ID."
+            f"No hay plan en estado 'locked' para service_date={svc_date} zone_id={zone_id}. "
+            "El tenant necesita un plan bloqueado para esa zona/fecha. "
+            "Alternativamente usa CORTECERO_ROUTE_ID con una ruta draft existente."
         )
+    plan_id = plans[0]["id"]
+    print(f"[SETUP] Plan resuelto: {plan_id}")
 
     payload = {
         "plan_id": plan_id,
