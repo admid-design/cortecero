@@ -39,11 +39,18 @@ from app.models import (
     Vehicle,
     Zone,
 )
+from app.routers import routing
 from tests.helpers import auth_headers, login_as
 
 # ---------------------------------------------------------------------------
 # Helpers de sesión
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _force_mock_provider(monkeypatch):
+    # Bloque E.1 valida flujo con provider mock; el proveedor real se cubre en E.2.
+    monkeypatch.setattr(routing.settings, "google_route_optimization_project_id", "", raising=False)
 
 
 def _get_tenant(db_session) -> Tenant:

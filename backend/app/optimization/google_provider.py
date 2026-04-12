@@ -37,7 +37,9 @@ def _parse_rfc3339(value: str) -> datetime:
 
 
 def _to_rfc3339_utc(value: datetime) -> str:
-    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    # Route Optimization rechaza nanos en globalStartTime/globalEndTime.
+    # Emitimos segundos enteros en RFC3339 UTC.
+    return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 class GoogleRouteOptimizationProvider(RouteOptimizationProvider):
