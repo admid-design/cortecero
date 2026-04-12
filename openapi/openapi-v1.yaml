@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CorteCero API
-  version: 1.5.0
+  version: 1.5.1
   description: >
     API MVP para control de cut-off, planes diarios por zona, pedidos tardíos,
     excepciones y auditoría.
@@ -3658,6 +3658,16 @@ components:
         failure_reason:
           type: string
           nullable: true
+        customer_lat:
+          type: number
+          format: float
+          nullable: true
+          description: Latitud del cliente asociada al pedido de la parada, si existe.
+        customer_lng:
+          type: number
+          format: float
+          nullable: true
+          description: Longitud del cliente asociada al pedido de la parada, si existe.
         created_at:
           type: string
           format: date-time

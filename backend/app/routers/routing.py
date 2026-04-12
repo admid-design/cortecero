@@ -87,6 +87,52 @@ def _serialize_stop(stop: RouteStop) -> RouteStopOut:
     return RouteStopOut.model_validate(stop)
 
 
+def _serialize_stop_with_customer_geo(
+    stop: RouteStop,
+    *,
+    customer_lat: float | None,
+    customer_lng: float | None,
+) -> RouteStopOut:
+    payload = RouteStopOut.model_validate(stop)
+    payload.customer_lat = customer_lat
+    payload.customer_lng = customer_lng
+    return payload
+
+
+def _load_customer_geo_by_order_id(
+    db: Session,
+    *,
+    tenant_id: uuid.UUID,
+    order_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, tuple[float | None, float | None]]:
+    if not order_ids:
+        return {}
+
+    rows = db.execute(
+        select(Order.id, Customer.lat, Customer.lng)
+        .select_from(Order)
+        .join(
+            Customer,
+            and_(
+                Customer.id == Order.customer_id,
+                Customer.tenant_id == Order.tenant_id,
+            ),
+        )
+        .where(
+            Order.tenant_id == tenant_id,
+            Order.id.in_(order_ids),
+        )
+    ).all()
+
+    result: dict[uuid.UUID, tuple[float | None, float | None]] = {}
+    for order_id, lat, lng in rows:
+        result[order_id] = (
+            float(lat) if lat is not None else None,
+            float(lng) if lng is not None else None,
+        )
+    return result
+
+
 def _serialize_route(db: Session, tenant_id: uuid.UUID, route: Route) -> RouteOut:
     stops = list(
         db.scalars(
@@ -96,7 +142,19 @@ def _serialize_route(db: Session, tenant_id: uuid.UUID, route: Route) -> RouteOu
         )
     )
     data = RouteOut.model_validate(route)
-    data.stops = [_serialize_stop(s) for s in stops]
+    geo_by_order_id = _load_customer_geo_by_order_id(
+        db,
+        tenant_id=tenant_id,
+        order_ids=[stop.order_id for stop in stops],
+    )
+    data.stops = [
+        _serialize_stop_with_customer_geo(
+            stop,
+            customer_lat=geo_by_order_id.get(stop.order_id, (None, None))[0],
+            customer_lng=geo_by_order_id.get(stop.order_id, (None, None))[1],
+        )
+        for stop in stops
+    ]
     return data
 
 
@@ -971,7 +1029,20 @@ def get_next_stop(
         )
     )
     remaining = [stop for stop in stops if stop.status not in _STOP_TERMINAL]
-    next_stop = _serialize_stop(remaining[0]) if remaining else None
+    next_stop = None
+    if remaining:
+        stop = remaining[0]
+        geo_by_order_id = _load_customer_geo_by_order_id(
+            db,
+            tenant_id=current.tenant_id,
+            order_ids=[stop.order_id],
+        )
+        lat, lng = geo_by_order_id.get(stop.order_id, (None, None))
+        next_stop = _serialize_stop_with_customer_geo(
+            stop,
+            customer_lat=lat,
+            customer_lng=lng,
+        )
     return RouteNextStopResponse(route_id=route.id, next_stop=next_stop, remaining_stops=len(remaining))
 
 

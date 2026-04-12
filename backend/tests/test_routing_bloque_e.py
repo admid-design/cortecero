@@ -262,6 +262,9 @@ def test_optimize_happy_path(client, db_session):
     body = res.json()
     assert body["status"] == "planned"
     assert body["id"] == str(route.id)
+    assert len(body["stops"]) >= 1
+    assert body["stops"][0]["customer_lat"] is not None
+    assert body["stops"][0]["customer_lng"] is not None
 
 
 def test_optimize_transitions_route_to_planned(client, db_session):

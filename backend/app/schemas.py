@@ -647,6 +647,8 @@ class RouteStopOut(APIModel):
     completed_at: datetime | None
     failed_at: datetime | None
     failure_reason: str | None
+    customer_lat: float | None = None
+    customer_lng: float | None = None
     created_at: datetime
     updated_at: datetime
 
