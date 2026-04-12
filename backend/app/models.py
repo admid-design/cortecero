@@ -476,6 +476,16 @@ class Driver(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    # user_id: vínculo explícito hacia la cuenta de acceso del conductor.
+    # Nullable: conductores demo/seed no tienen cuenta PWA.
+    # DEFERRABLE INITIALLY DEFERRED: User y Driver pueden crearse en la misma tx.
+    # ON DELETE SET NULL: borrar el User no borra el historial operativo del Driver.
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"),
+        nullable=True,
+        unique=True,
+    )
     vehicle_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     phone: Mapped[str] = mapped_column(Text, nullable=False)

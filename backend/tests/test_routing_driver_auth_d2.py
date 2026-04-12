@@ -51,36 +51,51 @@ def _driver_token(client, *, tenant_slug: str, email: str, password: str = "driv
 
 
 def _create_driver_with_user(db_session, tenant: Tenant, *, email: str) -> Driver:
+    """Crea un par (User con role=driver, Driver) con vínculo explícito via user_id.
+
+    Orden correcto post-018_driver_user_id:
+      1. User  — identidad de autenticación; genera su propio UUID.
+      2. Driver — ficha operativa; user_id apunta al User creado en (1).
+
+    La FK fk_drivers_user_id es DEFERRABLE INITIALLY DEFERRED, por lo que
+    User y Driver pueden insertarse en la misma transacción en cualquier orden.
+    Usamos el orden semánticamente correcto (User primero).
+    """
     now = datetime.now(UTC)
     vehicle = db_session.scalar(
         select(Vehicle).where(Vehicle.tenant_id == tenant.id, Vehicle.active.is_(True))
     )
     assert vehicle is not None
 
-    driver = Driver(
+    driver_name = f"Driver {email.split('@')[0]}"
+
+    # 1. Crear la cuenta de acceso (User) — UUID propio, independiente del Driver
+    user = User(
         id=uuid.uuid4(),
         tenant_id=tenant.id,
-        vehicle_id=vehicle.id,
-        name=f"Driver {email.split('@')[0]}",
-        phone=f"+34000{str(uuid.uuid4().int)[:8]}",
-        is_active=True,
-        created_at=now,
-        updated_at=now,
-    )
-    db_session.add(driver)
-    db_session.flush()
-
-    user = User(
-        id=driver.id,
-        tenant_id=tenant.id,
         email=email,
-        full_name=driver.name,
+        full_name=driver_name,
         password_hash=hash_password("driver123"),
         role=UserRole.driver,
         is_active=True,
         created_at=now,
     )
     db_session.add(user)
+    db_session.flush()  # user.id disponible antes del driver
+
+    # 2. Crear la ficha operativa (Driver) con vínculo explícito user_id → user.id
+    driver = Driver(
+        id=uuid.uuid4(),        # UUID propio (no comparte ID con User)
+        tenant_id=tenant.id,
+        user_id=user.id,        # vínculo explícito (018_driver_user_id)
+        vehicle_id=vehicle.id,
+        name=driver_name,
+        phone=f"+34000{str(uuid.uuid4().int)[:8]}",
+        is_active=True,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(driver)
     db_session.commit()
     db_session.refresh(driver)
     return driver

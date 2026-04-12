@@ -1006,11 +1006,21 @@ def _get_route_for_stop(
 
 
 def _resolve_current_driver(db: Session, current: CurrentUser) -> Driver | None:
+    """Resuelve el Driver activo vinculado al User actual.
+
+    La relación se busca por drivers.user_id == current.id (vínculo explícito,
+    migration 018). Esto reemplaza la convención anterior de drivers.id == users.id,
+    que carecía de FK y no era trazable.
+
+    Returns None si current no tiene role=driver (non-driver roles no hacen lookup).
+    Raise 403 DRIVER_NOT_LINKED si el User tiene role=driver pero no hay Driver
+    activo vinculado vía user_id.
+    """
     if current.role != UserRole.driver:
         return None
     driver = db.scalar(
         select(Driver).where(
-            Driver.id == current.id,
+            Driver.user_id == current.id,   # vínculo explícito (018_driver_user_id)
             Driver.tenant_id == current.tenant_id,
             Driver.is_active.is_(True),
         )
