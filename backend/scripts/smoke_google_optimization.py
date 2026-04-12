@@ -20,6 +20,7 @@ Variables de entorno requeridas:
   Para crear y optimizar una ruta nueva con las primeras N órdenes plannificadas:
     SMOKE_CREATE_ROUTE=1
     SMOKE_ORDER_LIMIT=5      (default: 5, máx recomendado: 10)
+    SMOKE_PREPARE_DATASET=1  prepara dataset geo-ready mínimo (DEMO-DATA-001)
 
 Uso típico:
   export GOOGLE_APPLICATION_CREDENTIALS=/ruta/privada/service-account.json
@@ -32,10 +33,12 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import time
 from collections import Counter, defaultdict
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 try:
     import requests
@@ -56,6 +59,7 @@ CREATE_ROUTE   = os.getenv("SMOKE_CREATE_ROUTE", "").strip() in ("1", "true", "y
 ORDER_LIMIT    = int(os.getenv("SMOKE_ORDER_LIMIT", "5"))
 MIN_STOPS      = int(os.getenv("SMOKE_MIN_STOPS", "2"))
 PREFERRED_STOPS = int(os.getenv("SMOKE_PREFERRED_STOPS", "3"))
+PREPARE_DATASET = os.getenv("SMOKE_PREPARE_DATASET", "").strip() in ("1", "true", "yes")
 
 DIV  = "=" * 72
 DIV2 = "-" * 72
@@ -69,6 +73,34 @@ def bail(msg: str) -> None:
 
 def pp(obj: object) -> str:
     return json.dumps(obj, indent=2, ensure_ascii=False, default=str)
+
+
+def prepare_geo_ready_dataset() -> None:
+    """
+    DEMO-DATA-001: prepara dataset mínimo geo-ready versionado.
+    """
+    helper = Path(__file__).resolve().with_name("prepare_google_smoke_dataset.py")
+    if not helper.exists():
+        bail(f"No existe helper de dataset: {helper}")
+    backend_root = helper.parent.parent
+
+    env = os.environ.copy()
+    env.setdefault("CORTECERO_TENANT_SLUG", TENANT_SLUG)
+
+    print(f"\n[DATASET] Preparando dataset demo geo-ready con {helper.name} ...")
+    proc = subprocess.run(
+        [sys.executable, str(helper)],
+        cwd=str(backend_root),
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+    if proc.stdout.strip():
+        print(proc.stdout.strip())
+    if proc.returncode != 0:
+        if proc.stderr.strip():
+            print(proc.stderr.strip())
+        bail("No se pudo preparar dataset demo geo-ready")
 
 # ---------------------------------------------------------------------------
 # Auth
@@ -418,6 +450,9 @@ def main() -> None:
     session.headers.update({"Content-Type": "application/json"})
 
     token = login(session)
+
+    if PREPARE_DATASET:
+        prepare_geo_ready_dataset()
 
     # -----------------------------------------------------------------------
     # Modo: listar rutas draft disponibles
