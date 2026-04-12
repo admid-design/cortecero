@@ -48,45 +48,20 @@ CorteCero reduce fricción operativa en tres frentes:
 
 ## Quick start
 
-### Prerequisites
+### Fast boot (local)
 
-- Docker / Docker Compose
-- Node.js
-- Python
-- credenciales privadas válidas para pruebas reales con Google Route Optimization cuando aplique
-
-### Run locally
+Prerequisites: Docker/Compose, Node.js y Python.
 
 ```bash
+# 1) levantar stack
 docker compose up -d --build
-```
 
-Frontend:
+# 2) frontend local
+cd frontend && npm install && npm run dev
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Backend tests:
-
-```bash
+# 3) chequeo mínimo rápido
 docker compose run --rm backend pytest -q
-```
-
-Frontend tests:
-
-```bash
-cd frontend
-npm test
-```
-
-Frontend build:
-
-```bash
-cd frontend
-npm run build
+cd frontend && npm test && npm run build
 ```
 
 ### Google optimization smoke
@@ -236,31 +211,13 @@ Para eso, usar `docs/`.
 
 ## Working model
 
-Este repositorio no se trabaja como un MVP genérico. Se trabaja con un método explícito:
+El método de trabajo es explícito y orientado a cierre verificable:
 
-- el usuario dirige fase, ticket y prioridad
-- un bloque por vez
-- cambio mínimo suficiente
-- no mezclar tickets
-- no abrir fases nuevas por iniciativa propia
-- verificar gate antes de ejecutar
-- ante ambigüedad: fail closed
+- un bloque por vez, cambio mínimo suficiente, sin mezclar tickets
+- usuario/revisor marca prioridad y gate; implementación por evidencia
+- no se declara cierre sin validación ejecutada y estado final explícito
 
-### Evidence and closure
-
-Ningún bloque se considera cerrado sin:
-
-- commit o diff real
-- alcance explícito
-- archivos tocados
-- tests/checks relevantes
-- riesgos declarados
-- estado final
-
-La revisión se hace con doble lente:
-
-- **valor operativo**
-- **preparación para IA**
+Detalle contractual completo en `AGENTS.md`, `CLAUDE.md` y `docs/contracts/`.
 
 ---
 
@@ -273,6 +230,19 @@ Antes de tocar código o contratos:
 3. valida invariantes y gates
 4. limítate al bloque activo
 5. declara evidencia, riesgos y estado al cerrar
+
+---
+
+## Releases
+
+- Tags publicados: `v0.2.0`, `v0.3.0`, `v0.4.0`, `v0.5.0`
+- Historial completo: `https://github.com/admid-design/cortecero/releases`
+
+---
+
+## License
+
+Actualmente este repositorio no incluye archivo `LICENSE`.
 
 ---
 
