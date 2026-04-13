@@ -98,7 +98,7 @@ import { DispatcherRoutingCard } from "../components/DispatcherRoutingCard";
 import { DriverRoutingCard } from "../components/DriverRoutingCard";
 import { OperationalQueueTableCard } from "../components/OperationalQueueTableCard";
 import { OperationalResolutionQueueTableCard } from "../components/OperationalResolutionQueueTableCard";
-import { OrderOperationalSnapshotsCard } from "../components/OrderOperationalSnapshotsCard";
+import { OrderSnapshotsTimelineCard } from "../components/OrderSnapshotsTimelineCard";
 import { PendingQueueTableCard } from "../components/PendingQueueTableCard";
 import { AdminProductsCard } from "../components/AdminProductsCard";
 import { OrdersTableCard } from "../components/OrdersTableCard";
@@ -1979,7 +1979,7 @@ export default function HomePage() {
             onApplyFilters={() => void refreshOps()}
           />
 
-          <OrderOperationalSnapshotsCard
+          <OrderSnapshotsTimelineCard
             selectedOrderId={selectedSnapshotOrderId}
             onSelectedOrderIdChange={onSnapshotOrderChange}
             orderOptions={snapshotOrderOptions}

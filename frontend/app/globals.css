@@ -381,6 +381,10 @@ button.tab.muted {
   gap: 8px;
 }
 
+.order-snapshots-timeline-card {
+  gap: 8px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

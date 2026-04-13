@@ -7,7 +7,7 @@ type OrderOption = {
   serviceDate: string;
 };
 
-type OrderOperationalSnapshotsCardProps = {
+type OrderSnapshotsTimelineCardProps = {
   selectedOrderId: string;
   onSelectedOrderIdChange: (value: string) => void;
   orderOptions: OrderOption[];
@@ -43,7 +43,7 @@ function readEvidenceValue(evidence: Record<string, unknown>, key: string): stri
   return String(value);
 }
 
-export function OrderOperationalSnapshotsCard({
+export function OrderSnapshotsTimelineCard({
   selectedOrderId,
   onSelectedOrderIdChange,
   orderOptions,
@@ -51,9 +51,9 @@ export function OrderOperationalSnapshotsCard({
   loading,
   error,
   onLoad,
-}: OrderOperationalSnapshotsCardProps) {
+}: OrderSnapshotsTimelineCardProps) {
   return (
-    <div className="card grid">
+    <div className="card grid order-snapshots-timeline-card">
       <h2>Operational Snapshots Timeline</h2>
       <div className="row">
         <label>

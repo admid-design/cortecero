@@ -3,12 +3,12 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { OrderOperationalSnapshotsCard } from "../components/OrderOperationalSnapshotsCard";
+import { OrderSnapshotsTimelineCard } from "../components/OrderSnapshotsTimelineCard";
 import type { OrderOperationalSnapshotItem } from "../lib/api";
 
 function renderCard(items: OrderOperationalSnapshotItem[], selectedOrderId = "order-1"): string {
   return renderToStaticMarkup(
-    <OrderOperationalSnapshotsCard
+    <OrderSnapshotsTimelineCard
       selectedOrderId={selectedOrderId}
       onSelectedOrderIdChange={() => {}}
       orderOptions={[
@@ -68,4 +68,3 @@ test("preserves backend order without frontend re-sorting", () => {
   assert.ok(secondIndex >= 0, "r6-v1 should be rendered");
   assert.ok(firstIndex < secondIndex, "Rendered order should match backend order");
 });
-
