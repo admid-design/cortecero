@@ -245,6 +245,14 @@ button.tab.muted {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.kpi-row {
+  gap: 10px;
+}
+
+.kpi-row-header h2 {
+  font-size: 18px;
+}
+
 .metric-grid div {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -263,6 +271,21 @@ button.tab.muted {
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+}
+
+.dispatcher-routing-shell {
+  gap: 10px;
+}
+
+.dispatcher-routing-shell-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.dispatcher-routing-shell-actions {
+  justify-content: flex-start;
 }
 
 table {
@@ -355,5 +378,10 @@ th {
 
   .metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dispatcher-routing-shell-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

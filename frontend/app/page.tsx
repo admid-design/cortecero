@@ -102,6 +102,8 @@ import { OrderOperationalSnapshotsCard } from "../components/OrderOperationalSna
 import { PendingQueueCard } from "../components/PendingQueueCard";
 import { AdminProductsCard } from "../components/AdminProductsCard";
 import { AppShell, GlobalBanner, SectionHeader, SidebarNav, TopTabs } from "../components/AppShell";
+import { KpiRow } from "../components/KpiRow";
+import { DispatcherRoutingShell } from "../components/DispatcherRoutingShell";
 
 type ViewMode = "ops" | "admin";
 type AdminSection = "zones" | "customers" | "users" | "tenant" | "products";
@@ -1657,41 +1659,7 @@ export default function HomePage() {
 
       {isAuthenticated && !isDriver && viewMode === "ops" && (
         <>
-          <div className="card row">
-            <input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} />
-            <button className="secondary" onClick={() => void refreshOps()}>
-              Refrescar operación
-            </button>
-          </div>
-
-          {summary && (
-            <div className="card metric-grid">
-              <div>
-                <strong>Total pedidos</strong>
-                <p>{summary.total_orders}</p>
-              </div>
-              <div>
-                <strong>Tardíos</strong>
-                <p>{summary.late_orders}</p>
-              </div>
-              <div>
-                <strong>Planes open</strong>
-                <p>{summary.plans_open}</p>
-              </div>
-              <div>
-                <strong>Planes locked</strong>
-                <p>{summary.plans_locked}</p>
-              </div>
-              <div>
-                <strong>Excepciones pending</strong>
-                <p>{summary.pending_exceptions}</p>
-              </div>
-              <div>
-                <strong>Excepciones approved</strong>
-                <p>{summary.approved_exceptions}</p>
-              </div>
-            </div>
-          )}
+          {summary && <KpiRow summary={summary} />}
 
           <div className="card grid">
             <h2>Métricas por Origen</h2>
@@ -1751,51 +1719,61 @@ export default function HomePage() {
             </table>
           </div>
 
-          {canViewRouting ? (
-            <DispatcherRoutingCard
-              serviceDate={serviceDate}
-              onServiceDateChange={setServiceDate}
-              routeStatus={dispatcherRouteStatus}
-              onRouteStatusChange={setDispatcherRouteStatus}
-              loading={dispatcherLoading}
-              canManage={canManageRouting}
-              readyOrders={dispatcherReadyOrders}
-              availableVehicles={dispatcherVehicles}
-              routes={dispatcherRoutes}
-              selectedRouteId={selectedDispatcherRouteId}
-              onSelectedRouteIdChange={onSelectDispatcherRoute}
-              selectedRoute={selectedDispatcherRoute}
-              routeEvents={selectedDispatcherRouteEvents}
-              routeDetailLoading={dispatcherRouteDetailLoading}
-              planId={dispatcherPlanId}
-              onPlanIdChange={setDispatcherPlanId}
-              planVehicleId={dispatcherPlanVehicleId}
-              onPlanVehicleIdChange={setDispatcherPlanVehicleId}
-              planDriverId={dispatcherPlanDriverId}
-              onPlanDriverIdChange={setDispatcherPlanDriverId}
-              planOrderIds={dispatcherPlanOrderIds}
-              onPlanOrderIdsChange={setDispatcherPlanOrderIds}
-              creatingPlan={dispatcherPlanCreating}
-              optimizingRouteId={dispatcherOptimizingRouteId}
-              dispatchingRouteId={dispatcherDispatchingRouteId}
-              moveSourceRouteId={dispatcherMoveSourceRouteId}
-              onMoveSourceRouteIdChange={setDispatcherMoveSourceRouteId}
-              moveStopId={dispatcherMoveStopId}
-              onMoveStopIdChange={setDispatcherMoveStopId}
-              moveTargetRouteId={dispatcherMoveTargetRouteId}
-              onMoveTargetRouteIdChange={setDispatcherMoveTargetRouteId}
-              movingStop={dispatcherMovingStop}
-              onRefresh={() => void refreshDispatcher()}
-              onCreatePlan={() => void onCreateDispatcherRoutePlan()}
-              onOptimizeRoute={(routeId) => void onOptimizeDispatcherRoute(routeId)}
-              onDispatchRoute={(routeId) => void onDispatchDispatcherRoute(routeId)}
-              onMoveStop={() => void onMoveDispatcherStop()}
-            />
-          ) : (
-            <div className="card" style={{ borderColor: "#fca5a5", color: "#991b1b" }}>
-              RBAC_FORBIDDEN: El panel dispatcher requiere rol office/logistics/admin.
-            </div>
-          )}
+          <DispatcherRoutingShell
+            serviceDate={serviceDate}
+            onServiceDateChange={setServiceDate}
+            onRefresh={() => void refreshOps()}
+            loading={dispatcherLoading}
+            routeCount={dispatcherRoutes.length}
+            readyOrderCount={dispatcherReadyOrders.length}
+            vehicleCount={dispatcherVehicles.length}
+          >
+            {canViewRouting ? (
+              <DispatcherRoutingCard
+                serviceDate={serviceDate}
+                onServiceDateChange={setServiceDate}
+                routeStatus={dispatcherRouteStatus}
+                onRouteStatusChange={setDispatcherRouteStatus}
+                loading={dispatcherLoading}
+                canManage={canManageRouting}
+                readyOrders={dispatcherReadyOrders}
+                availableVehicles={dispatcherVehicles}
+                routes={dispatcherRoutes}
+                selectedRouteId={selectedDispatcherRouteId}
+                onSelectedRouteIdChange={onSelectDispatcherRoute}
+                selectedRoute={selectedDispatcherRoute}
+                routeEvents={selectedDispatcherRouteEvents}
+                routeDetailLoading={dispatcherRouteDetailLoading}
+                planId={dispatcherPlanId}
+                onPlanIdChange={setDispatcherPlanId}
+                planVehicleId={dispatcherPlanVehicleId}
+                onPlanVehicleIdChange={setDispatcherPlanVehicleId}
+                planDriverId={dispatcherPlanDriverId}
+                onPlanDriverIdChange={setDispatcherPlanDriverId}
+                planOrderIds={dispatcherPlanOrderIds}
+                onPlanOrderIdsChange={setDispatcherPlanOrderIds}
+                creatingPlan={dispatcherPlanCreating}
+                optimizingRouteId={dispatcherOptimizingRouteId}
+                dispatchingRouteId={dispatcherDispatchingRouteId}
+                moveSourceRouteId={dispatcherMoveSourceRouteId}
+                onMoveSourceRouteIdChange={setDispatcherMoveSourceRouteId}
+                moveStopId={dispatcherMoveStopId}
+                onMoveStopIdChange={setDispatcherMoveStopId}
+                moveTargetRouteId={dispatcherMoveTargetRouteId}
+                onMoveTargetRouteIdChange={setDispatcherMoveTargetRouteId}
+                movingStop={dispatcherMovingStop}
+                onRefresh={() => void refreshDispatcher()}
+                onCreatePlan={() => void onCreateDispatcherRoutePlan()}
+                onOptimizeRoute={(routeId) => void onOptimizeDispatcherRoute(routeId)}
+                onDispatchRoute={(routeId) => void onDispatchDispatcherRoute(routeId)}
+                onMoveStop={() => void onMoveDispatcherStop()}
+              />
+            ) : (
+              <div className="card" style={{ borderColor: "#fca5a5", color: "#991b1b" }}>
+                RBAC_FORBIDDEN: El panel dispatcher requiere rol office/logistics/admin.
+              </div>
+            )}
+          </DispatcherRoutingShell>
 
           <div className="grid cols-2">
             <div className="card grid">
