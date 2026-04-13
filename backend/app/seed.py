@@ -152,6 +152,27 @@ def seed() -> None:
                 )
                 db.add(customer)
                 db.flush()
+            else:
+                # Backfill determinista de dataset geo demo para instalaciones existentes.
+                # Evita que pedidos/rutas demo queden sin coordenadas por seeds antiguos.
+                needs_update = False
+                if customer.zone_id != zone.id:
+                    customer.zone_id = zone.id
+                    needs_update = True
+                if customer.lat is None:
+                    customer.lat = lat_val
+                    needs_update = True
+                if customer.lng is None:
+                    customer.lng = lng_val
+                    needs_update = True
+                if not customer.delivery_address:
+                    customer.delivery_address = addr
+                    needs_update = True
+                if not customer.active:
+                    customer.active = True
+                    needs_update = True
+                if needs_update:
+                    customer.updated_at = now_utc()
             customers.append(customer)
 
         service_date = (datetime.now(ZoneInfo("Europe/Madrid")) + timedelta(days=1)).date()
@@ -262,6 +283,20 @@ def seed() -> None:
 
         planned_candidate = by_external.get(f"DEMO-{service_date.strftime('%Y%m%d')}-001")
         if planned_candidate:
+            # Garantiza caso demo geo-ready para la referencia principal de flujo.
+            # Si el pedido quedó vinculado a un cliente sin coordenadas, se corrige
+            # al cliente demo 01 (geo sintético estable).
+            planned_customer = db.scalar(
+                select(Customer).where(
+                    Customer.id == planned_candidate.customer_id,
+                    Customer.tenant_id == tenant.id,
+                )
+            )
+            if not planned_customer or planned_customer.lat is None or planned_customer.lng is None:
+                planned_candidate.customer_id = customers[0].id
+                planned_candidate.zone_id = customers[0].zone_id
+                planned_candidate.updated_at = now_utc()
+
             exists_plan_order = db.scalar(
                 select(PlanOrder).where(PlanOrder.tenant_id == tenant.id, PlanOrder.order_id == planned_candidate.id)
             )
@@ -278,6 +313,28 @@ def seed() -> None:
                     )
                 )
                 planned_candidate.status = OrderStatus.planned
+
+        # Backfill de compatibilidad para órdenes demo históricas (p.ej. DEMO-YYYYMMDD-001)
+        # que ya existían antes del dataset geográfico sintético.
+        legacy_demo_orders = list(
+            db.scalars(
+                select(Order).where(
+                    Order.tenant_id == tenant.id,
+                    Order.external_ref.like("DEMO-%-001"),
+                )
+            )
+        )
+        for order_obj in legacy_demo_orders:
+            order_customer = db.scalar(
+                select(Customer).where(
+                    Customer.id == order_obj.customer_id,
+                    Customer.tenant_id == tenant.id,
+                )
+            )
+            if not order_customer or order_customer.lat is None or order_customer.lng is None:
+                order_obj.customer_id = customers[0].id
+                order_obj.zone_id = customers[0].zone_id
+                order_obj.updated_at = now_utc()
 
         pending_order = by_external.get(f"DEMO-{service_date.strftime('%Y%m%d')}-019")
         approved_order = by_external.get(f"DEMO-{service_date.strftime('%Y%m%d')}-020")
