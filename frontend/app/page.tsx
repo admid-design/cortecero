@@ -101,6 +101,7 @@ import { OperationalResolutionQueueCard } from "../components/OperationalResolut
 import { OrderOperationalSnapshotsCard } from "../components/OrderOperationalSnapshotsCard";
 import { PendingQueueCard } from "../components/PendingQueueCard";
 import { AdminProductsCard } from "../components/AdminProductsCard";
+import { AppShell, GlobalBanner, SectionHeader, SidebarNav, TopTabs } from "../components/AppShell";
 
 type ViewMode = "ops" | "admin";
 type AdminSection = "zones" | "customers" | "users" | "tenant" | "products";
@@ -1548,35 +1549,87 @@ export default function HomePage() {
     }
   }
 
-  return (
-    <main className="grid" style={{ gap: 16 }}>
-      <div className="card topbar">
-        <div>
-          <h1>CorteCero Ops</h1>
-          <p style={{ margin: 0, color: "#6b7280" }}>Cut-off, lock y excepciones con trazabilidad operativa</p>
-        </div>
-        {isAuthenticated && (
-          <div className="row">
-            <span className="pill">Rol: {role ?? "desconocido"}</span>
-            <button className="secondary" onClick={onLogout}>
-              Cerrar sesión
-            </button>
-          </div>
-        )}
-      </div>
+  const shellSidebar = isAuthenticated ? (
+    <SidebarNav
+      title={isDriver ? "Modo conductor" : "Ops"}
+      items={[
+        ...(isDriver
+          ? [{ id: "driver", label: "Mis rutas", active: true }]
+          : [
+              {
+                id: "ops",
+                label: "Operación",
+                active: viewMode === "ops",
+                onClick: () => setViewMode("ops"),
+              },
+              ...(isAdmin
+                ? [
+                    {
+                      id: "admin",
+                      label: "Admin",
+                      active: viewMode === "admin",
+                      onClick: () => {
+                        setViewMode("admin");
+                        void refreshZones();
+                      },
+                    },
+                  ]
+                : []),
+            ]),
+      ]}
+    />
+  ) : undefined;
 
+  const shellTabs =
+    isAuthenticated && !isDriver ? (
+      <TopTabs
+        items={[
+          { id: "ops-tab", label: "Operación", active: viewMode === "ops", onClick: () => setViewMode("ops") },
+          ...(isAdmin
+            ? [
+                {
+                  id: "admin-tab",
+                  label: "Admin",
+                  active: viewMode === "admin",
+                  onClick: () => {
+                    setViewMode("admin");
+                    void refreshZones();
+                  },
+                },
+              ]
+            : []),
+        ]}
+      />
+    ) : undefined;
+
+  return (
+    <AppShell
+      header={
+        <SectionHeader
+          title="CorteCero Ops"
+          subtitle="Cut-off, lock y excepciones con trazabilidad operativa"
+          actions={
+            isAuthenticated ? (
+              <div className="row">
+                <span className="pill">Rol: {role ?? "desconocido"}</span>
+                <button className="secondary" onClick={onLogout}>
+                  Cerrar sesión
+                </button>
+              </div>
+            ) : null
+          }
+        />
+      }
+      topTabs={shellTabs}
+      banner={error ? <GlobalBanner tone="error">{error}</GlobalBanner> : undefined}
+      sidebar={shellSidebar}
+    >
       {!isAuthenticated && (
         <div className="card grid cols-2">
           <input placeholder="tenant_slug" value={tenantSlug} onChange={(e) => setTenantSlug(e.target.value)} />
           <input placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           <input placeholder="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
           <button onClick={onLogin}>Entrar</button>
-        </div>
-      )}
-
-      {error && (
-        <div className="card" style={{ borderColor: "#fca5a5", color: "#991b1b" }}>
-          {error}
         </div>
       )}
 
@@ -1600,25 +1653,6 @@ export default function HomePage() {
           onSkip={(stopId) => void onDriverSkip(stopId)}
           onReportIncident={(payload) => void onDriverReportIncident(payload)}
         />
-      )}
-
-      {isAuthenticated && !isDriver && (
-        <div className="card row">
-          <button className={viewMode === "ops" ? "tab active" : "tab"} onClick={() => setViewMode("ops")}>
-            Operación
-          </button>
-          {isAdmin && (
-            <button
-              className={viewMode === "admin" ? "tab active" : "tab"}
-              onClick={() => {
-                setViewMode("admin");
-                void refreshZones();
-              }}
-            >
-              Admin
-            </button>
-          )}
-        </div>
       )}
 
       {isAuthenticated && !isDriver && viewMode === "ops" && (
@@ -2884,6 +2918,6 @@ export default function HomePage() {
           )}
         </>
       )}
-    </main>
+    </AppShell>
   );
 }
