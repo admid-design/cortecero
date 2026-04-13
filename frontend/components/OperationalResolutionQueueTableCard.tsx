@@ -5,7 +5,7 @@ import type {
   OperationalResolutionQueueSeverity,
 } from "../lib/api";
 
-type OperationalResolutionQueueCardProps = {
+type OperationalResolutionQueueTableCardProps = {
   serviceDate: string;
   onServiceDateChange: (value: string) => void;
   zoneId: string;
@@ -43,7 +43,7 @@ function operationalSeverityBadgeClass(severity: string | null): string {
   return "badge intake-unknown";
 }
 
-export function OperationalResolutionQueueCard({
+export function OperationalResolutionQueueTableCard({
   serviceDate,
   onServiceDateChange,
   zoneId,
@@ -57,9 +57,9 @@ export function OperationalResolutionQueueCard({
   severityOptions,
   items,
   onApplyFilters,
-}: OperationalResolutionQueueCardProps) {
+}: OperationalResolutionQueueTableCardProps) {
   return (
-    <div className="card grid">
+    <div className="card grid operational-resolution-queue-table-card">
       <h2>Operational Resolution Queue</h2>
       <div className="row">
         <label>

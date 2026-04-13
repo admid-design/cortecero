@@ -377,6 +377,10 @@ button.tab.muted {
   gap: 8px;
 }
 
+.operational-resolution-queue-table-card {
+  gap: 8px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

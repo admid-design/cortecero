@@ -3,12 +3,12 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { OperationalResolutionQueueCard } from "../components/OperationalResolutionQueueCard";
+import { OperationalResolutionQueueTableCard } from "../components/OperationalResolutionQueueTableCard";
 import type { OperationalResolutionQueueItem } from "../lib/api";
 
 function renderCard(items: OperationalResolutionQueueItem[]): string {
   return renderToStaticMarkup(
-    <OperationalResolutionQueueCard
+    <OperationalResolutionQueueTableCard
       serviceDate="2026-04-01"
       onServiceDateChange={() => {}}
       zoneId="all"
