@@ -339,6 +339,10 @@ button.tab.muted {
   background: #f8fafc;
 }
 
+.route-detail-card {
+  gap: 10px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
