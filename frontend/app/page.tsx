@@ -104,6 +104,7 @@ import { AdminProductsCard } from "../components/AdminProductsCard";
 import { OrdersTableCard } from "../components/OrdersTableCard";
 import { PlansTableCard } from "../components/PlansTableCard";
 import { PlanConsolidationCard } from "../components/PlanConsolidationCard";
+import { ExceptionsTableCard } from "../components/ExceptionsTableCard";
 import { AppShell, GlobalBanner, SectionHeader, SidebarNav, TopTabs } from "../components/AppShell";
 import { KpiRow } from "../components/KpiRow";
 import { DispatcherRoutingShell } from "../components/DispatcherRoutingShell";
@@ -1821,49 +1822,16 @@ export default function HomePage() {
               />
             </div>
 
-            <div className="card grid">
-              <h2>Excepciones</h2>
-              <div className="row">
-                <input
-                  placeholder="order_id"
-                  value={exceptionOrderId}
-                  onChange={(e) => setExceptionOrderId(e.target.value)}
-                />
-                <input placeholder="nota" value={exceptionNote} onChange={(e) => setExceptionNote(e.target.value)} />
-                <button className="warn" onClick={onCreateException}>
-                  Solicitar excepción
-                </button>
-              </div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>id</th>
-                    <th>order</th>
-                    <th>estado</th>
-                    <th>acción</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {exceptions.map((item) => (
-                    <tr key={item.id}>
-                      <td>{shortId(item.id)}</td>
-                      <td>{shortId(item.order_id)}</td>
-                      <td>{item.status}</td>
-                      <td className="row">
-                        {item.status === "pending" && (
-                          <>
-                            <button onClick={() => onApproveException(item.id)}>Aprobar</button>
-                            <button className="danger" onClick={() => onRejectException(item.id)}>
-                              Rechazar
-                            </button>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ExceptionsTableCard
+              exceptionOrderId={exceptionOrderId}
+              onExceptionOrderIdChange={setExceptionOrderId}
+              exceptionNote={exceptionNote}
+              onExceptionNoteChange={setExceptionNote}
+              onCreateException={() => void onCreateException()}
+              exceptions={exceptions}
+              onApproveException={(exceptionId) => void onApproveException(exceptionId)}
+              onRejectException={(exceptionId) => void onRejectException(exceptionId)}
+            />
           </div>
 
           <div className="card grid">

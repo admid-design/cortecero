@@ -385,6 +385,10 @@ button.tab.muted {
   gap: 8px;
 }
 
+.exceptions-table-card {
+  gap: 8px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
