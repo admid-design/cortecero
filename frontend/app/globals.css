@@ -356,6 +356,15 @@ button.tab.muted {
   gap: 8px;
 }
 
+.plans-column {
+  gap: 10px;
+  align-content: start;
+}
+
+.plans-table-card {
+  gap: 8px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

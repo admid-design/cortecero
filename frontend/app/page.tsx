@@ -102,6 +102,7 @@ import { OrderOperationalSnapshotsCard } from "../components/OrderOperationalSna
 import { PendingQueueCard } from "../components/PendingQueueCard";
 import { AdminProductsCard } from "../components/AdminProductsCard";
 import { OrdersTableCard } from "../components/OrdersTableCard";
+import { PlansTableCard } from "../components/PlansTableCard";
 import { AppShell, GlobalBanner, SectionHeader, SidebarNav, TopTabs } from "../components/AppShell";
 import { KpiRow } from "../components/KpiRow";
 import { DispatcherRoutingShell } from "../components/DispatcherRoutingShell";
@@ -1777,126 +1778,38 @@ export default function HomePage() {
           </DispatcherRoutingShell>
 
           <div className="grid cols-2">
-            <div className="card grid">
-              <h2>Planes</h2>
-              {canRunAutoLock && (
-                <div className="row">
-                  <button className="secondary" onClick={onRunAutoLock} disabled={autoLockRunning}>
-                    {autoLockRunning ? "Ejecutando auto-lock..." : "Ejecutar auto-lock"}
-                  </button>
-                  {autoLockResult && (
-                    <span className="pill">
-                      service_date {autoLockResult.service_date} · locked {autoLockResult.locked_count}/
-                      {autoLockResult.considered_open_plans} · enabled{" "}
-                      {autoLockResult.auto_lock_enabled ? "true" : "false"} · window{" "}
-                      {autoLockResult.window_reached ? "reached" : "not_reached"}
-                    </span>
-                  )}
-                </div>
-              )}
-              <div className="row">
-                <input
-                  placeholder="zone_id para crear plan"
-                  value={newPlanZoneId}
-                  onChange={(e) => setNewPlanZoneId(e.target.value)}
-                />
-                <button onClick={onCreatePlan}>Crear plan</button>
-              </div>
-              <div className="row">
-                <input placeholder="plan_id" value={includePlanId} onChange={(e) => setIncludePlanId(e.target.value)} />
-                <input placeholder="order_id" value={includeOrderId} onChange={(e) => setIncludeOrderId(e.target.value)} />
-                <button className="secondary" onClick={onIncludeOrder}>
-                  Incluir pedido
-                </button>
-              </div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>id</th>
-                    <th>zona</th>
-                    <th>estado</th>
-                    <th>vehículo</th>
-                    <th>peso_kg</th>
-                    <th>con/sin peso</th>
-                    <th>asignar vehículo</th>
-                    <th>acción</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {plans.map((plan) => (
-                    <tr key={plan.id}>
-                      <td>{shortId(plan.id)}</td>
-                      <td>{shortId(plan.zone_id)}</td>
-                      <td>{plan.status}</td>
-                      <td>
-                        {plan.vehicle_id ? (
-                          <div className="grid" style={{ gap: 2 }}>
-                            <span>{plan.vehicle_name ?? "vehículo"}</span>
-                            <small style={{ color: "#6b7280" }}>
-                              {plan.vehicle_code ?? shortId(plan.vehicle_id)}
-                              {plan.vehicle_capacity_kg != null ? ` · cap ${plan.vehicle_capacity_kg} kg` : ""}
-                            </small>
-                          </div>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td>{plan.total_weight_kg}</td>
-                      <td>
-                        {plan.orders_with_weight}/{plan.orders_total}
-                        {plan.orders_missing_weight > 0 ? ` (${plan.orders_missing_weight} sin peso)` : ""}
-                      </td>
-                      <td>
-                        {canAssignPlanVehicle ? (
-                          <div className="row" style={{ gap: 6 }}>
-                            <input
-                              placeholder="vehicle_id (uuid)"
-                              value={vehicleDrafts[plan.id] ?? (plan.vehicle_id ?? "")}
-                              onChange={(e) =>
-                                setVehicleDrafts((current) => ({
-                                  ...current,
-                                  [plan.id]: e.target.value,
-                                }))
-                              }
-                              style={{ width: 220 }}
-                            />
-                            <button
-                              className="secondary"
-                              onClick={() => void onSavePlanVehicle(plan)}
-                              disabled={savingVehiclePlanId === plan.id}
-                            >
-                              {savingVehiclePlanId === plan.id ? "Guardando..." : "Guardar"}
-                            </button>
-                            <button
-                              className="secondary"
-                              onClick={() => void onSavePlanVehicle(plan, true)}
-                              disabled={savingVehiclePlanId === plan.id}
-                            >
-                              Limpiar
-                            </button>
-                          </div>
-                        ) : (
-                          <span style={{ color: "#6b7280" }}>solo lectura</span>
-                        )}
-                      </td>
-                      <td className="row">
-                        {plan.status === "open" && <button onClick={() => onLockPlan(plan.id)}>Lock</button>}
-                        <button
-                          className="secondary"
-                          onClick={() => {
-                            void onLoadPlanConsolidation(plan.id);
-                          }}
-                          disabled={planConsolidationLoading}
-                        >
-                          Consolidar
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="grid plans-column">
+              <PlansTableCard
+                plans={plans}
+                canRunAutoLock={canRunAutoLock}
+                autoLockRunning={autoLockRunning}
+                autoLockResult={autoLockResult}
+                onRunAutoLock={onRunAutoLock}
+                newPlanZoneId={newPlanZoneId}
+                onNewPlanZoneIdChange={setNewPlanZoneId}
+                onCreatePlan={onCreatePlan}
+                includePlanId={includePlanId}
+                onIncludePlanIdChange={setIncludePlanId}
+                includeOrderId={includeOrderId}
+                onIncludeOrderIdChange={setIncludeOrderId}
+                onIncludeOrder={onIncludeOrder}
+                canAssignPlanVehicle={canAssignPlanVehicle}
+                vehicleDrafts={vehicleDrafts}
+                onVehicleDraftChange={(planId, value) =>
+                  setVehicleDrafts((current) => ({
+                    ...current,
+                    [planId]: value,
+                  }))
+                }
+                savingVehiclePlanId={savingVehiclePlanId}
+                onSavePlanVehicle={(plan, clear) => void onSavePlanVehicle(plan, clear)}
+                onLockPlan={onLockPlan}
+                onLoadPlanConsolidation={(planId) => void onLoadPlanConsolidation(planId)}
+                planConsolidationLoading={planConsolidationLoading}
+                shortId={shortId}
+              />
 
-              <div className="card grid" style={{ marginTop: 8 }}>
+              <div className="card grid">
                 <h3>Consolidación por Cliente (Plan)</h3>
                 <div className="row">
                   <select
