@@ -288,6 +288,57 @@ button.tab.muted {
   justify-content: flex-start;
 }
 
+.route-map-card {
+  gap: 10px;
+}
+
+.route-map-meta .pill {
+  background: #edf4ff;
+}
+
+.route-map-legend {
+  align-items: center;
+}
+
+.route-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.route-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.route-dot.pending {
+  background: #f59e0b;
+}
+
+.route-dot.moving {
+  background: #2563eb;
+}
+
+.route-dot.completed {
+  background: #16a34a;
+}
+
+.route-dot.failed {
+  background: #dc2626;
+}
+
+.route-map-canvas {
+  width: 100%;
+  min-height: 360px;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

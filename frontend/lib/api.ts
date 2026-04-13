@@ -286,6 +286,12 @@ export type RoutingRouteStop = {
   updated_at: string;
 };
 
+export type RoutingRouteGeometry = {
+  provider: string;
+  encoding: "google_encoded_polyline";
+  transition_polylines: string[];
+};
+
 export type RoutingRoute = {
   id: string;
   plan_id: string;
@@ -296,6 +302,7 @@ export type RoutingRoute = {
   version: number;
   optimization_request_id: string | null;
   optimization_response_json: Record<string, unknown> | null;
+  route_geometry?: RoutingRouteGeometry | null;
   created_at: string;
   updated_at: string;
   dispatched_at: string | null;
