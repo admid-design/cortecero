@@ -351,6 +351,11 @@ button.tab.muted {
   gap: 10px;
 }
 
+.orders-table-card {
+  display: grid;
+  gap: 8px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
