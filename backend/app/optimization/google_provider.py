@@ -119,6 +119,7 @@ class GoogleRouteOptimizationProvider(RouteOptimizationProvider):
         return {
             "label": str(request.route_id),
             "considerRoadTraffic": True,
+            "populateTransitionPolylines": True,
             "model": model,
         }
 

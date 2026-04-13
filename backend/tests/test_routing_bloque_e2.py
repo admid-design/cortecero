@@ -88,6 +88,10 @@ def test_google_provider_optimize_happy_path(monkeypatch):
                 "requestLabel": "req-123",
                 "routes": [
                     {
+                        "transitions": [
+                            {"routePolyline": {"points": "abc123"}},
+                            {"routePolyline": {"points": "def456"}},
+                        ],
                         "visits": [
                             {"shipmentLabel": str(order_b), "startTime": "2026-04-11T09:15:00Z"},
                             {"shipmentLabel": str(order_a), "startTime": "2026-04-11T09:30:00Z"},
@@ -111,10 +115,12 @@ def test_google_provider_optimize_happy_path(monkeypatch):
     assert captured["headers"]["Authorization"] == "Bearer fake-token"
     assert captured["timeout"] == 10.0
     assert captured["json"]["label"] == str(request.route_id)
+    assert captured["json"]["populateTransitionPolylines"] is True
     assert len(captured["json"]["model"]["shipments"]) == 2
 
     assert result.request_id == "req-123"
     assert result.response_json["provider"] == "google"
+    assert result.response_json["routes"][0]["transitions"][0]["routePolyline"]["points"] == "abc123"
     assert [str(stop.order_id) for stop in result.stops] == [str(order_b), str(order_a)]
     assert [stop.sequence_number for stop in result.stops] == [1, 2]
     assert result.stops[0].estimated_arrival_at == datetime(2026, 4, 11, 9, 15, tzinfo=UTC)

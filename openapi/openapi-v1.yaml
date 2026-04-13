@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CorteCero API
-  version: 1.5.1
+  version: 1.5.2
   description: >
     API MVP para control de cut-off, planes diarios por zona, pedidos tardíos,
     excepciones y auditoría.
@@ -3675,6 +3675,23 @@ components:
           type: string
           format: date-time
 
+    RouteGeometryOut:
+      type: object
+      required: [provider, encoding, transition_polylines]
+      properties:
+        provider:
+          type: string
+          description: Proveedor que originó la geometría de la ruta.
+        encoding:
+          type: string
+          enum: [google_encoded_polyline]
+          description: Formato de codificación usado en transition_polylines.
+        transition_polylines:
+          type: array
+          description: Polylines por transición en orden de ruta.
+          items:
+            type: string
+
     RouteOut:
       type: object
       required: [id, plan_id, vehicle_id, service_date, status, version, created_at, updated_at, stops]
@@ -3710,6 +3727,11 @@ components:
           type: object
           nullable: true
           description: Payload raw del proveedor de optimización persistido para trazabilidad
+        route_geometry:
+          allOf:
+            - $ref: '#/components/schemas/RouteGeometryOut'
+          nullable: true
+          description: Geometría vial derivada y estable para consumo UI.
         created_at:
           type: string
           format: date-time

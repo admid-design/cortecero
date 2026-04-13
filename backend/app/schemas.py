@@ -653,6 +653,12 @@ class RouteStopOut(APIModel):
     updated_at: datetime
 
 
+class RouteGeometryOut(APIModel):
+    provider: str
+    encoding: Literal["google_encoded_polyline"]
+    transition_polylines: list[str] = Field(default_factory=list)
+
+
 class RouteOut(APIModel):
     id: uuid.UUID
     plan_id: uuid.UUID
@@ -663,6 +669,7 @@ class RouteOut(APIModel):
     version: int
     optimization_request_id: str | None
     optimization_response_json: dict | None
+    route_geometry: RouteGeometryOut | None = None
     created_at: datetime
     updated_at: datetime
     dispatched_at: datetime | None

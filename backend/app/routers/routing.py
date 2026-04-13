@@ -66,6 +66,7 @@ from app.schemas import (
     RouteNextStopResponse,
     RouteEventsListResponse,
     RouteEventOut,
+    RouteGeometryOut,
     RouteOut,
     RouteStopArriveRequest,
     RouteStopCompleteRequest,
@@ -155,7 +156,55 @@ def _serialize_route(db: Session, tenant_id: uuid.UUID, route: Route) -> RouteOu
         )
         for stop in stops
     ]
+    data.route_geometry = _extract_route_geometry(route.optimization_response_json)
     return data
+
+
+def _extract_route_geometry(optimization_response_json: dict | None) -> RouteGeometryOut | None:
+    if not isinstance(optimization_response_json, dict):
+        return None
+
+    routes = optimization_response_json.get("routes")
+    if not isinstance(routes, list) or not routes:
+        return None
+
+    first_route = routes[0]
+    if not isinstance(first_route, dict):
+        return None
+
+    transitions = first_route.get("transitions")
+    if not isinstance(transitions, list) or not transitions:
+        return None
+
+    transition_polylines: list[str] = []
+    for transition in transitions:
+        if not isinstance(transition, dict):
+            continue
+        route_polyline = transition.get("routePolyline")
+        if not isinstance(route_polyline, dict):
+            continue
+
+        encoded = route_polyline.get("points")
+        if isinstance(encoded, str) and encoded.strip():
+            transition_polylines.append(encoded)
+            continue
+
+        encoded_alt = route_polyline.get("encodedPolyline")
+        if isinstance(encoded_alt, str) and encoded_alt.strip():
+            transition_polylines.append(encoded_alt)
+
+    if not transition_polylines:
+        return None
+
+    provider = optimization_response_json.get("provider")
+    if not isinstance(provider, str) or not provider:
+        provider = "google"
+
+    return RouteGeometryOut(
+        provider=provider,
+        encoding="google_encoded_polyline",
+        transition_polylines=transition_polylines,
+    )
 
 
 def _emit_event(
