@@ -105,6 +105,7 @@ import { OrdersTableCard } from "../components/OrdersTableCard";
 import { PlansTableCard } from "../components/PlansTableCard";
 import { PlanConsolidationCard } from "../components/PlanConsolidationCard";
 import { ExceptionsTableCard } from "../components/ExceptionsTableCard";
+import { CapacityAlertsTableCard } from "../components/CapacityAlertsTableCard";
 import { AppShell, GlobalBanner, SectionHeader, SidebarNav, TopTabs } from "../components/AppShell";
 import { KpiRow } from "../components/KpiRow";
 import { DispatcherRoutingShell } from "../components/DispatcherRoutingShell";
@@ -1834,77 +1835,17 @@ export default function HomePage() {
             />
           </div>
 
-          <div className="card grid">
-            <h2>Alertas de Capacidad</h2>
-            <div className="row">
-              <label>
-                service_date{" "}
-                <input type="date" value={serviceDate} onChange={(e) => setServiceDate(e.target.value)} />
-              </label>
-              <label>
-                zone_id{" "}
-                <select value={capacityAlertZoneId} onChange={(e) => setCapacityAlertZoneId(e.target.value)}>
-                  <option value="all">all</option>
-                  {pendingQueueZoneOptions.map((zoneId) => (
-                    <option key={zoneId} value={zoneId}>
-                      {zoneId}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                level{" "}
-                <select
-                  value={capacityAlertLevel}
-                  onChange={(e) => setCapacityAlertLevel(e.target.value as "all" | CapacityAlertLevel)}
-                >
-                  <option value="all">all</option>
-                  <option value="OVER_CAPACITY">OVER_CAPACITY</option>
-                  <option value="NEAR_CAPACITY">NEAR_CAPACITY</option>
-                </select>
-              </label>
-              <button className="secondary" onClick={() => void refreshOps()}>
-                Aplicar filtros
-              </button>
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>plan_id</th>
-                  <th>zone_id</th>
-                  <th>vehículo</th>
-                  <th>peso_kg</th>
-                  <th>capacidad_kg</th>
-                  <th>usage_ratio</th>
-                  <th>alert_level</th>
-                </tr>
-              </thead>
-              <tbody>
-                {capacityAlerts.length === 0 && (
-                  <tr>
-                    <td colSpan={7} style={{ color: "#6b7280" }}>
-                      Sin alertas para los filtros actuales.
-                    </td>
-                  </tr>
-                )}
-                {capacityAlerts.map((item) => (
-                  <tr key={item.plan_id}>
-                    <td>{shortId(item.plan_id)}</td>
-                    <td>{shortId(item.zone_id)}</td>
-                    <td>{item.vehicle_name ?? item.vehicle_code ?? shortId(item.vehicle_id)}</td>
-                    <td>{item.total_weight_kg}</td>
-                    <td>{item.vehicle_capacity_kg}</td>
-                    <td>{item.usage_ratio.toFixed(2)}</td>
-                    <td>
-                      <span className={item.alert_level === "OVER_CAPACITY" ? "badge rejected" : "badge late"}>
-                        {item.alert_level}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <CapacityAlertsTableCard
+            serviceDate={serviceDate}
+            onServiceDateChange={setServiceDate}
+            zoneId={capacityAlertZoneId}
+            onZoneIdChange={setCapacityAlertZoneId}
+            zoneOptions={pendingQueueZoneOptions}
+            level={capacityAlertLevel}
+            onLevelChange={setCapacityAlertLevel}
+            alerts={capacityAlerts}
+            onApplyFilters={() => void refreshOps()}
+          />
 
           <PendingQueueTableCard
             serviceDate={serviceDate}

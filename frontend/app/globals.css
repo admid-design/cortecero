@@ -389,6 +389,10 @@ button.tab.muted {
   gap: 8px;
 }
 
+.capacity-alerts-table-card {
+  gap: 8px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
