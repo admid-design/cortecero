@@ -117,7 +117,9 @@ def seed() -> None:
         # No contiene ubicaciones ni direcciones reales de clientes.
         _customer_geo = [
             # Centro (zone_a)
-            ("Cliente 01", 40.1010, -3.7020, "Avenida Demo Centro 1"),
+            # Cliente 01 se usa como caso demo principal y debe quedar alineado
+            # con el depot demo en Mallorca para evitar recorridos incoherentes.
+            ("Cliente 01", 39.5711, 2.6512, "Avenida Demo Palma 1"),
             ("Cliente 02", 40.1040, -3.6990, "Calle Demo Centro 2"),
             ("Cliente 03", 40.1080, -3.7050, "Parque Empresarial Centro 3"),
             ("Cliente 04", 40.1120, -3.6960, "Ronda Demo Centro 4"),
@@ -171,6 +173,18 @@ def seed() -> None:
                 if not customer.active:
                     customer.active = True
                     needs_update = True
+                # Microbloque demo Mallorca: forzar Cliente 01 a coordenada sintética
+                # cercana al depot para un mapa de routing visualmente coherente.
+                if name == "Cliente 01":
+                    if customer.lat != lat_val:
+                        customer.lat = lat_val
+                        needs_update = True
+                    if customer.lng != lng_val:
+                        customer.lng = lng_val
+                        needs_update = True
+                    if customer.delivery_address != addr:
+                        customer.delivery_address = addr
+                        needs_update = True
                 if needs_update:
                     customer.updated_at = now_utc()
             customers.append(customer)
