@@ -369,6 +369,10 @@ button.tab.muted {
   gap: 8px;
 }
 
+.pending-queue-table-card {
+  gap: 8px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

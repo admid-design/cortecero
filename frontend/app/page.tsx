@@ -99,7 +99,7 @@ import { DriverRoutingCard } from "../components/DriverRoutingCard";
 import { OperationalQueueCard } from "../components/OperationalQueueCard";
 import { OperationalResolutionQueueCard } from "../components/OperationalResolutionQueueCard";
 import { OrderOperationalSnapshotsCard } from "../components/OrderOperationalSnapshotsCard";
-import { PendingQueueCard } from "../components/PendingQueueCard";
+import { PendingQueueTableCard } from "../components/PendingQueueTableCard";
 import { AdminProductsCard } from "../components/AdminProductsCard";
 import { OrdersTableCard } from "../components/OrdersTableCard";
 import { PlansTableCard } from "../components/PlansTableCard";
@@ -1938,7 +1938,7 @@ export default function HomePage() {
             </table>
           </div>
 
-          <PendingQueueCard
+          <PendingQueueTableCard
             serviceDate={serviceDate}
             onServiceDateChange={setServiceDate}
             zoneId={pendingQueueZoneId}

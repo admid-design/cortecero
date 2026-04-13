@@ -1,7 +1,7 @@
 import React from "react";
 import type { PendingQueueItem, PendingQueueReason } from "../lib/api";
 
-type PendingQueueCardProps = {
+type PendingQueueTableCardProps = {
   serviceDate: string;
   onServiceDateChange: (value: string) => void;
   zoneId: string;
@@ -17,7 +17,7 @@ function shortId(value: string): string {
   return value.slice(0, 8);
 }
 
-export function PendingQueueCard({
+export function PendingQueueTableCard({
   serviceDate,
   onServiceDateChange,
   zoneId,
@@ -27,9 +27,9 @@ export function PendingQueueCard({
   onReasonChange,
   items,
   onApplyFilters,
-}: PendingQueueCardProps) {
+}: PendingQueueTableCardProps) {
   return (
-    <div className="card grid">
+    <div className="card grid pending-queue-table-card">
       <h2>Pending Queue</h2>
       <div className="row">
         <label>
@@ -93,4 +93,3 @@ export function PendingQueueCard({
     </div>
   );
 }
-
