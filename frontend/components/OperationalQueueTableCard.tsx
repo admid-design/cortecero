@@ -1,7 +1,7 @@
 import React from "react";
 import type { OperationalQueueItem, OperationalQueueReason } from "../lib/api";
 
-type OperationalQueueCardProps = {
+type OperationalQueueTableCardProps = {
   serviceDate: string;
   onServiceDateChange: (value: string) => void;
   zoneId: string;
@@ -28,7 +28,7 @@ function operationalReasonBadgeClass(reason: string): string {
   return "badge intake-unknown";
 }
 
-export function OperationalQueueCard({
+export function OperationalQueueTableCard({
   serviceDate,
   onServiceDateChange,
   zoneId,
@@ -39,9 +39,9 @@ export function OperationalQueueCard({
   reasonOptions,
   items,
   onApplyFilters,
-}: OperationalQueueCardProps) {
+}: OperationalQueueTableCardProps) {
   return (
-    <div className="card grid">
+    <div className="card grid operational-queue-table-card">
       <h2>Operational Queue</h2>
       <div className="row">
         <label>
@@ -113,4 +113,3 @@ export function OperationalQueueCard({
     </div>
   );
 }
-

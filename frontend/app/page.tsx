@@ -96,7 +96,7 @@ import {
 } from "../lib/api";
 import { DispatcherRoutingCard } from "../components/DispatcherRoutingCard";
 import { DriverRoutingCard } from "../components/DriverRoutingCard";
-import { OperationalQueueCard } from "../components/OperationalQueueCard";
+import { OperationalQueueTableCard } from "../components/OperationalQueueTableCard";
 import { OperationalResolutionQueueCard } from "../components/OperationalResolutionQueueCard";
 import { OrderOperationalSnapshotsCard } from "../components/OrderOperationalSnapshotsCard";
 import { PendingQueueTableCard } from "../components/PendingQueueTableCard";
@@ -1950,7 +1950,7 @@ export default function HomePage() {
             onApplyFilters={() => void refreshOps()}
           />
 
-          <OperationalQueueCard
+          <OperationalQueueTableCard
             serviceDate={serviceDate}
             onServiceDateChange={setServiceDate}
             zoneId={operationalQueueZoneId}

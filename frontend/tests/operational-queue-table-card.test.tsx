@@ -3,12 +3,12 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { OperationalQueueCard } from "../components/OperationalQueueCard";
+import { OperationalQueueTableCard } from "../components/OperationalQueueTableCard";
 import type { OperationalQueueItem } from "../lib/api";
 
 function renderCard(items: OperationalQueueItem[]): string {
   return renderToStaticMarkup(
-    <OperationalQueueCard
+    <OperationalQueueTableCard
       serviceDate="2026-04-01"
       onServiceDateChange={() => {}}
       zoneId="all"
@@ -71,4 +71,3 @@ test("preserves backend order without frontend re-sorting", () => {
   assert.ok(refAIndex >= 0, "REF-A should be rendered");
   assert.ok(refBIndex < refAIndex, "Rendered order should match backend order");
 });
-
