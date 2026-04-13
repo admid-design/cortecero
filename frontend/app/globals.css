@@ -343,6 +343,14 @@ button.tab.muted {
   gap: 10px;
 }
 
+.routing-side-panels {
+  gap: 12px;
+}
+
+.routing-plan-form {
+  gap: 10px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

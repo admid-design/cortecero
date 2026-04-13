@@ -7,6 +7,7 @@ import type {
   RoutingRouteStatus,
 } from "../lib/api";
 import { RouteDetailCard } from "./RouteDetailCard";
+import { RoutingSidePanels } from "./RoutingSidePanels";
 
 type DispatcherRoutingCardProps = {
   serviceDate: string;
@@ -47,10 +48,6 @@ type DispatcherRoutingCardProps = {
   onDispatchRoute: (routeId: string) => void;
   onMoveStop: () => void;
 };
-
-function shortId(value: string): string {
-  return value.slice(0, 8);
-}
 
 function routeStatusBadgeClass(status: RoutingRouteStatus): string {
   if (status === "completed") return "badge ok";
@@ -123,116 +120,21 @@ export function DispatcherRoutingCard({
         </button>
       </div>
 
-      <div className="grid cols-2">
-        <div className="card grid">
-          <h3>Pedidos Ready to Dispatch</h3>
-          {!canManage && (
-            <p style={{ margin: 0, color: "#6b7280" }}>Solo `logistics/admin` pueden consultar este bloque.</p>
-          )}
-          {canManage && (
-            <table>
-              <thead>
-                <tr>
-                  <th>order_id</th>
-                  <th>customer_id</th>
-                  <th>zone_id</th>
-                  <th>peso_kg</th>
-                </tr>
-              </thead>
-              <tbody>
-                {readyOrders.length === 0 && (
-                  <tr>
-                    <td colSpan={4} style={{ color: "#6b7280" }}>
-                      Sin pedidos planned para esta fecha.
-                    </td>
-                  </tr>
-                )}
-                {readyOrders.map((item) => (
-                  <tr key={item.id}>
-                    <td>{shortId(item.id)}</td>
-                    <td>{shortId(item.customer_id)}</td>
-                    <td>{shortId(item.zone_id)}</td>
-                    <td>{item.total_weight_kg == null ? "—" : item.total_weight_kg}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        <div className="card grid">
-          <h3>Vehículos Disponibles</h3>
-          {!canManage && (
-            <p style={{ margin: 0, color: "#6b7280" }}>Solo `logistics/admin` pueden consultar este bloque.</p>
-          )}
-          {canManage && (
-            <table>
-              <thead>
-                <tr>
-                  <th>vehicle</th>
-                  <th>capacidad_kg</th>
-                  <th>driver</th>
-                </tr>
-              </thead>
-              <tbody>
-                {availableVehicles.length === 0 && (
-                  <tr>
-                    <td colSpan={3} style={{ color: "#6b7280" }}>
-                      Sin vehículos activos disponibles.
-                    </td>
-                  </tr>
-                )}
-                {availableVehicles.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      {item.name}
-                      <br />
-                      <small style={{ color: "#6b7280" }}>{item.code}</small>
-                    </td>
-                    <td>{item.capacity_kg == null ? "—" : item.capacity_kg}</td>
-                    <td>{item.driver ? `${item.driver.name} (${item.driver.phone})` : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      <div className="card grid">
-        <h3>Planificar Ruta</h3>
-        {!canManage && <p style={{ margin: 0, color: "#6b7280" }}>Solo `logistics/admin` pueden planificar.</p>}
-        {canManage && (
-          <>
-            <div className="row">
-              <input placeholder="plan_id (uuid)" value={planId} onChange={(e) => onPlanIdChange(e.target.value)} style={{ minWidth: 280 }} />
-              <select value={planVehicleId} onChange={(e) => onPlanVehicleIdChange(e.target.value)}>
-                <option value="">vehicle_id</option>
-                {availableVehicles.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} · {item.code}
-                  </option>
-                ))}
-              </select>
-              <input
-                placeholder="driver_id (uuid opcional)"
-                value={planDriverId}
-                onChange={(e) => onPlanDriverIdChange(e.target.value)}
-                style={{ minWidth: 280 }}
-              />
-            </div>
-            <textarea
-              placeholder="order_ids (uuid separados por coma/espacio/salto)"
-              rows={3}
-              value={planOrderIds}
-              onChange={(e) => onPlanOrderIdsChange(e.target.value)}
-            />
-            <button onClick={onCreatePlan} disabled={creatingPlan}>
-              {creatingPlan ? "Planificando..." : "Planificar ruta"}
-            </button>
-          </>
-        )}
-      </div>
+      <RoutingSidePanels
+        canManage={canManage}
+        readyOrders={readyOrders}
+        availableVehicles={availableVehicles}
+        planId={planId}
+        onPlanIdChange={onPlanIdChange}
+        planVehicleId={planVehicleId}
+        onPlanVehicleIdChange={onPlanVehicleIdChange}
+        planDriverId={planDriverId}
+        onPlanDriverIdChange={onPlanDriverIdChange}
+        planOrderIds={planOrderIds}
+        onPlanOrderIdsChange={onPlanOrderIdsChange}
+        creatingPlan={creatingPlan}
+        onCreatePlan={onCreatePlan}
+      />
 
       <div className="card grid">
         <h3>Rutas</h3>
@@ -259,10 +161,10 @@ export function DispatcherRoutingCard({
             )}
             {routes.map((route) => (
               <tr key={route.id}>
-                <td>{shortId(route.id)}</td>
-                <td>{shortId(route.plan_id)}</td>
-                <td>{shortId(route.vehicle_id)}</td>
-                <td>{route.driver_id ? shortId(route.driver_id) : "—"}</td>
+                <td>{route.id.slice(0, 8)}</td>
+                <td>{route.plan_id.slice(0, 8)}</td>
+                <td>{route.vehicle_id.slice(0, 8)}</td>
+                <td>{route.driver_id ? route.driver_id.slice(0, 8) : "—"}</td>
                 <td>
                   <span className={routeStatusBadgeClass(route.status)}>{route.status}</span>
                 </td>
@@ -312,7 +214,7 @@ export function DispatcherRoutingCard({
                 <option value="">source_route_id</option>
                 {routes.map((route) => (
                   <option key={route.id} value={route.id}>
-                    {shortId(route.id)} · {route.status}
+                    {route.id.slice(0, 8)} · {route.status}
                   </option>
                 ))}
               </select>
@@ -321,7 +223,7 @@ export function DispatcherRoutingCard({
                 <option value="">target_route_id</option>
                 {routes.map((route) => (
                   <option key={route.id} value={route.id}>
-                    {shortId(route.id)} · {route.status}
+                    {route.id.slice(0, 8)} · {route.status}
                   </option>
                 ))}
               </select>
