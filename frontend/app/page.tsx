@@ -1,16 +1,19 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   type AdminUser,
+  type DriverPositionOut,
   type IncidentCreateRequest,
   type RouteNextStopResponse,
   APIError,
   formatError,
   arriveStop,
   completeStop,
+  createStopProof,
   failStop,
+  getDriverPosition,
   skipStop,
   createIncident,
   getDriverRoutes,
@@ -109,7 +112,7 @@ import { CapacityAlertsTableCard } from "../components/CapacityAlertsTableCard";
 import { AppShell, GlobalBanner, SectionHeader, SidebarNav, TopTabs } from "../components/AppShell";
 import { KpiRow } from "../components/KpiRow";
 import { DispatcherRoutingShell } from "../components/DispatcherRoutingShell";
-
+import { AdminShell } from "../components/AdminShell";
 type ViewMode = "ops" | "admin";
 type AdminSection = "zones" | "customers" | "users" | "tenant" | "products";
 type OrdersOperationalStateFilter = "all" | "eligible" | "restricted";
@@ -329,8 +332,11 @@ export default function HomePage() {
   const [driverNextStopLoading, setDriverNextStopLoading] = useState(false);
   const [driverActionLoadingStopId, setDriverActionLoadingStopId] = useState<string | null>(null);
   const [driverIncidentLoading, setDriverIncidentLoading] = useState(false);
+  const [driverProofLoading, setDriverProofLoading] = useState(false);
   const [driverError, setDriverError] = useState<string | null>(null);
   const [driverSuccess, setDriverSuccess] = useState<string | null>(null);
+  // Posición del conductor vista desde el dispatcher (polling cada 30s)
+  const [dispatcherDriverPosition, setDispatcherDriverPosition] = useState<DriverPositionOut | null>(null);
 
   const isAuthenticated = useMemo(() => token.length > 0, [token]);
   const isAdmin = useMemo(() => role === "admin", [role]);
@@ -586,6 +592,7 @@ export default function HomePage() {
   const onSelectDispatcherRoute = useCallback(
     (routeId: string) => {
       setSelectedDispatcherRouteId(routeId);
+      setDispatcherDriverPosition(null); // reset al cambiar de ruta
       if (!routeId) {
         setSelectedDispatcherRoute(null);
         setSelectedDispatcherRouteEvents([]);
@@ -596,6 +603,43 @@ export default function HomePage() {
     },
     [loadDispatcherRouteDetail],
   );
+
+  // Polling de posición del conductor cada 30 s cuando hay una ruta activa seleccionada.
+  const dispatcherSelectedRouteStatus = selectedDispatcherRoute?.status ?? null;
+  const shouldPollDriverPosition =
+    selectedDispatcherRouteId !== "" &&
+    (dispatcherSelectedRouteStatus === "dispatched" || dispatcherSelectedRouteStatus === "in_progress");
+
+  const pollDriverPositionRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!shouldPollDriverPosition || !token || !selectedDispatcherRouteId) {
+      if (pollDriverPositionRef.current) {
+        clearInterval(pollDriverPositionRef.current);
+        pollDriverPositionRef.current = null;
+      }
+      return;
+    }
+
+    const poll = async () => {
+      try {
+        const pos = await getDriverPosition(token, selectedDispatcherRouteId);
+        setDispatcherDriverPosition(pos);
+      } catch {
+        // posición aún no disponible — sin conductor en ruta o ruta sin GPS
+      }
+    };
+
+    void poll(); // primera llamada inmediata
+    pollDriverPositionRef.current = setInterval(() => void poll(), 30_000);
+
+    return () => {
+      if (pollDriverPositionRef.current) {
+        clearInterval(pollDriverPositionRef.current);
+        pollDriverPositionRef.current = null;
+      }
+    };
+  }, [shouldPollDriverPosition, token, selectedDispatcherRouteId]);
 
   const onSnapshotOrderChange = useCallback((orderId: string) => {
     setSelectedSnapshotOrderId(orderId);
@@ -798,6 +842,31 @@ export default function HomePage() {
       setDriverError(formatError(e));
     } finally {
       setDriverActionLoadingStopId(null);
+    }
+  }
+
+  async function onDriverCompleteWithProof(stopId: string, signatureData: string, signedBy: string) {
+    setDriverActionLoadingStopId(stopId);
+    setDriverProofLoading(true);
+    setDriverError(null);
+    setDriverSuccess(null);
+    try {
+      // 1. Completar la parada
+      const updated = await completeStop(token, stopId);
+      // 2. Guardar la firma vinculada a la parada ya completada
+      await createStopProof(token, stopId, {
+        proof_type: "signature",
+        signature_data: signatureData,
+        signed_by: signedBy || null,
+        captured_at: new Date().toISOString(),
+      });
+      setDriverSuccess(`Parada #${updated.sequence_number}: entrega completada con firma.`);
+      await refreshDriverRouteAndNextStop();
+    } catch (e) {
+      setDriverError(formatError(e));
+    } finally {
+      setDriverActionLoadingStopId(null);
+      setDriverProofLoading(false);
     }
   }
 
@@ -1651,11 +1720,15 @@ export default function HomePage() {
           nextStopLoading={driverNextStopLoading}
           actionLoadingStopId={driverActionLoadingStopId}
           incidentLoading={driverIncidentLoading}
+          proofLoading={driverProofLoading}
           errorMessage={driverError}
           successMessage={driverSuccess}
+          token={token}
+          apiBaseUrl={process.env.NEXT_PUBLIC_API_BASE_URL ?? ""}
           onRefresh={() => void refreshDriver()}
           onArrive={(stopId) => void onDriverArrive(stopId)}
           onComplete={(stopId) => void onDriverComplete(stopId)}
+          onCompleteWithProof={(stopId, sig, signedBy) => void onDriverCompleteWithProof(stopId, sig, signedBy)}
           onFail={(stopId, reason) => void onDriverFail(stopId, reason)}
           onSkip={(stopId) => void onDriverSkip(stopId)}
           onReportIncident={(payload) => void onDriverReportIncident(payload)}
@@ -1772,6 +1845,7 @@ export default function HomePage() {
                 onOptimizeRoute={(routeId) => void onOptimizeDispatcherRoute(routeId)}
                 onDispatchRoute={(routeId) => void onDispatchDispatcherRoute(routeId)}
                 onMoveStop={() => void onMoveDispatcherStop()}
+                driverPosition={dispatcherDriverPosition}
               />
             ) : (
               <div className="card" style={{ borderColor: "#fca5a5", color: "#991b1b" }}>
@@ -1935,51 +2009,22 @@ export default function HomePage() {
 
           {isAdmin && (
             <>
-              <div className="card row">
-                <button
-                  className={adminSection === "zones" ? "tab active" : "tab"}
-                  onClick={() => {
-                    setAdminSection("zones");
+              <AdminShell
+                activeSection={adminSection}
+                onSectionChange={(sec) => {
+                  setAdminSection(sec);
+                  if (sec === "zones") {
                     void refreshZones();
-                  }}
-                >
-                  Zonas
-                </button>
-                <button
-                  className={adminSection === "customers" ? "tab active" : "tab muted"}
-                  onClick={() => {
-                    setAdminSection("customers");
+                  } else if (sec === "customers") {
                     void refreshZones();
                     void refreshCustomers();
-                  }}
-                >
-                  Clientes
-                </button>
-                <button
-                  className={adminSection === "users" ? "tab active" : "tab muted"}
-                  onClick={() => {
-                    setAdminSection("users");
+                  } else if (sec === "users") {
                     void refreshUsers();
-                  }}
-                >
-                  Usuarios
-                </button>
-                <button
-                  className={adminSection === "products" ? "tab active" : "tab muted"}
-                  onClick={() => setAdminSection("products")}
-                >
-                  Productos
-                </button>
-                <button
-                  className={adminSection === "tenant" ? "tab active" : "tab muted"}
-                  onClick={() => {
-                    setAdminSection("tenant");
+                  } else if (sec === "tenant") {
                     void refreshTenantSettings();
-                  }}
-                >
-                  Tenant
-                </button>
-              </div>
+                  }
+                }}
+              >
 
               {adminSection === "zones" && (
                 <div className="grid cols-2">
@@ -2533,6 +2578,7 @@ export default function HomePage() {
                   </div>
                 </div>
               )}
+              </AdminShell>
             </>
           )}
         </>
