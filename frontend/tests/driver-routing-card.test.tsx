@@ -84,11 +84,13 @@ function renderCard(
       nextStopLoading={false}
       actionLoadingStopId={null}
       incidentLoading={false}
+      proofLoading={false}
       errorMessage={null}
       successMessage={null}
       onRefresh={NO_OP}
       onArrive={NO_OP}
       onComplete={NO_OP}
+      onCompleteWithProof={NO_OP}
       onFail={NO_OP}
       onSkip={NO_OP}
       onReportIncident={NO_OP_INCIDENT}
@@ -160,7 +162,7 @@ test("shows navigation fallback for stops without coordinates", () => {
     selectedRouteId: route.id,
   });
   assert.match(html, /Navegaci[oó]n no disponible/i);
-  assert.match(html, /coordenadas no incluidas/i);
+  assert.match(html, /cliente sin coordenadas/i);
 });
 
 test("shows Llegar button for pending stop", () => {
@@ -231,11 +233,13 @@ test("shows error message when errorMessage is set", () => {
       nextStopLoading={false}
       actionLoadingStopId={null}
       incidentLoading={false}
+      proofLoading={false}
       errorMessage="Error de conexión"
       successMessage={null}
       onRefresh={NO_OP}
       onArrive={NO_OP}
       onComplete={NO_OP}
+      onCompleteWithProof={NO_OP}
       onFail={NO_OP}
       onSkip={NO_OP}
       onReportIncident={NO_OP_INCIDENT}
@@ -256,11 +260,13 @@ test("shows success message when successMessage is set", () => {
       nextStopLoading={false}
       actionLoadingStopId={null}
       incidentLoading={false}
+      proofLoading={false}
       errorMessage={null}
       successMessage="Parada #1: llegada registrada."
       onRefresh={NO_OP}
       onArrive={NO_OP}
       onComplete={NO_OP}
+      onCompleteWithProof={NO_OP}
       onFail={NO_OP}
       onSkip={NO_OP}
       onReportIncident={NO_OP_INCIDENT}
@@ -281,11 +287,13 @@ test("shows Cargando rutas when loading=true and no routes", () => {
       nextStopLoading={false}
       actionLoadingStopId={null}
       incidentLoading={false}
+      proofLoading={false}
       errorMessage={null}
       successMessage={null}
       onRefresh={NO_OP}
       onArrive={NO_OP}
       onComplete={NO_OP}
+      onCompleteWithProof={NO_OP}
       onFail={NO_OP}
       onSkip={NO_OP}
       onReportIncident={NO_OP_INCIDENT}
