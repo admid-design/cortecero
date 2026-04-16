@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
   IncidentCreateRequest,
@@ -47,8 +47,7 @@ function isTerminal(status: RouteStopStatus): boolean {
 }
 
 /** Builds a Maps/Waze deep-link from coordinates if available.
- *  Stops in the current API schema do not embed lat/lng — this function
- *  receives them as optional so future enrichment can wire them in. */
+ *  Builds a Waze/Maps deep-link from coordinates embedded in the stop. */
 function buildNavUrl(lat?: number | null, lng?: number | null): string | null {
   if (lat == null || lng == null) return null;
   // Universal Waze deep link; falls back gracefully on desktop to Maps web.
@@ -247,9 +246,7 @@ function StopDetail({
   const loading = actionLoadingStopId === stop.id;
   const terminal = isTerminal(stop.status);
 
-  // Navigation: stops don't carry lat/lng in the current schema.
-  // Button is shown but disabled with a clear explanation.
-  const navUrl = buildNavUrl(null, null);
+  const navUrl = buildNavUrl(stop.customer_lat, stop.customer_lng);
   const navDisabled = navUrl === null;
 
   return (
@@ -286,7 +283,7 @@ function StopDetail({
       <div className="mb-3">
         {navDisabled ? (
           <p className="rounded bg-gray-50 px-3 py-2 text-center text-xs text-gray-500">
-            Navegación no disponible — coordenadas no incluidas en la respuesta API
+            Navegación no disponible — cliente sin coordenadas
           </p>
         ) : (
           <a
@@ -354,6 +351,212 @@ function StopDetail({
   );
 }
 
+// ── Signature Modal (A2 — POD-001) ──────────────────────────────────────────
+
+type SignatureModalProps = {
+  stopId: string;
+  loading: boolean;
+  onConfirm: (stopId: string, signatureDataUrl: string, signedBy: string) => void;
+  onSkipSignature: (stopId: string) => void;
+  onCancel: () => void;
+};
+
+function SignatureModal({ stopId, loading, onConfirm, onSkipSignature, onCancel }: SignatureModalProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasSig, setHasSig] = useState(false);
+  const [signedBy, setSignedBy] = useState("");
+  const lastPos = useRef<{ x: number; y: number } | null>(null);
+
+  function getPos(e: React.TouchEvent | React.MouseEvent, canvas: HTMLCanvasElement) {
+    const rect = canvas.getBoundingClientRect();
+    if ("touches" in e) {
+      return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+    }
+    return { x: (e as React.MouseEvent).clientX - rect.left, y: (e as React.MouseEvent).clientY - rect.top };
+  }
+
+  function startDraw(e: React.TouchEvent | React.MouseEvent) {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    e.preventDefault();
+    setIsDrawing(true);
+    lastPos.current = getPos(e, canvas);
+  }
+
+  function draw(e: React.TouchEvent | React.MouseEvent) {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    e.preventDefault();
+    const ctx = canvas.getContext("2d");
+    if (!ctx || !lastPos.current) return;
+    const pos = getPos(e, canvas);
+    ctx.beginPath();
+    ctx.moveTo(lastPos.current.x, lastPos.current.y);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = "round";
+    ctx.stroke();
+    lastPos.current = pos;
+    setHasSig(true);
+  }
+
+  function stopDraw() {
+    setIsDrawing(false);
+    lastPos.current = null;
+  }
+
+  function clearCanvas() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx?.clearRect(0, 0, canvas.width, canvas.height);
+    setHasSig(false);
+  }
+
+  function handleConfirm() {
+    const canvas = canvasRef.current;
+    if (!canvas || !hasSig) return;
+    const dataUrl = canvas.toDataURL("image/png");
+    onConfirm(stopId, dataUrl, signedBy.trim());
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl">
+        <h3 className="mb-1 text-base font-semibold text-gray-900">Firma del receptor</h3>
+        <p className="mb-3 text-xs text-gray-500">Pide al cliente que firme en el recuadro</p>
+
+        {/* Canvas de firma */}
+        <div className="mb-3 overflow-hidden rounded-lg border-2 border-dashed border-gray-300 bg-gray-50">
+          <canvas
+            ref={canvasRef}
+            width={320}
+            height={150}
+            className="block w-full touch-none"
+            style={{ cursor: "crosshair" }}
+            onMouseDown={startDraw}
+            onMouseMove={draw}
+            onMouseUp={stopDraw}
+            onMouseLeave={stopDraw}
+            onTouchStart={startDraw}
+            onTouchMove={draw}
+            onTouchEnd={stopDraw}
+          />
+        </div>
+
+        {hasSig && (
+          <button
+            className="mb-3 text-xs text-gray-400 underline"
+            onClick={clearCanvas}
+          >
+            Borrar firma
+          </button>
+        )}
+
+        {/* Nombre del receptor (opcional) */}
+        <label className="mb-1 block text-xs font-medium text-gray-700">
+          Nombre del receptor <span className="text-gray-400">(opcional)</span>
+        </label>
+        <input
+          className="mb-4 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+          placeholder="Ej: María García"
+          value={signedBy}
+          onChange={(e) => setSignedBy(e.target.value)}
+        />
+
+        <div className="flex flex-col gap-2">
+          <button
+            className="w-full rounded bg-green-600 px-3 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+            onClick={handleConfirm}
+            disabled={!hasSig || loading}
+          >
+            {loading ? "Guardando…" : "Completar con firma"}
+          </button>
+          <button
+            className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            onClick={() => onSkipSignature(stopId)}
+            disabled={loading}
+          >
+            Completar sin firma
+          </button>
+          <button
+            className="w-full rounded px-3 py-2 text-xs text-gray-400 hover:bg-gray-50"
+            onClick={onCancel}
+            disabled={loading}
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── GPS tracking hook (A3 — GPS-001) ─────────────────────────────────────────
+
+function useGpsTracking(
+  activeRouteId: string | null,
+  token: string | null,
+  apiBaseUrl: string,
+) {
+  const watchIdRef = useRef<number | null>(null);
+
+  const sendPosition = useCallback(
+    (routeId: string, lat: number, lng: number, accuracy: number | null, speed: number | null, heading: number | null) => {
+      if (!token) return;
+      const body = JSON.stringify({
+        route_id: routeId,
+        lat,
+        lng,
+        accuracy_m: accuracy,
+        speed_kmh: speed != null ? speed * 3.6 : null, // m/s → km/h
+        heading,
+        recorded_at: new Date().toISOString(),
+      });
+      // fire-and-forget; navigator.sendBeacon could also work
+      fetch(`${apiBaseUrl}/driver/location`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body,
+      }).catch(() => {
+        // silent — connectivity might be intermittent on a delivery route
+      });
+    },
+    [token, apiBaseUrl],
+  );
+
+  useEffect(() => {
+    if (!activeRouteId || !token || typeof navigator === "undefined" || !navigator.geolocation) return;
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        sendPosition(
+          activeRouteId,
+          pos.coords.latitude,
+          pos.coords.longitude,
+          pos.coords.accuracy,
+          pos.coords.speed,
+          pos.coords.heading,
+        );
+      },
+      () => {
+        // ignore errors silently — GPS might be unavailable indoors
+      },
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 },
+    );
+
+    return () => {
+      if (watchIdRef.current != null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+    };
+  }, [activeRouteId, token, sendPosition]);
+}
+
 // ── Main card props ──────────────────────────────────────────────────────────
 
 export type DriverRoutingCardProps = {
@@ -366,11 +569,17 @@ export type DriverRoutingCardProps = {
   nextStopLoading: boolean;
   actionLoadingStopId: string | null;
   incidentLoading: boolean;
+  proofLoading: boolean;
   errorMessage: string | null;
   successMessage: string | null;
+  /** JWT token del driver — usado para enviar posición GPS. */
+  token?: string | null;
+  /** Base URL de la API — usado por el hook de GPS. */
+  apiBaseUrl?: string;
   onRefresh: () => void;
   onArrive: (stopId: string) => void;
   onComplete: (stopId: string) => void;
+  onCompleteWithProof: (stopId: string, signatureData: string, signedBy: string) => void;
   onFail: (stopId: string, reason: string) => void;
   onSkip: (stopId: string) => void;
   onReportIncident: (payload: IncidentCreateRequest) => void;
@@ -388,33 +597,51 @@ export function DriverRoutingCard({
   nextStopLoading,
   actionLoadingStopId,
   incidentLoading,
+  proofLoading,
   errorMessage,
   successMessage,
+  token = null,
+  apiBaseUrl = "",
   onRefresh,
   onArrive,
   onComplete,
+  onCompleteWithProof,
   onFail,
   onSkip,
   onReportIncident,
 }: DriverRoutingCardProps) {
   const [failStopId, setFailStopId] = useState<string | null>(null);
   const [incidentStopId, setIncidentStopId] = useState<string | null>(null);
+  const [signatureStopId, setSignatureStopId] = useState<string | null>(null);
 
-  // Modal guards
+  // A3 — GPS tracking: activo mientras haya ruta in_progress seleccionada
+  const gpsRouteId =
+    selectedRoute?.status === "in_progress" ? selectedRoute.id : null;
+  useGpsTracking(gpsRouteId, token, apiBaseUrl);
+
   const failLoadingThisStop = failStopId !== null && actionLoadingStopId === failStopId;
+  const sigLoadingThisStop = signatureStopId !== null && proofLoading;
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-base font-bold text-gray-900">Driver — Mis Rutas</h2>
-        <button
-          className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-          onClick={onRefresh}
-          disabled={loading}
-        >
-          {loading ? "Cargando…" : "Actualizar"}
-        </button>
+        <div className="flex items-center gap-2">
+          {gpsRouteId && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
+              GPS activo
+            </span>
+          )}
+          <button
+            className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            onClick={onRefresh}
+            disabled={loading}
+          >
+            {loading ? "Cargando…" : "Actualizar"}
+          </button>
+        </div>
       </div>
 
       {/* Status messages */}
@@ -482,7 +709,7 @@ export function DriverRoutingCard({
                   routeId={selectedRoute.id}
                   actionLoadingStopId={actionLoadingStopId}
                   onArrive={onArrive}
-                  onComplete={onComplete}
+                  onComplete={(stopId) => setSignatureStopId(stopId)}
                   onFail={(stopId) => setFailStopId(stopId)}
                   onSkip={onSkip}
                   onReportIncident={(stopId) => setIncidentStopId(stopId)}
@@ -491,6 +718,23 @@ export function DriverRoutingCard({
             )}
           </div>
         </>
+      )}
+
+      {/* Signature modal — se abre al pulsar "Completar" */}
+      {signatureStopId && (
+        <SignatureModal
+          stopId={signatureStopId}
+          loading={sigLoadingThisStop}
+          onConfirm={(stopId, dataUrl, signedBy) => {
+            onCompleteWithProof(stopId, dataUrl, signedBy);
+            setSignatureStopId(null);
+          }}
+          onSkipSignature={(stopId) => {
+            onComplete(stopId);
+            setSignatureStopId(null);
+          }}
+          onCancel={() => setSignatureStopId(null)}
+        />
       )}
 
       {/* Fail modal */}
