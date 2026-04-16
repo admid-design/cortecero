@@ -1020,3 +1020,79 @@ export async function updateAdminTenantSettings(
 ): Promise<TenantSettings> {
   return request<TenantSettings>("/admin/tenant-settings", { token, method: "PATCH", body: payload });
 }
+
+// ── Stop Proof — A2 (POD-001) ────────────────────────────────────────────────
+
+export type StopProofType = "signature" | "photo" | "both";
+
+export type StopProofOut = {
+  id: string;
+  route_stop_id: string;
+  route_id: string;
+  proof_type: StopProofType;
+  signature_data: string | null;
+  photo_url: string | null;
+  signed_by: string | null;
+  captured_at: string;
+  created_at: string;
+};
+
+export type StopProofCreateRequest = {
+  proof_type: StopProofType;
+  signature_data?: string | null;
+  signed_by?: string | null;
+  captured_at?: string | null;
+};
+
+export async function createStopProof(
+  token: string,
+  stopId: string,
+  payload: StopProofCreateRequest,
+): Promise<StopProofOut> {
+  return request<StopProofOut>(`/stops/${stopId}/proof`, { token, method: "POST", body: payload });
+}
+
+export async function getStopProof(token: string, stopId: string): Promise<StopProofOut> {
+  return request<StopProofOut>(`/stops/${stopId}/proof`, { token });
+}
+
+// ── Driver Position — A3 (GPS-001) ───────────────────────────────────────────
+
+export type DriverPositionOut = {
+  driver_id: string;
+  route_id: string;
+  lat: number;
+  lng: number;
+  accuracy_m: number | null;
+  speed_kmh: number | null;
+  heading: number | null;
+  recorded_at: string;
+};
+
+export type DriverLocationUpdateRequest = {
+  route_id: string;
+  lat: number;
+  lng: number;
+  accuracy_m?: number | null;
+  speed_kmh?: number | null;
+  heading?: number | null;
+  recorded_at?: string | null;
+};
+
+export async function updateDriverLocation(
+  token: string,
+  payload: DriverLocationUpdateRequest,
+): Promise<void> {
+  await request<void>("/driver/location", { token, method: "POST", body: payload });
+}
+
+export async function getDriverPosition(
+  token: string,
+  routeId: string,
+): Promise<DriverPositionOut> {
+  return request<DriverPositionOut>(`/routes/${routeId}/driver-position`, { token });
+}
+
+export async function getActivePositions(token: string): Promise<DriverPositionOut[]> {
+  return request<DriverPositionOut[]>("/driver/active-positions", { token });
+}
