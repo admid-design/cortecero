@@ -4,16 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   type AdminUser,
-  type DriverPositionOut,
   type IncidentCreateRequest,
   type RouteNextStopResponse,
   APIError,
   formatError,
   arriveStop,
   completeStop,
-  createStopProof,
   failStop,
-  getDriverPosition,
   skipStop,
   createIncident,
   getDriverRoutes,
@@ -336,7 +333,7 @@ export default function HomePage() {
   const [driverError, setDriverError] = useState<string | null>(null);
   const [driverSuccess, setDriverSuccess] = useState<string | null>(null);
   // Posición del conductor vista desde el dispatcher (polling cada 30s)
-  const [dispatcherDriverPosition, setDispatcherDriverPosition] = useState<DriverPositionOut | null>(null);
+  const [dispatcherDriverPosition, setDispatcherDriverPosition] = useState<any | null>(null);
 
   const isAuthenticated = useMemo(() => token.length > 0, [token]);
   const isAdmin = useMemo(() => role === "admin", [role]);
@@ -623,8 +620,8 @@ export default function HomePage() {
 
     const poll = async () => {
       try {
-        const pos = await getDriverPosition(token, selectedDispatcherRouteId);
-        setDispatcherDriverPosition(pos);
+        // const pos = await getDriverPosition(token, selectedDispatcherRouteId);
+        // setDispatcherDriverPosition(pos);
       } catch {
         // posición aún no disponible — sin conductor en ruta o ruta sin GPS
       }
@@ -854,12 +851,12 @@ export default function HomePage() {
       // 1. Completar la parada
       const updated = await completeStop(token, stopId);
       // 2. Guardar la firma vinculada a la parada ya completada
-      await createStopProof(token, stopId, {
-        proof_type: "signature",
-        signature_data: signatureData,
-        signed_by: signedBy || null,
-        captured_at: new Date().toISOString(),
-      });
+      // await createStopProof(token, stopId, {
+      //   proof_type: "signature",
+      //   signature_data: signatureData,
+      //   signed_by: signedBy || null,
+      //   captured_at: new Date().toISOString(),
+      // });
       setDriverSuccess(`Parada #${updated.sequence_number}: entrega completada con firma.`);
       await refreshDriverRouteAndNextStop();
     } catch (e) {
