@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { RouteStopStatus, RoutingRoute } from "../lib/api";
 
+type LocalDriverPosition = {
+  lat?: number | null;
+  lng?: number | null;
+  heading?: number | null;
+  updated_at?: string | null;
+};
+
 type RouteMapPoint = {
   stopId: string;
   sequenceNumber: number;
@@ -96,7 +103,13 @@ async function loadGoogleMapsScript(apiKey: string): Promise<void> {
   await mapsWindow.__corteCeroGoogleMapsPromise;
 }
 
-export function RouteMapCard({ route }: { route: RoutingRoute }) {
+type RouteMapCardProps = {
+  route: RoutingRoute;
+  /** Posición actual del conductor — actualizada por polling desde el padre. */
+  driverPosition?: LocalDriverPosition | null;
+};
+
+export function RouteMapCard({ route, driverPosition }: RouteMapCardProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
   const [mapsLoaded, setMapsLoaded] = useState(false);
@@ -263,6 +276,66 @@ export function RouteMapCard({ route }: { route: RoutingRoute }) {
     };
   }, [mapsLoaded, stopPoints, depotLat, depotLng, hasTransitionGeometry, transitionGeometryPaths]);
 
+  // Marcador separado para el conductor — se actualiza sin redibujar todo el mapa
+  const driverMarkerRef = useRef<{ setPosition: (pos: any) => void; setMap: (map: any) => void } | null>(null);
+  const mapInstanceRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!mapsLoaded || !mapRef.current) return;
+    const mapsWindow = window as GoogleMapsWindow;
+    const maps = mapsWindow.google?.maps;
+    if (!maps) return;
+    // Guardamos referencia al mapa cuando se crea
+    if (!mapInstanceRef.current) {
+      // El mapa ya existe en el DOM — lo recuperamos del ref
+      mapInstanceRef.current = (mapRef.current as any).__gm_map ?? null;
+    }
+  }, [mapsLoaded]);
+
+  useEffect(() => {
+    if (!mapsLoaded) return;
+    const mapsWindow = window as GoogleMapsWindow;
+    const maps = mapsWindow.google?.maps;
+    if (!maps || !mapRef.current) return;
+
+    const driverLat = parseCoordinate(driverPosition?.lat ?? null);
+    const driverLng = parseCoordinate(driverPosition?.lng ?? null);
+
+    if (driverLat == null || driverLng == null) {
+      // Limpiar marcador si ya no hay posición
+      driverMarkerRef.current?.setMap(null);
+      driverMarkerRef.current = null;
+      return;
+    }
+
+    // Recuperar instancia del mapa desde el div (Google Maps la adjunta internamente)
+    const mapEl = mapRef.current;
+    const mapObj = (mapEl as any).__gm_map ?? mapInstanceRef.current;
+    if (!mapObj) return;
+
+    if (driverMarkerRef.current) {
+      // Actualizar posición del marcador existente
+      driverMarkerRef.current.setPosition({ lat: driverLat, lng: driverLng });
+    } else {
+      // Crear marcador nuevo
+      driverMarkerRef.current = new maps.Marker({
+        map: mapObj,
+        position: { lat: driverLat, lng: driverLng },
+        title: "Conductor",
+        icon: {
+          path: maps.SymbolPath.FORWARD_CLOSED_ARROW,
+          scale: 6,
+          fillColor: "#7c3aed",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
+          rotation: driverPosition?.heading ?? 0,
+        },
+        zIndex: 999,
+      });
+    }
+  }, [mapsLoaded, driverPosition]);
+
   return (
     <div className="card grid route-map-card">
       <h4 style={{ margin: 0 }}>Mapa de Ruta</h4>
@@ -284,6 +357,11 @@ export function RouteMapCard({ route }: { route: RoutingRoute }) {
         <span className="route-legend-item">
           <span className="route-dot failed" /> failed
         </span>
+        {driverPosition && (
+          <span className="route-legend-item">
+            <span className="route-dot" style={{ background: "#7c3aed" }} /> conductor
+          </span>
+        )}
       </div>
       {mapError && <p style={{ margin: 0, color: "#6b7280" }}>{mapError}</p>}
       {!mapError && stopPoints.length === 0 && (

@@ -2,6 +2,12 @@ import React from "react";
 import type { RouteEventItem, RoutingRoute } from "../lib/api";
 import { RouteMapCard } from "./RouteMapCard";
 
+type LocalDriverPosition = {
+  lat?: number | null;
+  lng?: number | null;
+  updated_at?: string | null;
+};
+
 type RouteDetailCardProps = {
   routes: RoutingRoute[];
   selectedRouteId: string;
@@ -9,6 +15,8 @@ type RouteDetailCardProps = {
   routeDetailLoading: boolean;
   selectedRoute: RoutingRoute | null;
   routeEvents: RouteEventItem[];
+  /** Posición actual del conductor — actualizada por polling en page.tsx. */
+  driverPosition?: LocalDriverPosition | null;
 };
 
 function shortId(value: string): string {
@@ -22,6 +30,7 @@ export function RouteDetailCard({
   routeDetailLoading,
   selectedRoute,
   routeEvents,
+  driverPosition,
 }: RouteDetailCardProps) {
   return (
     <div className="card grid route-detail-card">
@@ -49,7 +58,7 @@ export function RouteDetailCard({
             <span className="pill">status: {selectedRoute.status}</span>
             <span className="pill">stops: {selectedRoute.stops.length}</span>
           </div>
-          <RouteMapCard route={selectedRoute} />
+          <RouteMapCard route={selectedRoute} driverPosition={driverPosition} />
           <table>
             <thead>
               <tr>
