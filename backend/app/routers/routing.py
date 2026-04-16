@@ -40,6 +40,7 @@ from app.optimization.protocol import OptimizationRequest, OptimizationWaypoint,
 from app.models import (
     Customer,
     Driver,
+    DriverPosition,
     Incident,
     IncidentSeverity,
     IncidentStatus,
@@ -55,10 +56,13 @@ from app.models import (
     RouteStatus,
     RouteStop,
     RouteStopStatus,
+    StopProof,
     UserRole,
     Vehicle,
 )
 from app.schemas import (
+    DriverLocationUpdateRequest,
+    DriverPositionOut,
     IncidentResolveRequest,
     IncidentCreateRequest,
     IncidentOut,
@@ -74,6 +78,8 @@ from app.schemas import (
     RouteStopSkipRequest,
     RouteStopOut,
     RoutesListResponse,
+    StopProofCreateRequest,
+    StopProofOut,
 )
 
 router = APIRouter(tags=["Routing"])
@@ -1885,3 +1891,234 @@ def resolve_incident(
 
     db.refresh(incident)
     return IncidentOut.model_validate(incident)
+
+
+# ============================================================================
+# BLOQUE A2 — Proof of Delivery (POD-001)
+# ============================================================================
+
+
+def _get_stop_proof(db: Session, tenant_id: uuid.UUID, route_stop_id: uuid.UUID) -> StopProof | None:
+    return db.execute(
+        select(StopProof).where(
+            StopProof.tenant_id == tenant_id,
+            StopProof.route_stop_id == route_stop_id,
+        )
+    ).scalar_one_or_none()
+
+
+@router.post("/stops/{stop_id}/proof", response_model=StopProofOut, status_code=201)
+def create_stop_proof(
+    stop_id: uuid.UUID,
+    payload: StopProofCreateRequest,
+    current: CurrentUser = Depends(require_roles("driver", "logistics", "admin")),
+    db: Session = Depends(get_db),
+) -> StopProof:
+    """
+    Registrar prueba de entrega (firma digital) para una parada.
+    Solo callable por el driver asignado a la ruta, o por logistics/admin.
+    """
+    stop = _get_stop_guarded(db, current.tenant_id, stop_id)
+
+    # El driver solo puede firmar paradas de su propia ruta
+    if current.role == "driver":
+        route = db.execute(
+            select(Route).where(Route.id == stop.route_id, Route.tenant_id == current.tenant_id)
+        ).scalar_one_or_none()
+        if route:
+            _assert_driver_scope_for_route(db, current, route)
+
+    # Solo paradas en arrived o completed admiten prueba
+    if stop.status not in (RouteStopStatus.arrived, RouteStopStatus.completed):
+        raise conflict(
+            "STOP_NOT_ARRIVED",
+            f"La parada debe estar en 'arrived' o 'completed' para registrar prueba (estado actual: {stop.status})",
+        )
+
+    # Validar que haya datos cuando proof_type incluye firma
+    if payload.proof_type in ("signature", "both") and not payload.signature_data:
+        raise unprocessable(
+            "SIGNATURE_DATA_REQUIRED",
+            "signature_data es obligatorio para proof_type 'signature' o 'both'",
+        )
+
+    now = datetime.now(UTC)
+    proof = StopProof(
+        id=uuid.uuid4(),
+        tenant_id=current.tenant_id,
+        route_stop_id=stop_id,
+        route_id=stop.route_id,
+        proof_type=payload.proof_type,
+        signature_data=payload.signature_data,
+        photo_url=None,
+        signed_by=payload.signed_by,
+        captured_at=payload.captured_at or now,
+        created_at=now,
+    )
+    db.add(proof)
+
+    _emit_event(
+        db,
+        tenant_id=current.tenant_id,
+        route_id=stop.route_id,
+        route_stop_id=stop_id,
+        event_type=RouteEventType.stop_completed,
+        actor_type=RouteEventActorType.driver,
+        actor_id=current.id,
+        metadata={"proof_type": payload.proof_type, "signed_by": payload.signed_by},
+    )
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise conflict("RESOURCE_CONFLICT", "No se pudo registrar la prueba de entrega") from exc
+
+    db.refresh(proof)
+    return proof
+
+
+@router.get("/stops/{stop_id}/proof", response_model=StopProofOut)
+def get_stop_proof(
+    stop_id: uuid.UUID,
+    current: CurrentUser = Depends(require_roles("driver", "logistics", "admin", "office")),
+    db: Session = Depends(get_db),
+) -> StopProof:
+    """Obtener la prueba de entrega de una parada."""
+    _get_stop_guarded(db, current.tenant_id, stop_id)
+    proof = _get_stop_proof(db, current.tenant_id, stop_id)
+    if not proof:
+        raise not_found("PROOF_NOT_FOUND", "No se encontró prueba de entrega para esta parada")
+    return proof
+
+
+# ============================================================================
+# BLOQUE A3 — GPS del conductor (GPS-001)
+# ============================================================================
+
+
+@router.post("/driver/location", status_code=204)
+def update_driver_location(
+    payload: DriverLocationUpdateRequest,
+    current: CurrentUser = Depends(require_roles("driver")),
+    db: Session = Depends(get_db),
+) -> Response:
+    """
+    Recibir posición GPS del conductor. Llamado periódicamente desde la PWA.
+    Solo callable por driver autenticado con ruta activa (in_progress).
+    """
+    driver = _resolve_current_driver(db, current)
+    if not driver:
+        raise not_found("DRIVER_NOT_FOUND", "No se encontró un conductor asociado a este usuario")
+
+    route = db.execute(
+        select(Route).where(
+            Route.id == payload.route_id,
+            Route.tenant_id == current.tenant_id,
+            Route.driver_id == driver.id,
+        )
+    ).scalar_one_or_none()
+
+    if not route:
+        raise not_found(
+            "ROUTE_NOT_FOUND",
+            "Ruta no encontrada o no asignada a este conductor",
+        )
+
+    if route.status != RouteStatus.in_progress:
+        raise conflict(
+            "ROUTE_NOT_IN_PROGRESS",
+            f"La ruta debe estar en progreso para publicar posición (estado actual: {route.status})",
+        )
+
+    now = datetime.now(UTC)
+    position = DriverPosition(
+        id=uuid.uuid4(),
+        tenant_id=current.tenant_id,
+        driver_id=driver.id,
+        route_id=payload.route_id,
+        lat=payload.lat,
+        lng=payload.lng,
+        accuracy_m=payload.accuracy_m,
+        speed_kmh=payload.speed_kmh,
+        heading=payload.heading,
+        recorded_at=payload.recorded_at or now,
+        created_at=now,
+    )
+    db.add(position)
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.get("/routes/{route_id}/driver-position", response_model=DriverPositionOut)
+def get_driver_position(
+    route_id: uuid.UUID,
+    current: CurrentUser = Depends(require_roles("logistics", "admin", "office", "driver")),
+    db: Session = Depends(get_db),
+) -> DriverPosition:
+    """
+    Última posición conocida del conductor para una ruta.
+    Dispatcher (logistics/admin) puede ver cualquier ruta del tenant.
+    Driver solo puede ver la posición de su propia ruta.
+    """
+    route = db.execute(
+        select(Route).where(Route.id == route_id, Route.tenant_id == current.tenant_id)
+    ).scalar_one_or_none()
+    if not route:
+        raise not_found("ROUTE_NOT_FOUND", "Ruta no encontrada")
+
+    if current.role == "driver":
+        driver = _resolve_current_driver(db, current)
+        if not driver or route.driver_id != driver.id:
+            raise forbidden("FORBIDDEN", "No tienes acceso a esta ruta")
+
+    position = db.execute(
+        select(DriverPosition)
+        .where(
+            DriverPosition.route_id == route_id,
+            DriverPosition.tenant_id == current.tenant_id,
+        )
+        .order_by(DriverPosition.recorded_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+    if not position:
+        raise not_found("POSITION_NOT_FOUND", "No hay posición registrada para esta ruta")
+
+    return position
+
+
+@router.get("/driver/active-positions", response_model=list[DriverPositionOut])
+def get_active_positions(
+    current: CurrentUser = Depends(require_roles("logistics", "admin")),
+    db: Session = Depends(get_db),
+) -> list[DriverPosition]:
+    """
+    Última posición de todos los conductores con rutas in_progress del tenant.
+    Para fleet view en el mapa del dispatcher.
+    """
+    active_route_ids = db.execute(
+        select(Route.id).where(
+            Route.tenant_id == current.tenant_id,
+            Route.status == RouteStatus.in_progress,
+        )
+    ).scalars().all()
+
+    if not active_route_ids:
+        return []
+
+    positions: list[DriverPosition] = []
+    for rid in active_route_ids:
+        pos = db.execute(
+            select(DriverPosition)
+            .where(
+                DriverPosition.route_id == rid,
+                DriverPosition.tenant_id == current.tenant_id,
+            )
+            .order_by(DriverPosition.recorded_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if pos:
+            positions.append(pos)
+
+    return positions
