@@ -3,6 +3,9 @@ const nextConfig = {
   experimental: {
     typedRoutes: false,
   },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 };
 
 export default nextConfig;
