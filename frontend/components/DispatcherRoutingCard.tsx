@@ -1,12 +1,17 @@
 import React from "react";
 import type {
   AvailableVehicleItem,
-  DriverPositionOut,
   ReadyToDispatchItem,
   RouteEventItem,
   RoutingRoute,
   RoutingRouteStatus,
 } from "../lib/api";
+
+type LocalDriverPosition = {
+  lat?: number | null;
+  lng?: number | null;
+  updated_at?: string | null;
+};
 import { RouteDetailCard } from "./RouteDetailCard";
 import { RoutingSidePanels } from "./RoutingSidePanels";
 
@@ -49,7 +54,7 @@ type DispatcherRoutingCardProps = {
   onDispatchRoute: (routeId: string) => void;
   onMoveStop: () => void;
   /** Posición actual del conductor — actualizada por polling en page.tsx. */
-  driverPosition?: DriverPositionOut | null;
+  driverPosition?: LocalDriverPosition | null;
 };
 
 function routeStatusBadgeClass(status: RoutingRouteStatus): string {
