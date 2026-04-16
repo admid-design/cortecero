@@ -25,7 +25,8 @@ import uuid
 from datetime import UTC, date, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -34,6 +35,8 @@ from app.config import settings
 from app.db import get_db
 from app.deps import CurrentUser, require_roles
 from app.errors import conflict, forbidden, not_found, unprocessable
+from app.realtime import event_bus
+from app.security import decode_token
 from app.optimization.google_provider import GoogleRouteOptimizationProvider
 from app.optimization.mock_provider import MockRouteOptimizationProvider
 from app.optimization.protocol import OptimizationRequest, OptimizationWaypoint, RouteOptimizationProvider
@@ -57,6 +60,7 @@ from app.models import (
     RouteStop,
     RouteStopStatus,
     StopProof,
+    User,
     UserRole,
     Vehicle,
 )
@@ -1334,6 +1338,19 @@ def stop_arrive(
         db.rollback()
         raise conflict("RESOURCE_CONFLICT", "No se pudo registrar la llegada") from exc
 
+    # SSE: notificar suscriptores del estado de la parada (REALTIME-001)
+    event_bus.publish(
+        str(current.tenant_id),
+        str(stop.route_id),
+        "stop_status_changed",
+        {
+            "route_id": str(stop.route_id),
+            "stop_id": str(stop.id),
+            "status": stop.status.value,
+            "sequence_number": stop.sequence_number,
+        },
+    )
+
     db.refresh(stop)
     return RouteStopOut.model_validate(stop)
 
@@ -1443,6 +1460,19 @@ def stop_complete(
     except IntegrityError as exc:
         db.rollback()
         raise conflict("RESOURCE_CONFLICT", "No se pudo completar la parada") from exc
+
+    # SSE: notificar suscriptores del estado de la parada (REALTIME-001)
+    event_bus.publish(
+        str(current.tenant_id),
+        str(stop.route_id),
+        "stop_status_changed",
+        {
+            "route_id": str(stop.route_id),
+            "stop_id": str(stop.id),
+            "status": stop.status.value,
+            "sequence_number": stop.sequence_number,
+        },
+    )
 
     db.refresh(stop)
     return RouteStopOut.model_validate(stop)
@@ -1557,6 +1587,19 @@ def stop_fail(
         db.rollback()
         raise conflict("RESOURCE_CONFLICT", "No se pudo registrar el fallo de entrega") from exc
 
+    # SSE: notificar suscriptores del estado de la parada (REALTIME-001)
+    event_bus.publish(
+        str(current.tenant_id),
+        str(stop.route_id),
+        "stop_status_changed",
+        {
+            "route_id": str(stop.route_id),
+            "stop_id": str(stop.id),
+            "status": stop.status.value,
+            "sequence_number": stop.sequence_number,
+        },
+    )
+
     db.refresh(stop)
     return RouteStopOut.model_validate(stop)
 
@@ -1645,6 +1688,19 @@ def stop_skip(
     except IntegrityError as exc:
         db.rollback()
         raise conflict("RESOURCE_CONFLICT", "No se pudo omitir la parada") from exc
+
+    # SSE: notificar suscriptores del estado de la parada (REALTIME-001)
+    event_bus.publish(
+        str(current.tenant_id),
+        str(stop.route_id),
+        "stop_status_changed",
+        {
+            "route_id": str(stop.route_id),
+            "stop_id": str(stop.id),
+            "status": stop.status.value,
+            "sequence_number": stop.sequence_number,
+        },
+    )
 
     db.refresh(stop)
     return RouteStopOut.model_validate(stop)
@@ -2047,6 +2103,20 @@ def update_driver_location(
     )
     db.add(position)
     db.commit()
+
+    # SSE: notificar suscriptores de la nueva posición del conductor (REALTIME-001)
+    event_bus.publish(
+        str(current.tenant_id),
+        str(payload.route_id),
+        "driver_position_updated",
+        {
+            "route_id": str(payload.route_id),
+            "lat": float(payload.lat),
+            "lng": float(payload.lng),
+            "recorded_at": position.recorded_at.isoformat(),
+        },
+    )
+
     return Response(status_code=204)
 
 
@@ -2122,3 +2192,107 @@ def get_active_positions(
             positions.append(pos)
 
     return positions
+
+
+# ============================================================================
+# BLOQUE B1 — SSE: stream en tiempo real de una ruta (REALTIME-001)
+# ============================================================================
+
+
+@router.get("/routes/{route_id}/stream")
+async def route_stream(
+    route_id: uuid.UUID,
+    token: str = Query(
+        ...,
+        description=(
+            "JWT de autenticación. "
+            "NOTA B1: token en query param aceptado SOLO para smoke/local/pilot de REALTIME-001. "
+            "SSE no soporta headers Authorization en browser. "
+            "La autenticación definitiva de streaming requiere decisión explícita en bloque posterior."
+        ),
+    ),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """
+    Stream SSE de eventos en tiempo real para una ruta.
+
+    Emite dos tipos de evento (REALTIME-001):
+    - stop_status_changed: cuando arrive / complete / fail / skip ocurre en una parada.
+    - driver_position_updated: cuando el conductor publica su posición GPS.
+
+    El stream permanece abierto mientras el cliente esté conectado.
+    Tenant isolation: solo emite eventos del tenant del token.
+
+    Autenticación via query param ?token=<jwt> — provisional B1.
+    Ver docstring del módulo realtime.py para limitaciones conocidas.
+    """
+    # --- Auth desde query param (excepción temporal B1) ---
+    try:
+        jwt_payload = decode_token(token)
+    except ValueError:
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "INVALID_TOKEN", "message": "Token inválido"},
+        )
+
+    user_id_str = jwt_payload.get("sub")
+    tenant_id_str = jwt_payload.get("tenant_id")
+    if not user_id_str or not tenant_id_str:
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "INVALID_TOKEN", "message": "Token incompleto"},
+        )
+
+    try:
+        auth_user_id = uuid.UUID(user_id_str)
+        auth_tenant_id = uuid.UUID(tenant_id_str)
+    except (ValueError, AttributeError):
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "INVALID_TOKEN", "message": "Token malformado"},
+        )
+
+    user = db.scalar(
+        select(User).where(
+            User.id == auth_user_id,
+            User.tenant_id == auth_tenant_id,
+            User.is_active.is_(True),
+        )
+    )
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "INVALID_TOKEN", "message": "Usuario no válido o inactivo"},
+        )
+
+    # --- Verificar que la ruta pertenece al tenant ---
+    route = db.scalar(
+        select(Route).where(
+            Route.id == route_id,
+            Route.tenant_id == auth_tenant_id,
+        )
+    )
+    if not route:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "ROUTE_NOT_FOUND", "message": "Ruta no encontrada"},
+        )
+
+    # --- Generador SSE ---
+    tenant_id_key = str(auth_tenant_id)
+    route_id_key = str(route_id)
+
+    async def _generator():
+        # Comentario inicial: confirma conexión al cliente sin emitir un evento real
+        yield ": connected\n\n"
+        async for frame in event_bus.subscribe(tenant_id_key, route_id_key):
+            yield frame
+
+    return StreamingResponse(
+        _generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # Nginx: desactivar buffering para SSE
+        },
+    )

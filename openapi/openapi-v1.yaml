@@ -2487,6 +2487,52 @@ paths:
         "404":
           description: POSITION_NOT_FOUND — Sin posición registrada para esta ruta
 
+  /routes/{route_id}/stream:
+    get:
+      tags: [Routing]
+      summary: Stream SSE de eventos en tiempo real para una ruta (REALTIME-001)
+      description: >
+        Endpoint Server-Sent Events (SSE) que emite eventos en tiempo real para una ruta.
+
+        **Eventos emitidos (B1 scope):**
+        - `stop_status_changed` — cuando arrive / complete / fail / skip ocurre en una parada.
+        - `driver_position_updated` — cuando el conductor publica su posición GPS.
+
+        **Autenticación:** JWT en query param `?token=<jwt>`.
+        NOTA B1: token en query param aceptado SOLO para smoke/local/pilot de REALTIME-001.
+        La autenticación definitiva requiere decisión explícita en bloque posterior.
+
+        **Limitación conocida (REALTIME-001):** el bus de eventos usa asyncio.Queue in-process.
+        No se comparte entre workers de gunicorn en modo multi-process.
+        Fix futuro: Redis pub/sub (bloque independiente, fuera de REALTIME-001).
+      parameters:
+        - in: path
+          name: route_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: token
+          required: true
+          schema:
+            type: string
+          description: JWT de autenticación (provisional B1 — ver descripción)
+      responses:
+        "200":
+          description: Stream SSE abierto. El cliente recibe eventos mientras esté conectado.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: >
+                  Frames SSE en formato estándar:
+                  `event: <tipo>\ndata: <json>\n\n`
+        "401":
+          description: INVALID_TOKEN — JWT ausente, inválido o usuario inactivo
+        "404":
+          description: ROUTE_NOT_FOUND — Ruta no encontrada en el tenant del token
+
   /driver/active-positions:
     get:
       tags: [Routing]

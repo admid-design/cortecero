@@ -4,7 +4,7 @@
 > Todo lo que aquí se afirma debe tener evidencia: código existente, test verde o smoke ejecutado.
 > Si una capacidad no aparece aquí, no asumas que existe.
 
-Última actualización: R8 activo — Fase A completa (MAP-001, POD-001, GPS-001 verificados; DEMO-OPT-001 evidence green). Abril 2026.
+Última actualización: R8 activo — Fase A completa + REALTIME-001 (B1) implementado (tests pendientes de ejecución local). Abril 2026.
 
 ---
 
@@ -89,7 +89,8 @@
 
 | Capacidad | Estado real |
 |---|---|
-| Seguimiento GPS en tiempo real (servidor push/SSE) | NO EXISTE — se usa polling 30 s como aproximación |
+| SSE transport layer backend (REALTIME-001 B1) | IMPLEMENTADO — `RouteEventBus` + `GET /routes/{id}/stream` + hooks en arrive/complete/fail/skip/driver-location. Tests en `test_realtime_b1.py`. Pendiente ejecución Docker local para cerrar como VERIFICADO LOCAL. Limitación: asyncio.Queue in-process, no compartido entre workers gunicorn. Auth por query param JWT solo para B1/smoke. |
+| Seguimiento GPS en tiempo real en frontend (SSE/push) | NO EXISTE — frontend sigue usando polling 30 s; backend SSE existe pero frontend no lo consume aún |
 | ETA dinámico post-incidencia | NO EXISTE — ETA es estático post-optimize |
 | Reoptimización automática ante incidencias | NO EXISTE — trigger manual existe, flujo automático no |
 | Prueba de entrega: firma | VERIFICADO LOCAL — backend + frontend + tests en verde; e2e con device real pendiente |
@@ -170,3 +171,10 @@ Service account montado en Docker: `~/.config/kelko/google/route-optimization-sa
   - DEMO-OPT-001: Google Route Optimization smoke 200 — CERRADO_CON_EVIDENCIA_LOCAL (commit `59bd16d`, evidence en `docs/evidence/DEMO-OPT-001.json`)
     - Fixes aplicados: seed.py backfill fuerza coordenadas Mallorca; `_build_result` maneja `skippedShipments` sin crashear
     - Resultado: 2 paradas, ETAs reales (seq1=13:49Z, seq2=14:08Z), totalDuration=2693s, provider=google
+- R8: Fase B1 — REALTIME-001 implementado (pendiente test green local)
+  - `backend/app/realtime.py` — RouteEventBus: publish/subscribe asyncio.Queue in-process
+  - `GET /routes/{id}/stream` — SSE endpoint con auth JWT query param (provisional B1)
+  - Hooks `event_bus.publish()` en stop_arrive, stop_complete, stop_fail, stop_skip, update_driver_location
+  - `backend/tests/test_realtime_b1.py` — 7 tests: unit bus, SSE auth 401/404, publish hooks via monkeypatch
+  - OpenAPI actualizado con `/routes/{route_id}/stream`
+  - Limitación documentada: asyncio.Queue no compartido entre workers gunicorn (fix futuro: Redis)
