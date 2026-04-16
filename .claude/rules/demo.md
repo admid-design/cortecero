@@ -49,16 +49,17 @@ No declares la demo lista si alguno de estos prerrequisitos no está resuelto.
 Ver `docs/as-is.md` para el estado verificado completo.
 
 Capacidades NO demostrables hoy:
-- Mapa operativo — no hay SDK de mapas
-- Seguimiento GPS en tiempo real — no existe
+- Fleet view (visualización de flota completa) — no existe en UI
+- Seguimiento GPS en tiempo real (SSE/push) — solo polling 30 s
 - ETA dinámico — solo ETA estático post-optimize
-- Proof of delivery — no existe
-- Fleet view — no existe
+- Proof of delivery: foto — schema preparado, UI no implementada
 - Asistente IA — no existe en ninguna capa
 
 Capacidades demostrables hoy:
 - Flujo dispatcher completo (plan → dispatch → optimize → paradas)
-- PWA conductor (arrive/complete/fail/skip/incidencias)
+- Mapa de ruta con marcadores por estado + marcador conductor (MAP-001 — requiere API key)
+- PWA conductor (arrive/complete/fail/skip/incidencias/firma de entrega)
+- GPS tracking conductor durante ruta in_progress (GPS-001)
 - Gestión de excepciones
 - Panel operativo
 

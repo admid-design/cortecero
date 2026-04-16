@@ -4,7 +4,7 @@
 > Todo lo que aquí se afirma debe tener evidencia: código existente, test verde o smoke ejecutado.
 > Si una capacidad no aparece aquí, no asumas que existe.
 
-Última actualización: R7 activo. CI en verde sobre `main`.
+Última actualización: R8 activo — Fase A (MAP-001 evidence green, POD-001 tests green, GPS-001 tests green). Abril 2026.
 
 ---
 
@@ -17,7 +17,7 @@
 - Multi-tenant estricto en todas las queries
 - RBAC con roles: `admin`, `logistics`, `office`, `driver`
 - Contrato de errores uniforme: `{ detail: { code, message } }`
-- Migraciones versionadas en `db/migrations/` (001–019), lexicográficas, idempotentes
+- Migraciones versionadas en `db/migrations/` (001–021), lexicográficas, idempotentes
 - Seed reproducible en `backend/app/seed.py`
 - Google Route Optimization integrado en `backend/app/optimization/google_provider.py`
 - Mock provider disponible cuando no hay `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID`
@@ -29,19 +29,21 @@
 - **Next.js** + TypeScript
 - Cliente tipado en `frontend/lib/api.ts`
 - Componentes operativos: `DispatcherRoutingCard`, `DriverRoutingCard`, `OperationalQueueCard`, `PendingQueueCard`, `OperationalResolutionQueueCard`, `OrderOperationalSnapshotsCard`, `AdminProductsCard`
-- Panel dispatcher: asignación de rutas, despacho, visualización de paradas (lista, no mapa)
-- PWA del conductor: arrive / complete / fail / skip / incidencias
+- Panel dispatcher: asignación de rutas, despacho, visualización de paradas, mapa de ruta con marcadores por estado y marcador conductor en tiempo real (polling 30 s)
+- PWA del conductor: arrive / complete / fail / skip / incidencias / firma de entrega (modal canvas) / GPS tracking activo durante ruta in_progress
 - Frontend build en verde (CI `frontend-smoke`)
 - Tests de componentes: 26 tests en verde
 
 ### Base de datos
 
 - PostgreSQL 16
-- Migraciones: 019 aplicadas
+- Migraciones: 021 aplicadas
 - Migraciones críticas recientes:
   - `017_user_role_driver.sql` — rol driver en tabla `users`
   - `018_driver_user_id.sql` — FK explícita `drivers.user_id → users.id` (PILOT-HARDEN-001)
   - `019_warehouse_locations.sql`
+  - `020_stop_proofs.sql` — tabla `stop_proofs` con índices (POD-001)
+  - `021_driver_positions.sql` — tabla `driver_positions` con índice por driver+fecha desc (GPS-001)
 - Constraints y vocabularios explícitos donde aplica
 
 ### OpenAPI
@@ -76,6 +78,10 @@
 | Routing: driver auth con user_id explícito | VERIFICADO | PILOT-HARDEN-001 + CI |
 | Frontend: panel dispatcher | VERIFICADO | tests + CI build |
 | Frontend: PWA conductor | VERIFICADO | tests + CI build |
+| Mapa de ruta (Google Maps JS API) | VERIFICADO LOCAL — `RouteMapCard.tsx` renderiza con marcadores por estado; evidence green en browser con `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` configurada (MAP-001) |
+| Marcador conductor en mapa dispatcher | PARCIAL — implementado con polling 30 s; requiere ruta in_progress con posición publicada para evidencia e2e |
+| Proof of delivery (firma canvas) | VERIFICADO LOCAL — modal firma en `DriverRoutingCard` + endpoints backend (`STOP_NOT_ARRIVED`, `SIGNATURE_DATA_REQUIRED`) + migración `stop_proofs`; 183 tests en verde (`test_routing_proof_a2.py`) |
+| GPS tracking conductor (publicación de posición) | VERIFICADO LOCAL — `useGpsTracking` hook + `POST /driver/location` + migración `driver_positions`; two-query logic (404 vs 409); 183 tests en verde (`test_routing_gps_a3.py`) |
 
 ---
 
@@ -83,13 +89,13 @@
 
 | Capacidad | Estado real |
 |---|---|
-| Mapa operativo (visualización de ruta en mapa) | NO EXISTE — frontend es list-centric, sin SDK de mapas |
-| Seguimiento GPS en tiempo real del conductor | NO EXISTE |
+| Seguimiento GPS en tiempo real (servidor push/SSE) | NO EXISTE — se usa polling 30 s como aproximación |
 | ETA dinámico post-incidencia | NO EXISTE — ETA es estático post-optimize |
 | Reoptimización automática ante incidencias | NO EXISTE — trigger manual existe, flujo automático no |
-| Prueba de entrega (foto/firma) | NO EXISTE |
+| Prueba de entrega: firma | VERIFICADO LOCAL — backend + frontend + tests en verde; e2e con device real pendiente |
+| Prueba de entrega: foto | NO EXISTE — schema preparado, UI no implementada |
 | Notificación de ETA a cliente final | NO EXISTE |
-| Fleet view (vista de flota en mapa) | NO EXISTE |
+| Fleet view (vista de flota en mapa) | PARCIAL — endpoint `/driver/active-positions` implementado; UI dispatcher no tiene vista fleet aún |
 | Asistente IA en dispatcher | NO EXISTE |
 | Asistente IA en app del conductor | NO EXISTE |
 | Multi-vehicle en UI (fleet view) | NO EXISTE — backend soporta múltiples vehículos, UI no los visualiza juntos |
@@ -109,9 +115,10 @@
 
 ### Test suite
 
-- Backend: `pytest` en Docker — CI verde en `main`
+- Backend: `pytest` en Docker — **183 tests en verde** (commit `62cdb79`, HEAD local)
 - Frontend: `npm test` — CI verde en `main`
-- `test_routing_bloque_e.py` tiene 5 tests fallando localmente (relacionados con optimize Google — bloque `DEMO-OPT-001` pendiente)
+- `test_routing_bloque_e.py` tiene 5 tests que requieren `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID` — excluidos de CI estándar (bloque `DEMO-OPT-001` pendiente)
+- Nuevos archivos de test en HEAD: `test_routing_gps_a3.py` (GPS-001), `test_routing_proof_a2.py` (POD-001)
 
 ---
 
@@ -155,5 +162,9 @@ Service account montado en Docker: `~/.config/kelko/google/route-optimization-sa
 ## Historial de fases
 
 - R1–R6: cerradas
-- R7: abierta (routing + optimización Google + demo)
-- Bloque activo: `DEMO-OPT-001` (timestamp RFC3339 + smoke evidencia)
+- R7: cerrada (routing + optimización Google + demo — smoke pendiente)
+- R8: abierta — Fase A (MAP-001, POD-001, GPS-001) en implementación
+  - MAP-001: `RouteMapCard.tsx` + marcador conductor — VERIFICADO LOCAL (evidence green en browser; `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` configurada)
+  - POD-001: `stop_proofs` migration + endpoints + modal firma — VERIFICADO LOCAL (183 tests en verde, commit `62cdb79`)
+  - GPS-001: `driver_positions` migration + endpoints + hook GPS + two-query logic — VERIFICADO LOCAL (183 tests en verde, commit `62cdb79`)
+- Bloque pendiente: `DEMO-OPT-001` (smoke Google Route Optimization — dataset geo-ready bloqueado)

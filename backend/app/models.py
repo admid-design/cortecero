@@ -593,3 +593,38 @@ class RouteEvent(Base):
         ForeignKeyConstraint(["route_id", "tenant_id"], ["routes.id", "routes.tenant_id"], ondelete="CASCADE"),
         ForeignKeyConstraint(["route_stop_id", "tenant_id"], ["route_stops.id", "route_stops.tenant_id"], ondelete="CASCADE"),
     )
+
+
+class StopProof(Base):
+    """Prueba de entrega: firma digital del receptor.  Bloque A2 (POD-001)."""
+
+    __tablename__ = "stop_proofs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    route_stop_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    route_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    proof_type: Mapped[str] = mapped_column(Text, nullable=False)
+    signature_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    photo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signed_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DriverPosition(Base):
+    """Posición GPS del conductor enviada periódicamente.  Bloque A3 (GPS-001)."""
+
+    __tablename__ = "driver_positions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    driver_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    route_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    lat: Mapped[float] = mapped_column(Numeric(9, 6), nullable=False)
+    lng: Mapped[float] = mapped_column(Numeric(9, 6), nullable=False)
+    accuracy_m: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
+    speed_kmh: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
+    heading: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

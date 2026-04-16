@@ -50,12 +50,17 @@ Cuando un path de backend cambia:
 | `OrderOperationalSnapshotsCard` | Snapshots de pedido |
 | `AdminProductsCard` | Administración de productos |
 
+## Qué SÍ existe en frontend (R8)
+
+- `RouteMapCard.tsx` — Google Maps JS API, marcadores por estado, marcador conductor (polling 30 s); requiere `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
+- Modal firma en `DriverRoutingCard` — canvas para proof of delivery (POD-001)
+- Hook `useGpsTracking` en `DriverRoutingCard` — publica posición durante ruta in_progress (GPS-001)
+
 ## Qué NO existe en frontend
 
-- Mapa (no hay SDK Mapbox/Google Maps JS)
-- Seguimiento GPS en tiempo real
-- Visualización de flota
-- Proof of delivery
+- Fleet view (visualización de flota completa en mapa)
+- Seguimiento GPS en tiempo real (SSE/push) — solo polling 30 s
+- Proof of delivery: foto (schema preparado, UI no implementada)
 - Notificaciones push operativas
 
 No insinúes estas capacidades en UI ni en comentarios de código.

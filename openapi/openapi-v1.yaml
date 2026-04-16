@@ -2368,6 +2368,147 @@ paths:
         "422":
           description: INVALID_INPUT — resolution_note es obligatorio
 
+  /stops/{stop_id}/proof:
+    post:
+      tags: [Routing]
+      summary: Registrar proof of delivery (POD-001)
+      description: >
+        Crea un registro de prueba de entrega para una parada.
+        La parada debe estar en estado `arrived` o `completed`.
+        Si `proof_type=signature`, `signature_data` (base64 de imagen) es obligatorio.
+        Requiere rol `driver`, `logistics` o `admin`.
+      parameters:
+        - in: path
+          name: stop_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StopProofCreateRequest'
+      responses:
+        "201":
+          description: Proof creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StopProofOut'
+        "401":
+          description: No autenticado
+        "404":
+          description: ENTITY_NOT_FOUND — Parada no encontrada
+        "409":
+          description: STOP_NOT_ARRIVED — La parada no está en estado arrived/completed
+        "422":
+          description: SIGNATURE_DATA_REQUIRED — proof_type=signature sin signature_data
+    get:
+      tags: [Routing]
+      summary: Recuperar proof of delivery de una parada
+      description: >
+        Devuelve el proof of delivery asociado a la parada indicada.
+        Requiere rol `driver`, `logistics` o `admin`.
+      parameters:
+        - in: path
+          name: stop_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Proof encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StopProofOut'
+        "401":
+          description: No autenticado
+        "404":
+          description: ENTITY_NOT_FOUND — Parada o proof no encontrado
+
+  /driver/location:
+    post:
+      tags: [Routing]
+      summary: Publicar posición GPS del conductor (GPS-001)
+      description: >
+        El conductor publica su posición GPS actual.
+        La ruta debe estar en estado `in_progress`.
+        La posición se persiste en `driver_positions` para consulta del dispatcher.
+        Fire-and-forget — errores de conectividad son ignorados por el cliente.
+        Requiere rol `driver`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverLocationUpdateRequest'
+      responses:
+        "204":
+          description: Posición registrada
+        "401":
+          description: No autenticado
+        "403":
+          description: DRIVER_NOT_LINKED — Usuario sin ficha de conductor activa
+        "404":
+          description: ENTITY_NOT_FOUND — Ruta no encontrada o no asignada al conductor
+        "409":
+          description: ROUTE_NOT_IN_PROGRESS — La ruta no está en estado in_progress
+
+  /routes/{route_id}/driver-position:
+    get:
+      tags: [Routing]
+      summary: Última posición GPS del conductor en una ruta
+      description: >
+        Devuelve la posición GPS más reciente del conductor para la ruta indicada.
+        Usada por el dispatcher para actualizar el marcador en el mapa (polling 30 s).
+        Requiere rol `logistics` o `admin`. El rol `driver` puede consultarla para su propia ruta.
+      parameters:
+        - in: path
+          name: route_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Posición encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverPositionOut'
+        "401":
+          description: No autenticado
+        "403":
+          description: DRIVER_SCOPE_FORBIDDEN — Ruta asignada a otro conductor
+        "404":
+          description: POSITION_NOT_FOUND — Sin posición registrada para esta ruta
+
+  /driver/active-positions:
+    get:
+      tags: [Routing]
+      summary: Posiciones activas de todos los conductores (fleet view)
+      description: >
+        Devuelve la última posición de cada conductor con ruta `in_progress` del tenant.
+        Usada para fleet view en el mapa del dispatcher.
+        Requiere rol `logistics` o `admin`.
+      responses:
+        "200":
+          description: Lista de posiciones (puede ser vacía)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DriverPositionOut'
+        "401":
+          description: No autenticado
+        "403":
+          description: RBAC_FORBIDDEN — Rol sin permisos
+
 components:
   securitySchemes:
     bearerAuth:
@@ -4159,3 +4300,119 @@ components:
             $ref: '#/components/schemas/RouteEventOut'
         total:
           type: integer
+
+    StopProofCreateRequest:
+      type: object
+      properties:
+        proof_type:
+          type: string
+          enum: [signature, photo, both]
+          default: signature
+        signature_data:
+          type: string
+          nullable: true
+          description: Imagen de firma en formato base64 data URI. Obligatorio si proof_type=signature.
+        signed_by:
+          type: string
+          nullable: true
+          description: Nombre del receptor que firmó
+        captured_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp de captura en cliente. Si null, usa now() en servidor.
+
+    StopProofOut:
+      type: object
+      required: [id, route_stop_id, route_id, proof_type, captured_at, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        route_stop_id:
+          type: string
+          format: uuid
+        route_id:
+          type: string
+          format: uuid
+        proof_type:
+          type: string
+          enum: [signature, photo, both]
+        signature_data:
+          type: string
+          nullable: true
+        photo_url:
+          type: string
+          nullable: true
+        signed_by:
+          type: string
+          nullable: true
+        captured_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    DriverLocationUpdateRequest:
+      type: object
+      required: [route_id, lat, lng]
+      properties:
+        route_id:
+          type: string
+          format: uuid
+        lat:
+          type: number
+          format: double
+          description: Latitud en grados decimales (WGS84)
+        lng:
+          type: number
+          format: double
+          description: Longitud en grados decimales (WGS84)
+        accuracy_m:
+          type: number
+          nullable: true
+          description: Precisión GPS en metros
+        speed_kmh:
+          type: number
+          nullable: true
+          description: Velocidad en km/h
+        heading:
+          type: number
+          nullable: true
+          description: Rumbo en grados (0=Norte, 90=Este)
+        recorded_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp en cliente. Si null, usa now() en servidor.
+
+    DriverPositionOut:
+      type: object
+      required: [driver_id, route_id, lat, lng, recorded_at]
+      properties:
+        driver_id:
+          type: string
+          format: uuid
+        route_id:
+          type: string
+          format: uuid
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        accuracy_m:
+          type: number
+          nullable: true
+        speed_kmh:
+          type: number
+          nullable: true
+        heading:
+          type: number
+          nullable: true
+          description: Rumbo en grados (0=Norte, 90=Este). Usado para rotar el marcador en el mapa.
+        recorded_at:
+          type: string
+          format: date-time

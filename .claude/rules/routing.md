@@ -78,9 +78,11 @@ python3 backend/scripts/prepare_google_smoke_dataset.py
 | `test_routing_bloque_e.py` | Optimize con Google provider real (requiere credenciales) |
 | `test_routing_bloque_e2.py` | Optimize con mock provider |
 | `test_routing_driver_auth_d2.py` | Driver auth con user_id explícito |
+| `test_routing_gps_a3.py` | GPS-001: POST /driver/location, GET /routes/{id}/driver-position, GET /driver/active-positions |
+| `test_routing_proof_a2.py` | POD-001: POST /stops/{id}/proof, GET /stops/{id}/proof |
 
 `test_routing_bloque_e.py` falla en CI sin `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID`.
-Esto es esperado en CI — los 5 tests fallando en ese archivo son bloqueo conocido.
+Esto es esperado en CI — los 5 tests de ese archivo son bloqueo conocido (DEMO-OPT-001).
 
 ## Smoke script
 

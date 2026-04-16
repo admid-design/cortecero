@@ -755,3 +755,47 @@ class RouteEventOut(APIModel):
 class RouteEventsListResponse(BaseModel):
     items: list[RouteEventOut]
     total: int
+
+
+# ── Stop Proof (A2 — POD-001) ─────────────────────────────────────────────────
+
+class StopProofCreateRequest(BaseModel):
+    proof_type: Literal["signature", "photo", "both"] = "signature"
+    signature_data: str | None = None   # base64 PNG
+    signed_by: str | None = None
+    captured_at: datetime | None = None  # si None, se usa now() en backend
+
+
+class StopProofOut(APIModel):
+    id: uuid.UUID
+    route_stop_id: uuid.UUID
+    route_id: uuid.UUID
+    proof_type: str
+    signature_data: str | None
+    photo_url: str | None
+    signed_by: str | None
+    captured_at: datetime
+    created_at: datetime
+
+
+# ── Driver Position (A3 — GPS-001) ────────────────────────────────────────────
+
+class DriverLocationUpdateRequest(BaseModel):
+    route_id: uuid.UUID
+    lat: float
+    lng: float
+    accuracy_m: float | None = None
+    speed_kmh: float | None = None
+    heading: float | None = None
+    recorded_at: datetime | None = None  # si None, se usa now() en backend
+
+
+class DriverPositionOut(BaseModel):
+    driver_id: uuid.UUID
+    route_id: uuid.UUID
+    lat: float
+    lng: float
+    accuracy_m: float | None
+    speed_kmh: float | None
+    heading: float | None
+    recorded_at: datetime
