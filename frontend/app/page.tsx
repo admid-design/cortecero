@@ -4,13 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   type AdminUser,
+  type DriverPositionOut,
   type IncidentCreateRequest,
   type RouteNextStopResponse,
   APIError,
   formatError,
   arriveStop,
   completeStop,
+  createStopProof,
   failStop,
+  getDriverPosition,
   skipStop,
   createIncident,
   getDriverRoutes,
@@ -19,12 +22,10 @@ import {
   createAdminCustomer,
   createAdminCustomerOperationalException,
   createAdminUser,
-  createAdminZone,
   createException,
   createPlan,
   deactivateAdminCustomer,
   deleteAdminCustomerOperationalException,
-  deactivateAdminZone,
   dispatchRoute,
   getDailySummary,
   getPlanCapacityAlerts,
@@ -62,7 +63,6 @@ import {
   putAdminCustomerOperationalProfile,
   updateAdminTenantSettings,
   updateAdminUser,
-  updateAdminZone,
   type AutoLockRunResponse,
   type AvailableVehicleItem,
   type CapacityAlertLevel,
@@ -110,6 +110,7 @@ import { AppShell, GlobalBanner, SectionHeader, SidebarNav, TopTabs } from "../c
 import { KpiRow } from "../components/KpiRow";
 import { DispatcherRoutingShell } from "../components/DispatcherRoutingShell";
 import { AdminShell } from "../components/AdminShell";
+import { AdminZonesSection } from "../components/AdminZonesSection";
 type ViewMode = "ops" | "admin";
 type AdminSection = "zones" | "customers" | "users" | "tenant" | "products";
 type OrdersOperationalStateFilter = "all" | "eligible" | "restricted";
@@ -263,13 +264,6 @@ export default function HomePage() {
 
   const [zoneFilter, setZoneFilter] = useState<"all" | "active" | "inactive">("all");
   const [zones, setZones] = useState<Zone[]>([]);
-  const [newZoneName, setNewZoneName] = useState("");
-  const [newZoneCutoff, setNewZoneCutoff] = useState("10:00:00");
-  const [newZoneTimezone, setNewZoneTimezone] = useState("Europe/Madrid");
-  const [editingZoneId, setEditingZoneId] = useState("");
-  const [editZoneName, setEditZoneName] = useState("");
-  const [editZoneCutoff, setEditZoneCutoff] = useState("10:00:00");
-  const [editZoneTimezone, setEditZoneTimezone] = useState("Europe/Madrid");
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerFilter, setCustomerFilter] = useState<"all" | "active" | "inactive">("all");
@@ -333,7 +327,7 @@ export default function HomePage() {
   const [driverError, setDriverError] = useState<string | null>(null);
   const [driverSuccess, setDriverSuccess] = useState<string | null>(null);
   // Posición del conductor vista desde el dispatcher (polling cada 30s)
-  const [dispatcherDriverPosition, setDispatcherDriverPosition] = useState<any | null>(null);
+  const [dispatcherDriverPosition, setDispatcherDriverPosition] = useState<DriverPositionOut | null>(null);
 
   const isAuthenticated = useMemo(() => token.length > 0, [token]);
   const isAdmin = useMemo(() => role === "admin", [role]);
@@ -620,8 +614,8 @@ export default function HomePage() {
 
     const poll = async () => {
       try {
-        // const pos = await getDriverPosition(token, selectedDispatcherRouteId);
-        // setDispatcherDriverPosition(pos);
+        const pos = await getDriverPosition(token, selectedDispatcherRouteId);
+        setDispatcherDriverPosition(pos);
       } catch {
         // posición aún no disponible — sin conductor en ruta o ruta sin GPS
       }
@@ -851,12 +845,12 @@ export default function HomePage() {
       // 1. Completar la parada
       const updated = await completeStop(token, stopId);
       // 2. Guardar la firma vinculada a la parada ya completada
-      // await createStopProof(token, stopId, {
-      //   proof_type: "signature",
-      //   signature_data: signatureData,
-      //   signed_by: signedBy || null,
-      //   captured_at: new Date().toISOString(),
-      // });
+      await createStopProof(token, stopId, {
+        proof_type: "signature",
+        signature_data: signatureData,
+        signed_by: signedBy || null,
+        captured_at: new Date().toISOString(),
+      });
       setDriverSuccess(`Parada #${updated.sequence_number}: entrega completada con firma.`);
       await refreshDriverRouteAndNextStop();
     } catch (e) {
@@ -1299,70 +1293,6 @@ export default function HomePage() {
     }
   }
 
-  async function onCreateZone() {
-    if (!token || !isAdmin) return;
-    if (!newZoneName.trim()) {
-      setError("El nombre de zona es obligatorio");
-      return;
-    }
-    try {
-      await createAdminZone(token, {
-        name: newZoneName.trim(),
-        default_cutoff_time: newZoneCutoff,
-        timezone: newZoneTimezone.trim(),
-      });
-      setNewZoneName("");
-      await refreshZones();
-    } catch (e) {
-      setError(formatError(e));
-    }
-  }
-
-  function startEditZone(zone: Zone) {
-    setEditingZoneId(zone.id);
-    setEditZoneName(zone.name);
-    setEditZoneCutoff(zone.default_cutoff_time);
-    setEditZoneTimezone(zone.timezone);
-  }
-
-  function cancelEditZone() {
-    setEditingZoneId("");
-  }
-
-  async function onSaveZoneEdit() {
-    if (!token || !isAdmin || !editingZoneId) return;
-    if (!editZoneName.trim()) {
-      setError("El nombre de zona es obligatorio");
-      return;
-    }
-    try {
-      await updateAdminZone(token, editingZoneId, {
-        name: editZoneName.trim(),
-        default_cutoff_time: editZoneCutoff,
-        timezone: editZoneTimezone.trim(),
-      });
-      setEditingZoneId("");
-      await refreshZones();
-    } catch (e) {
-      setError(formatError(e));
-    }
-  }
-
-  async function onDeactivateZone(zoneId: string) {
-    if (!token || !isAdmin) return;
-    const confirmed = window.confirm("¿Desactivar esta zona?");
-    if (!confirmed) return;
-    try {
-      await deactivateAdminZone(token, zoneId);
-      if (editingZoneId === zoneId) {
-        setEditingZoneId("");
-      }
-      await refreshZones();
-    } catch (e) {
-      setError(formatError(e));
-    }
-  }
-
   async function onCreateCustomer() {
     if (!token || !isAdmin) return;
     if (!newCustomerName.trim()) {
@@ -1629,26 +1559,26 @@ export default function HomePage() {
         ...(isDriver
           ? [{ id: "driver", label: "Mis rutas", active: true }]
           : [
-              {
-                id: "ops",
-                label: "Operación",
-                active: viewMode === "ops",
-                onClick: () => setViewMode("ops"),
-              },
-              ...(isAdmin
-                ? [
-                    {
-                      id: "admin",
-                      label: "Admin",
-                      active: viewMode === "admin",
-                      onClick: () => {
-                        setViewMode("admin");
-                        void refreshZones();
-                      },
-                    },
-                  ]
-                : []),
-            ]),
+            {
+              id: "ops",
+              label: "Operación",
+              active: viewMode === "ops",
+              onClick: () => setViewMode("ops"),
+            },
+            ...(isAdmin
+              ? [
+                {
+                  id: "admin",
+                  label: "Admin",
+                  active: viewMode === "admin",
+                  onClick: () => {
+                    setViewMode("admin");
+                    void refreshZones();
+                  },
+                },
+              ]
+              : []),
+          ]),
       ]}
     />
   ) : undefined;
@@ -1660,16 +1590,16 @@ export default function HomePage() {
           { id: "ops-tab", label: "Operación", active: viewMode === "ops", onClick: () => setViewMode("ops") },
           ...(isAdmin
             ? [
-                {
-                  id: "admin-tab",
-                  label: "Admin",
-                  active: viewMode === "admin",
-                  onClick: () => {
-                    setViewMode("admin");
-                    void refreshZones();
-                  },
+              {
+                id: "admin-tab",
+                label: "Admin",
+                active: viewMode === "admin",
+                onClick: () => {
+                  setViewMode("admin");
+                  void refreshZones();
                 },
-              ]
+              },
+            ]
             : []),
         ]}
       />
@@ -2023,558 +1953,471 @@ export default function HomePage() {
                 }}
               >
 
-              {adminSection === "zones" && (
-                <div className="grid cols-2">
-                  <div className="card grid">
-                    <h2>Crear Zona</h2>
-                    <input placeholder="Nombre" value={newZoneName} onChange={(e) => setNewZoneName(e.target.value)} />
-                    <input
-                      placeholder="default_cutoff_time HH:MM:SS"
-                      value={newZoneCutoff}
-                      onChange={(e) => setNewZoneCutoff(e.target.value)}
-                    />
-                    <input
-                      placeholder="Timezone IANA"
-                      value={newZoneTimezone}
-                      onChange={(e) => setNewZoneTimezone(e.target.value)}
-                    />
-                    <button onClick={onCreateZone}>Crear</button>
-                  </div>
+                {adminSection === "zones" && <AdminZonesSection token={token} />}
 
-                  <div className="card grid">
-                    <h2>Editar Zona</h2>
-                    {!editingZoneId && <p style={{ margin: 0, color: "#6b7280" }}>Selecciona una zona para editar.</p>}
-                    {editingZoneId && (
-                      <>
-                        <input value={editZoneName} onChange={(e) => setEditZoneName(e.target.value)} />
-                        <input value={editZoneCutoff} onChange={(e) => setEditZoneCutoff(e.target.value)} />
-                        <input value={editZoneTimezone} onChange={(e) => setEditZoneTimezone(e.target.value)} />
-                        <div className="row">
-                          <button onClick={onSaveZoneEdit}>Guardar</button>
-                          <button className="secondary" onClick={cancelEditZone}>
-                            Cancelar
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="card" style={{ gridColumn: "1 / -1" }}>
-                    <div className="row" style={{ marginBottom: 10 }}>
-                      <h2 style={{ marginRight: 12 }}>Listado de Zonas</h2>
-                      <select value={zoneFilter} onChange={(e) => setZoneFilter(e.target.value as "all" | "active" | "inactive")}>
-                        <option value="all">Todas</option>
-                        <option value="active">Activas</option>
-                        <option value="inactive">Inactivas</option>
-                      </select>
-                      <button className="secondary" onClick={() => void refreshZones()}>
-                        Refrescar
-                      </button>
-                    </div>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>id</th>
-                          <th>nombre</th>
-                          <th>cutoff</th>
-                          <th>timezone</th>
-                          <th>estado</th>
-                          <th>acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {zones.map((zone) => (
-                          <tr key={zone.id}>
-                            <td>{shortId(zone.id)}</td>
-                            <td>{zone.name}</td>
-                            <td>{zone.default_cutoff_time}</td>
-                            <td>{zone.timezone}</td>
-                            <td>
-                              <span className={zone.active ? "badge ok" : "badge rejected"}>
-                                {zone.active ? "active" : "inactive"}
-                              </span>
-                            </td>
-                            <td className="row">
-                              <button className="secondary" onClick={() => startEditZone(zone)}>
-                                Editar
-                              </button>
-                              {zone.active && (
-                                <button className="danger" onClick={() => onDeactivateZone(zone.id)}>
-                                  Desactivar
-                                </button>
-                              )}
-                            </td>
+                {adminSection === "customers" && (
+                  <div className="admin-layout">
+                    <div className="card">
+                      <div className="row" style={{ marginBottom: 10 }}>
+                        <h2 style={{ marginRight: 12 }}>Listado de Clientes</h2>
+                        <select
+                          value={customerFilter}
+                          onChange={(e) => setCustomerFilter(e.target.value as "all" | "active" | "inactive")}
+                        >
+                          <option value="all">Todos</option>
+                          <option value="active">Activos</option>
+                          <option value="inactive">Inactivos</option>
+                        </select>
+                        <select value={customerZoneFilter} onChange={(e) => setCustomerZoneFilter(e.target.value)}>
+                          <option value="all">Todas las zonas</option>
+                          {zones.map((zone) => (
+                            <option key={zone.id} value={zone.id}>
+                              {zone.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button className="secondary" onClick={() => void refreshCustomers()}>
+                          Refrescar
+                        </button>
+                      </div>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>id</th>
+                            <th>nombre</th>
+                            <th>zona</th>
+                            <th>prioridad</th>
+                            <th>cutoff override</th>
+                            <th>estado</th>
+                            <th>acciones</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {adminSection === "customers" && (
-                <div className="admin-layout">
-                  <div className="card">
-                    <div className="row" style={{ marginBottom: 10 }}>
-                      <h2 style={{ marginRight: 12 }}>Listado de Clientes</h2>
-                      <select
-                        value={customerFilter}
-                        onChange={(e) => setCustomerFilter(e.target.value as "all" | "active" | "inactive")}
-                      >
-                        <option value="all">Todos</option>
-                        <option value="active">Activos</option>
-                        <option value="inactive">Inactivos</option>
-                      </select>
-                      <select value={customerZoneFilter} onChange={(e) => setCustomerZoneFilter(e.target.value)}>
-                        <option value="all">Todas las zonas</option>
-                        {zones.map((zone) => (
-                          <option key={zone.id} value={zone.id}>
-                            {zone.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button className="secondary" onClick={() => void refreshCustomers()}>
-                        Refrescar
-                      </button>
+                        </thead>
+                        <tbody>
+                          {customers.map((customer) => {
+                            const zoneName = zones.find((zone) => zone.id === customer.zone_id)?.name ?? shortId(customer.zone_id);
+                            return (
+                              <tr key={customer.id}>
+                                <td>{shortId(customer.id)}</td>
+                                <td>{customer.name}</td>
+                                <td>{zoneName}</td>
+                                <td>{customer.priority}</td>
+                                <td>{customer.cutoff_override_time ?? "-"}</td>
+                                <td>
+                                  <span className={customer.active ? "badge ok" : "badge rejected"}>
+                                    {customer.active ? "active" : "inactive"}
+                                  </span>
+                                </td>
+                                <td className="row">
+                                  <button className="secondary" onClick={() => startEditCustomer(customer)}>
+                                    Editar
+                                  </button>
+                                  {customer.active && (
+                                    <button className="danger" onClick={() => onDeactivateCustomer(customer.id)}>
+                                      Desactivar
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>id</th>
-                          <th>nombre</th>
-                          <th>zona</th>
-                          <th>prioridad</th>
-                          <th>cutoff override</th>
-                          <th>estado</th>
-                          <th>acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {customers.map((customer) => {
-                          const zoneName = zones.find((zone) => zone.id === customer.zone_id)?.name ?? shortId(customer.zone_id);
-                          return (
-                            <tr key={customer.id}>
-                              <td>{shortId(customer.id)}</td>
-                              <td>{customer.name}</td>
-                              <td>{zoneName}</td>
-                              <td>{customer.priority}</td>
-                              <td>{customer.cutoff_override_time ?? "-"}</td>
+
+                    <div className="grid" style={{ gap: 12 }}>
+                      <div className="card grid">
+                        <h2>Crear Cliente</h2>
+                        <input
+                          placeholder="Nombre cliente"
+                          value={newCustomerName}
+                          onChange={(e) => setNewCustomerName(e.target.value)}
+                        />
+                        <select value={newCustomerZoneId} onChange={(e) => setNewCustomerZoneId(e.target.value)}>
+                          <option value="">Selecciona zona</option>
+                          {zones.map((zone) => (
+                            <option key={zone.id} value={zone.id}>
+                              {zone.name}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          placeholder="Prioridad (int)"
+                          value={newCustomerPriority}
+                          onChange={(e) => setNewCustomerPriority(e.target.value)}
+                        />
+                        <input
+                          placeholder="cutoff_override_time HH:MM:SS (opcional)"
+                          value={newCustomerCutoff}
+                          onChange={(e) => setNewCustomerCutoff(e.target.value)}
+                        />
+                        <button onClick={onCreateCustomer}>Crear</button>
+                      </div>
+
+                      <div className="card grid">
+                        <h2>Editar Cliente</h2>
+                        {!editingCustomerId && <p style={{ margin: 0, color: "#6b7280" }}>Selecciona un cliente para editar.</p>}
+                        {editingCustomerId && (
+                          <>
+                            <input value={editCustomerName} onChange={(e) => setEditCustomerName(e.target.value)} />
+                            <select value={editCustomerZoneId} onChange={(e) => setEditCustomerZoneId(e.target.value)}>
+                              <option value="">Selecciona zona</option>
+                              {zones.map((zone) => (
+                                <option key={zone.id} value={zone.id}>
+                                  {zone.name}
+                                </option>
+                              ))}
+                            </select>
+                            <input value={editCustomerPriority} onChange={(e) => setEditCustomerPriority(e.target.value)} />
+                            <input value={editCustomerCutoff} onChange={(e) => setEditCustomerCutoff(e.target.value)} />
+                            <div className="row">
+                              <button onClick={onSaveCustomerEdit}>Guardar</button>
+                              <button className="secondary" onClick={cancelEditCustomer}>
+                                Cancelar
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="card grid">
+                        <h2>Perfil Operativo</h2>
+                        {!editingCustomerId && (
+                          <p style={{ margin: 0, color: "#6b7280" }}>
+                            Selecciona un cliente (Editar) para ver y actualizar su perfil operativo.
+                          </p>
+                        )}
+                        {editingCustomerId && (
+                          <>
+                            {operationalProfileLoading && <p style={{ margin: 0, color: "#6b7280" }}>Cargando perfil...</p>}
+                            {operationalProfile && (
+                              <div className="row" style={{ gap: 6 }}>
+                                <span className="pill">window_mode: {operationalProfile.window_mode}</span>
+                                <span className="pill">tz: {operationalProfile.evaluation_timezone}</span>
+                                <span className="pill">customized: {operationalProfile.is_customized ? "true" : "false"}</span>
+                              </div>
+                            )}
+
+                            <label className="row" style={{ gap: 6 }}>
+                              <input
+                                type="checkbox"
+                                checked={opAcceptOrders}
+                                onChange={(e) => setOpAcceptOrders(e.target.checked)}
+                              />
+                              accept_orders
+                            </label>
+
+                            <input
+                              placeholder="window_start HH:MM:SS (opcional)"
+                              value={opWindowStart}
+                              onChange={(e) => setOpWindowStart(e.target.value)}
+                            />
+                            <input
+                              placeholder="window_end HH:MM:SS (opcional)"
+                              value={opWindowEnd}
+                              onChange={(e) => setOpWindowEnd(e.target.value)}
+                            />
+                            <input
+                              placeholder="min_lead_hours (entero >= 0)"
+                              value={opMinLeadHours}
+                              onChange={(e) => setOpMinLeadHours(e.target.value)}
+                            />
+
+                            <label className="row" style={{ gap: 6 }}>
+                              <input
+                                type="checkbox"
+                                checked={opConsolidateByDefault}
+                                onChange={(e) => setOpConsolidateByDefault(e.target.checked)}
+                              />
+                              consolidate_by_default
+                            </label>
+
+                            <textarea
+                              placeholder="ops_note (opcional)"
+                              value={opOpsNote}
+                              onChange={(e) => setOpOpsNote(e.target.value)}
+                              rows={4}
+                            />
+
+                            <div className="row">
+                              <button onClick={onSaveOperationalProfile} disabled={operationalProfileSaving}>
+                                {operationalProfileSaving ? "Guardando..." : "Guardar perfil"}
+                              </button>
+                              <button
+                                className="secondary"
+                                onClick={() => {
+                                  void loadCustomerOperationalProfile(editingCustomerId);
+                                }}
+                                disabled={operationalProfileLoading || operationalProfileSaving}
+                              >
+                                Recargar perfil
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="card grid">
+                        <h2>Excepciones Operativas</h2>
+                        {!editingCustomerId && (
+                          <p style={{ margin: 0, color: "#6b7280" }}>
+                            Selecciona un cliente (Editar) para gestionar excepciones por fecha.
+                          </p>
+                        )}
+                        {editingCustomerId && (
+                          <>
+                            <div className="row">
+                              <input type="date" value={opExceptionDate} onChange={(e) => setOpExceptionDate(e.target.value)} />
+                              <select
+                                value={opExceptionType}
+                                onChange={(e) => setOpExceptionType(e.target.value as CustomerOperationalExceptionType)}
+                              >
+                                <option value="blocked">blocked</option>
+                                <option value="restricted">restricted</option>
+                              </select>
+                            </div>
+                            <input
+                              placeholder="note (obligatoria)"
+                              value={opExceptionNote}
+                              onChange={(e) => setOpExceptionNote(e.target.value)}
+                            />
+                            <div className="row">
+                              <button onClick={onCreateOperationalException} disabled={operationalExceptionCreating}>
+                                {operationalExceptionCreating ? "Creando..." : "Crear excepción"}
+                              </button>
+                              <button
+                                className="secondary"
+                                onClick={() => {
+                                  void loadCustomerOperationalExceptions(editingCustomerId);
+                                }}
+                                disabled={operationalExceptionsLoading || operationalExceptionCreating}
+                              >
+                                Recargar excepciones
+                              </button>
+                            </div>
+
+                            {operationalExceptionsLoading && (
+                              <p style={{ margin: 0, color: "#6b7280" }}>Cargando excepciones...</p>
+                            )}
+
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>date</th>
+                                  <th>type</th>
+                                  <th>note</th>
+                                  <th>created_at</th>
+                                  <th>acción</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {operationalExceptions.length === 0 && (
+                                  <tr>
+                                    <td colSpan={5} style={{ color: "#6b7280" }}>
+                                      Sin excepciones operativas para este cliente.
+                                    </td>
+                                  </tr>
+                                )}
+                                {operationalExceptions.map((item) => (
+                                  <tr key={item.id}>
+                                    <td>{item.date}</td>
+                                    <td>{item.type}</td>
+                                    <td>{item.note}</td>
+                                    <td>{new Date(item.created_at).toLocaleString("es-ES")}</td>
+                                    <td>
+                                      <button
+                                        className="danger"
+                                        onClick={() => {
+                                          void onDeleteOperationalException(item.id);
+                                        }}
+                                        disabled={operationalExceptionDeletingId === item.id}
+                                      >
+                                        {operationalExceptionDeletingId === item.id ? "Eliminando..." : "Eliminar"}
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {adminSection === "users" && (
+                  <div className="admin-layout">
+                    <div className="card">
+                      <div className="row" style={{ marginBottom: 10 }}>
+                        <h2 style={{ marginRight: 12 }}>Listado de Usuarios</h2>
+                        <select value={userFilter} onChange={(e) => setUserFilter(e.target.value as "all" | "active" | "inactive")}>
+                          <option value="all">Todos</option>
+                          <option value="active">Activos</option>
+                          <option value="inactive">Inactivos</option>
+                        </select>
+                        <select value={userRoleFilter} onChange={(e) => setUserRoleFilter(e.target.value as "all" | UserRole)}>
+                          <option value="all">Todos los roles</option>
+                          <option value="office">office</option>
+                          <option value="logistics">logistics</option>
+                          <option value="admin">admin</option>
+                        </select>
+                        <button className="secondary" onClick={() => void refreshUsers()}>
+                          Refrescar
+                        </button>
+                      </div>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>id</th>
+                            <th>email</th>
+                            <th>nombre</th>
+                            <th>rol</th>
+                            <th>estado</th>
+                            <th>acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {users.map((user) => (
+                            <tr key={user.id}>
+                              <td>{shortId(user.id)}</td>
+                              <td>{user.email}</td>
+                              <td>{user.full_name}</td>
+                              <td>{user.role}</td>
                               <td>
-                                <span className={customer.active ? "badge ok" : "badge rejected"}>
-                                  {customer.active ? "active" : "inactive"}
+                                <span className={user.is_active ? "badge ok" : "badge rejected"}>
+                                  {user.is_active ? "active" : "inactive"}
                                 </span>
                               </td>
                               <td className="row">
-                                <button className="secondary" onClick={() => startEditCustomer(customer)}>
+                                <button className="secondary" onClick={() => startEditUser(user)}>
                                   Editar
                                 </button>
-                                {customer.active && (
-                                  <button className="danger" onClick={() => onDeactivateCustomer(customer.id)}>
+                                {user.is_active && (
+                                  <button className="danger" onClick={() => onDeactivateUser(user.id)}>
                                     Desactivar
                                   </button>
                                 )}
                               </td>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="grid" style={{ gap: 12 }}>
-                    <div className="card grid">
-                      <h2>Crear Cliente</h2>
-                      <input
-                        placeholder="Nombre cliente"
-                        value={newCustomerName}
-                        onChange={(e) => setNewCustomerName(e.target.value)}
-                      />
-                      <select value={newCustomerZoneId} onChange={(e) => setNewCustomerZoneId(e.target.value)}>
-                        <option value="">Selecciona zona</option>
-                        {zones.map((zone) => (
-                          <option key={zone.id} value={zone.id}>
-                            {zone.name}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        placeholder="Prioridad (int)"
-                        value={newCustomerPriority}
-                        onChange={(e) => setNewCustomerPriority(e.target.value)}
-                      />
-                      <input
-                        placeholder="cutoff_override_time HH:MM:SS (opcional)"
-                        value={newCustomerCutoff}
-                        onChange={(e) => setNewCustomerCutoff(e.target.value)}
-                      />
-                      <button onClick={onCreateCustomer}>Crear</button>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
 
-                    <div className="card grid">
-                      <h2>Editar Cliente</h2>
-                      {!editingCustomerId && <p style={{ margin: 0, color: "#6b7280" }}>Selecciona un cliente para editar.</p>}
-                      {editingCustomerId && (
-                        <>
-                          <input value={editCustomerName} onChange={(e) => setEditCustomerName(e.target.value)} />
-                          <select value={editCustomerZoneId} onChange={(e) => setEditCustomerZoneId(e.target.value)}>
-                            <option value="">Selecciona zona</option>
-                            {zones.map((zone) => (
-                              <option key={zone.id} value={zone.id}>
-                                {zone.name}
-                              </option>
-                            ))}
-                          </select>
-                          <input value={editCustomerPriority} onChange={(e) => setEditCustomerPriority(e.target.value)} />
-                          <input value={editCustomerCutoff} onChange={(e) => setEditCustomerCutoff(e.target.value)} />
-                          <div className="row">
-                            <button onClick={onSaveCustomerEdit}>Guardar</button>
-                            <button className="secondary" onClick={cancelEditCustomer}>
-                              Cancelar
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    <div className="card grid">
-                      <h2>Perfil Operativo</h2>
-                      {!editingCustomerId && (
-                        <p style={{ margin: 0, color: "#6b7280" }}>
-                          Selecciona un cliente (Editar) para ver y actualizar su perfil operativo.
-                        </p>
-                      )}
-                      {editingCustomerId && (
-                        <>
-                          {operationalProfileLoading && <p style={{ margin: 0, color: "#6b7280" }}>Cargando perfil...</p>}
-                          {operationalProfile && (
-                            <div className="row" style={{ gap: 6 }}>
-                              <span className="pill">window_mode: {operationalProfile.window_mode}</span>
-                              <span className="pill">tz: {operationalProfile.evaluation_timezone}</span>
-                              <span className="pill">customized: {operationalProfile.is_customized ? "true" : "false"}</span>
-                            </div>
-                          )}
-
-                          <label className="row" style={{ gap: 6 }}>
-                            <input
-                              type="checkbox"
-                              checked={opAcceptOrders}
-                              onChange={(e) => setOpAcceptOrders(e.target.checked)}
-                            />
-                            accept_orders
-                          </label>
-
+                    <div className="grid" style={{ gap: 12 }}>
+                      <div className="card grid">
+                        <h2>Crear Usuario</h2>
+                        <input placeholder="Email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} />
+                        <input placeholder="Nombre" value={newUserName} onChange={(e) => setNewUserName(e.target.value)} />
+                        <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as UserRole)}>
+                          <option value="office">office</option>
+                          <option value="logistics">logistics</option>
+                          <option value="admin">admin</option>
+                        </select>
+                        <input
+                          placeholder="Password (mín. 8)"
+                          type="password"
+                          value={newUserPassword}
+                          onChange={(e) => setNewUserPassword(e.target.value)}
+                        />
+                        <label className="row" style={{ gap: 6 }}>
                           <input
-                            placeholder="window_start HH:MM:SS (opcional)"
-                            value={opWindowStart}
-                            onChange={(e) => setOpWindowStart(e.target.value)}
+                            type="checkbox"
+                            checked={newUserActive}
+                            onChange={(e) => setNewUserActive(e.target.checked)}
                           />
-                          <input
-                            placeholder="window_end HH:MM:SS (opcional)"
-                            value={opWindowEnd}
-                            onChange={(e) => setOpWindowEnd(e.target.value)}
-                          />
-                          <input
-                            placeholder="min_lead_hours (entero >= 0)"
-                            value={opMinLeadHours}
-                            onChange={(e) => setOpMinLeadHours(e.target.value)}
-                          />
+                          Activo
+                        </label>
+                        <button onClick={onCreateUser}>Crear</button>
+                      </div>
 
-                          <label className="row" style={{ gap: 6 }}>
-                            <input
-                              type="checkbox"
-                              checked={opConsolidateByDefault}
-                              onChange={(e) => setOpConsolidateByDefault(e.target.checked)}
-                            />
-                            consolidate_by_default
-                          </label>
-
-                          <textarea
-                            placeholder="ops_note (opcional)"
-                            value={opOpsNote}
-                            onChange={(e) => setOpOpsNote(e.target.value)}
-                            rows={4}
-                          />
-
-                          <div className="row">
-                            <button onClick={onSaveOperationalProfile} disabled={operationalProfileSaving}>
-                              {operationalProfileSaving ? "Guardando..." : "Guardar perfil"}
-                            </button>
-                            <button
-                              className="secondary"
-                              onClick={() => {
-                                void loadCustomerOperationalProfile(editingCustomerId);
-                              }}
-                              disabled={operationalProfileLoading || operationalProfileSaving}
-                            >
-                              Recargar perfil
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    <div className="card grid">
-                      <h2>Excepciones Operativas</h2>
-                      {!editingCustomerId && (
-                        <p style={{ margin: 0, color: "#6b7280" }}>
-                          Selecciona un cliente (Editar) para gestionar excepciones por fecha.
-                        </p>
-                      )}
-                      {editingCustomerId && (
-                        <>
-                          <div className="row">
-                            <input type="date" value={opExceptionDate} onChange={(e) => setOpExceptionDate(e.target.value)} />
-                            <select
-                              value={opExceptionType}
-                              onChange={(e) => setOpExceptionType(e.target.value as CustomerOperationalExceptionType)}
-                            >
-                              <option value="blocked">blocked</option>
-                              <option value="restricted">restricted</option>
+                      <div className="card grid">
+                        <h2>Editar Usuario</h2>
+                        {!editingUserId && <p style={{ margin: 0, color: "#6b7280" }}>Selecciona un usuario para editar.</p>}
+                        {editingUserId && (
+                          <>
+                            <input value={editUserEmail} onChange={(e) => setEditUserEmail(e.target.value)} />
+                            <input value={editUserName} onChange={(e) => setEditUserName(e.target.value)} />
+                            <select value={editUserRole} onChange={(e) => setEditUserRole(e.target.value as UserRole)}>
+                              <option value="office">office</option>
+                              <option value="logistics">logistics</option>
+                              <option value="admin">admin</option>
                             </select>
-                          </div>
-                          <input
-                            placeholder="note (obligatoria)"
-                            value={opExceptionNote}
-                            onChange={(e) => setOpExceptionNote(e.target.value)}
-                          />
-                          <div className="row">
-                            <button onClick={onCreateOperationalException} disabled={operationalExceptionCreating}>
-                              {operationalExceptionCreating ? "Creando..." : "Crear excepción"}
-                            </button>
-                            <button
-                              className="secondary"
-                              onClick={() => {
-                                void loadCustomerOperationalExceptions(editingCustomerId);
-                              }}
-                              disabled={operationalExceptionsLoading || operationalExceptionCreating}
-                            >
-                              Recargar excepciones
-                            </button>
-                          </div>
-
-                          {operationalExceptionsLoading && (
-                            <p style={{ margin: 0, color: "#6b7280" }}>Cargando excepciones...</p>
-                          )}
-
-                          <table>
-                            <thead>
-                              <tr>
-                                <th>date</th>
-                                <th>type</th>
-                                <th>note</th>
-                                <th>created_at</th>
-                                <th>acción</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {operationalExceptions.length === 0 && (
-                                <tr>
-                                  <td colSpan={5} style={{ color: "#6b7280" }}>
-                                    Sin excepciones operativas para este cliente.
-                                  </td>
-                                </tr>
-                              )}
-                              {operationalExceptions.map((item) => (
-                                <tr key={item.id}>
-                                  <td>{item.date}</td>
-                                  <td>{item.type}</td>
-                                  <td>{item.note}</td>
-                                  <td>{new Date(item.created_at).toLocaleString("es-ES")}</td>
-                                  <td>
-                                    <button
-                                      className="danger"
-                                      onClick={() => {
-                                        void onDeleteOperationalException(item.id);
-                                      }}
-                                      disabled={operationalExceptionDeletingId === item.id}
-                                    >
-                                      {operationalExceptionDeletingId === item.id ? "Eliminando..." : "Eliminar"}
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {adminSection === "users" && (
-                <div className="admin-layout">
-                  <div className="card">
-                    <div className="row" style={{ marginBottom: 10 }}>
-                      <h2 style={{ marginRight: 12 }}>Listado de Usuarios</h2>
-                      <select value={userFilter} onChange={(e) => setUserFilter(e.target.value as "all" | "active" | "inactive")}>
-                        <option value="all">Todos</option>
-                        <option value="active">Activos</option>
-                        <option value="inactive">Inactivos</option>
-                      </select>
-                      <select value={userRoleFilter} onChange={(e) => setUserRoleFilter(e.target.value as "all" | UserRole)}>
-                        <option value="all">Todos los roles</option>
-                        <option value="office">office</option>
-                        <option value="logistics">logistics</option>
-                        <option value="admin">admin</option>
-                      </select>
-                      <button className="secondary" onClick={() => void refreshUsers()}>
-                        Refrescar
-                      </button>
-                    </div>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>id</th>
-                          <th>email</th>
-                          <th>nombre</th>
-                          <th>rol</th>
-                          <th>estado</th>
-                          <th>acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {users.map((user) => (
-                          <tr key={user.id}>
-                            <td>{shortId(user.id)}</td>
-                            <td>{user.email}</td>
-                            <td>{user.full_name}</td>
-                            <td>{user.role}</td>
-                            <td>
-                              <span className={user.is_active ? "badge ok" : "badge rejected"}>
-                                {user.is_active ? "active" : "inactive"}
-                              </span>
-                            </td>
-                            <td className="row">
-                              <button className="secondary" onClick={() => startEditUser(user)}>
-                                Editar
+                            <input
+                              placeholder="Nueva password (opcional)"
+                              type="password"
+                              value={editUserPassword}
+                              onChange={(e) => setEditUserPassword(e.target.value)}
+                            />
+                            <label className="row" style={{ gap: 6 }}>
+                              <input
+                                type="checkbox"
+                                checked={editUserActive}
+                                onChange={(e) => setEditUserActive(e.target.checked)}
+                              />
+                              Activo
+                            </label>
+                            <div className="row">
+                              <button onClick={onSaveUserEdit}>Guardar</button>
+                              <button className="secondary" onClick={cancelEditUser}>
+                                Cancelar
                               </button>
-                              {user.is_active && (
-                                <button className="danger" onClick={() => onDeactivateUser(user.id)}>
-                                  Desactivar
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
+                )}
 
-                  <div className="grid" style={{ gap: 12 }}>
+                {adminSection === "products" && (
+                  <AdminProductsCard token={token} />
+                )}
+
+                {adminSection === "tenant" && (
+                  <div className="grid cols-2">
                     <div className="card grid">
-                      <h2>Crear Usuario</h2>
-                      <input placeholder="Email" value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} />
-                      <input placeholder="Nombre" value={newUserName} onChange={(e) => setNewUserName(e.target.value)} />
-                      <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as UserRole)}>
-                        <option value="office">office</option>
-                        <option value="logistics">logistics</option>
-                        <option value="admin">admin</option>
-                      </select>
+                      <h2>Tenant Settings</h2>
+                      <div>
+                        <strong>Tenant:</strong> {tenantSettings?.name ?? "-"}
+                      </div>
+                      <div>
+                        <strong>Slug:</strong> {tenantSettings?.slug ?? "-"}
+                      </div>
                       <input
-                        placeholder="Password (mín. 8)"
-                        type="password"
-                        value={newUserPassword}
-                        onChange={(e) => setNewUserPassword(e.target.value)}
+                        placeholder="default_cutoff_time HH:MM:SS"
+                        value={tenantCutoff}
+                        onChange={(e) => setTenantCutoff(e.target.value)}
+                      />
+                      <input
+                        placeholder="default_timezone"
+                        value={tenantTimezone}
+                        onChange={(e) => setTenantTimezone(e.target.value)}
                       />
                       <label className="row" style={{ gap: 6 }}>
                         <input
                           type="checkbox"
-                          checked={newUserActive}
-                          onChange={(e) => setNewUserActive(e.target.checked)}
+                          checked={tenantAutoLock}
+                          onChange={(e) => setTenantAutoLock(e.target.checked)}
                         />
-                        Activo
+                        auto_lock_enabled
                       </label>
-                      <button onClick={onCreateUser}>Crear</button>
+                      <div className="row">
+                        <button onClick={onSaveTenantSettings}>Guardar</button>
+                        <button className="secondary" onClick={() => refreshTenantSettings()}>
+                          Recargar
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="card grid">
-                      <h2>Editar Usuario</h2>
-                      {!editingUserId && <p style={{ margin: 0, color: "#6b7280" }}>Selecciona un usuario para editar.</p>}
-                      {editingUserId && (
-                        <>
-                          <input value={editUserEmail} onChange={(e) => setEditUserEmail(e.target.value)} />
-                          <input value={editUserName} onChange={(e) => setEditUserName(e.target.value)} />
-                          <select value={editUserRole} onChange={(e) => setEditUserRole(e.target.value as UserRole)}>
-                            <option value="office">office</option>
-                            <option value="logistics">logistics</option>
-                            <option value="admin">admin</option>
-                          </select>
-                          <input
-                            placeholder="Nueva password (opcional)"
-                            type="password"
-                            value={editUserPassword}
-                            onChange={(e) => setEditUserPassword(e.target.value)}
-                          />
-                          <label className="row" style={{ gap: 6 }}>
-                            <input
-                              type="checkbox"
-                              checked={editUserActive}
-                              onChange={(e) => setEditUserActive(e.target.checked)}
-                            />
-                            Activo
-                          </label>
-                          <div className="row">
-                            <button onClick={onSaveUserEdit}>Guardar</button>
-                            <button className="secondary" onClick={cancelEditUser}>
-                              Cancelar
-                            </button>
-                          </div>
-                        </>
-                      )}
+                    <div className="card">
+                      <h2>Contexto</h2>
+                      <p style={{ margin: 0, color: "#6b7280" }}>
+                        Cambios aquí impactan la configuración base del tenant para reglas de cut-off y lock automático.
+                      </p>
                     </div>
                   </div>
-                </div>
-              )}
-
-              {adminSection === "products" && (
-                <AdminProductsCard token={token} />
-              )}
-
-              {adminSection === "tenant" && (
-                <div className="grid cols-2">
-                  <div className="card grid">
-                    <h2>Tenant Settings</h2>
-                    <div>
-                      <strong>Tenant:</strong> {tenantSettings?.name ?? "-"}
-                    </div>
-                    <div>
-                      <strong>Slug:</strong> {tenantSettings?.slug ?? "-"}
-                    </div>
-                    <input
-                      placeholder="default_cutoff_time HH:MM:SS"
-                      value={tenantCutoff}
-                      onChange={(e) => setTenantCutoff(e.target.value)}
-                    />
-                    <input
-                      placeholder="default_timezone"
-                      value={tenantTimezone}
-                      onChange={(e) => setTenantTimezone(e.target.value)}
-                    />
-                    <label className="row" style={{ gap: 6 }}>
-                      <input
-                        type="checkbox"
-                        checked={tenantAutoLock}
-                        onChange={(e) => setTenantAutoLock(e.target.checked)}
-                      />
-                      auto_lock_enabled
-                    </label>
-                    <div className="row">
-                      <button onClick={onSaveTenantSettings}>Guardar</button>
-                      <button className="secondary" onClick={() => refreshTenantSettings()}>
-                        Recargar
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="card">
-                    <h2>Contexto</h2>
-                    <p style={{ margin: 0, color: "#6b7280" }}>
-                      Cambios aquí impactan la configuración base del tenant para reglas de cut-off y lock automático.
-                    </p>
-                  </div>
-                </div>
-              )}
+                )}
               </AdminShell>
             </>
           )}
