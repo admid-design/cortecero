@@ -116,20 +116,20 @@ def seed() -> None:
         # Dataset geográfico sintético para demo/local.
         # No contiene ubicaciones ni direcciones reales de clientes.
         _customer_geo = [
-            # Centro (zone_a)
-            # Cliente 01 se usa como caso demo principal y debe quedar alineado
-            # con el depot demo en Mallorca para evitar recorridos incoherentes.
-            ("Cliente 01", 39.5711, 2.6512, "Avenida Demo Palma 1"),
-            ("Cliente 02", 40.1040, -3.6990, "Calle Demo Centro 2"),
-            ("Cliente 03", 40.1080, -3.7050, "Parque Empresarial Centro 3"),
-            ("Cliente 04", 40.1120, -3.6960, "Ronda Demo Centro 4"),
-            ("Cliente 05", 40.0990, -3.7080, "Plaza Demo Centro 5"),
-            # Costa (zone_b)
-            ("Cliente 06", 39.8040, -0.0770, "Avenida Demo Costa 6"),
-            ("Cliente 07", 39.8090, -0.0810, "Calle Demo Costa 7"),
-            ("Cliente 08", 39.8130, -0.0720, "Puerto Demo Costa 8"),
-            ("Cliente 09", 39.7980, -0.0860, "Poligono Demo Costa 9"),
-            ("Cliente 10", 39.8180, -0.0690, "Paseo Demo Costa 10"),
+            # Centro (zone_a) — Palma de Mallorca
+            # Todos los clientes de zone_a están en Palma para ser alcanzables
+            # desde el depot demo (39.5696, 2.6502) por carretera en la isla.
+            ("Cliente 01", 39.5711, 2.6512, "Avenida Jaume III 1, Palma"),
+            ("Cliente 02", 39.5752, 2.6478, "Carrer de Sant Miquel 2, Palma"),
+            ("Cliente 03", 39.5688, 2.6551, "Passeig del Born 3, Palma"),
+            ("Cliente 04", 39.5730, 2.6590, "Carrer de Colom 4, Palma"),
+            ("Cliente 05", 39.5660, 2.6440, "Avinguda d'Argentina 5, Palma"),
+            # Costa (zone_b) — Municipios costeros de Mallorca
+            ("Cliente 06", 39.8517, 3.1191, "Carrer Major 6, Alcúdia"),
+            ("Cliente 07", 39.7064, 3.2030, "Avinguda del Parc 7, Manacor"),
+            ("Cliente 08", 39.6381, 2.9959, "Carrer de l'Arenal 8, Llucmajor"),
+            ("Cliente 09", 39.7208, 2.9133, "Gran Via de Colom 9, Inca"),
+            ("Cliente 10", 39.5830, 2.7920, "Carretera de Manacor 10, Algaida"),
         ]
 
         customers = []

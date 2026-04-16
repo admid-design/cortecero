@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import sys
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+UTC = timezone.utc
 from pathlib import Path
 
 from sqlalchemy import select
