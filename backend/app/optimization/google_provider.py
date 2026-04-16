@@ -125,12 +125,26 @@ class GoogleRouteOptimizationProvider(RouteOptimizationProvider):
 
     def _build_result(self, request: OptimizationRequest, response_json: dict) -> OptimizationResult:
         routes = response_json.get("routes") or []
-        if not routes:
+
+        # --- Mapa de shipments que Google explícitamente omitió ---
+        # skippedShipments es el mecanismo oficial de Google para indicar
+        # que no pudo enrutar un pedido (ventana imposible, capacidad, etc.).
+        # No es un error fatal: procedemos con las paradas que sí se enrutaron.
+        skipped_reasons: dict[str, str] = {}
+        for entry in response_json.get("skippedShipments", []):
+            label = entry.get("label") or ""
+            reasons = entry.get("reasons") or [{}]
+            code = reasons[0].get("code", "UNKNOWN") if reasons else "UNKNOWN"
+            skipped_reasons[label] = code
+
+        if not routes and not skipped_reasons:
+            # Respuesta completamente vacía — ni rutas ni omisiones declaradas
             raise RuntimeError("Google Route Optimization returned no routes")
 
-        visits = routes[0].get("visits") or []
+        # --- Construir mapa label → (secuencia, ETA) a partir de las visitas ---
+        visits = routes[0].get("visits") if routes else []
         label_to_visit: dict[str, tuple[int, datetime]] = {}
-        for i, visit in enumerate(visits, start=1):
+        for i, visit in enumerate(visits or [], start=1):
             shipment_label = visit.get("shipmentLabel")
             start_time = visit.get("startTime")
             if not shipment_label:
@@ -138,16 +152,34 @@ class GoogleRouteOptimizationProvider(RouteOptimizationProvider):
             eta = _parse_rfc3339(start_time) if start_time else datetime.now(UTC)
             label_to_visit[shipment_label] = (i, eta)
 
-        missing_labels = [str(w.order_id) for w in request.waypoints if str(w.order_id) not in label_to_visit]
-        if missing_labels:
+        # --- Detectar pedidos ausentes sin justificación ---
+        # Un pedido "ausente" es aquel que no aparece en visitas NI en skippedShipments.
+        # Esto sí es un error: indica respuesta incompleta o bug en el request.
+        truly_missing = [
+            str(w.order_id)
+            for w in request.waypoints
+            if str(w.order_id) not in label_to_visit and str(w.order_id) not in skipped_reasons
+        ]
+        if truly_missing:
             raise RuntimeError(
-                "Google Route Optimization response missing shipments: "
-                + ", ".join(missing_labels)
+                "Google Route Optimization response missing shipments (not in visits nor skippedShipments): "
+                + ", ".join(truly_missing)
             )
 
+        # --- Construir stops solo para pedidos enrutados ---
+        # Los pedidos en skippedShipments no reciben ETA; quedan sin actualizar.
         stops = []
         for waypoint in request.waypoints:
-            seq, eta = label_to_visit[str(waypoint.order_id)]
+            label = str(waypoint.order_id)
+            if label not in label_to_visit:
+                # Pedido omitido por Google — loguear y continuar
+                reason = skipped_reasons.get(label, "UNKNOWN")
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Shipment skipped by Google Route Optimization: %s reason=%s", label, reason
+                )
+                continue
+            seq, eta = label_to_visit[label]
             stops.append(
                 OptimizedStop(
                     order_id=waypoint.order_id,
@@ -157,9 +189,17 @@ class GoogleRouteOptimizationProvider(RouteOptimizationProvider):
             )
         stops.sort(key=lambda s: s.sequence_number)
 
+        if not stops:
+            raise RuntimeError(
+                "Google Route Optimization skipped all shipments: "
+                + ", ".join(f"{k}={v}" for k, v in skipped_reasons.items())
+            )
+
         request_id = response_json.get("requestLabel") or str(uuid.uuid4())
         enriched_response = dict(response_json)
         enriched_response["provider"] = "google"
+        if skipped_reasons:
+            enriched_response["skipped_shipments_summary"] = skipped_reasons
         return OptimizationResult(
             request_id=request_id,
             response_json=enriched_response,

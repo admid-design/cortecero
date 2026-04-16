@@ -156,35 +156,25 @@ def seed() -> None:
                 db.flush()
             else:
                 # Backfill determinista de dataset geo demo para instalaciones existentes.
-                # Evita que pedidos/rutas demo queden sin coordenadas por seeds antiguos.
+                # Fuerza siempre las coordenadas canónicas del seed — sin condición de null —
+                # para que instalaciones con coordenadas antiguas (e.g. Madrid) queden
+                # corregidas a las coordenadas Mallorca geo-coherentes con el depot.
                 needs_update = False
                 if customer.zone_id != zone.id:
                     customer.zone_id = zone.id
                     needs_update = True
-                if customer.lat is None:
+                if customer.lat != lat_val:
                     customer.lat = lat_val
                     needs_update = True
-                if customer.lng is None:
+                if customer.lng != lng_val:
                     customer.lng = lng_val
                     needs_update = True
-                if not customer.delivery_address:
+                if customer.delivery_address != addr:
                     customer.delivery_address = addr
                     needs_update = True
                 if not customer.active:
                     customer.active = True
                     needs_update = True
-                # Microbloque demo Mallorca: forzar Cliente 01 a coordenada sintética
-                # cercana al depot para un mapa de routing visualmente coherente.
-                if name == "Cliente 01":
-                    if customer.lat != lat_val:
-                        customer.lat = lat_val
-                        needs_update = True
-                    if customer.lng != lng_val:
-                        customer.lng = lng_val
-                        needs_update = True
-                    if customer.delivery_address != addr:
-                        customer.delivery_address = addr
-                        needs_update = True
                 if needs_update:
                     customer.updated_at = now_utc()
             customers.append(customer)
