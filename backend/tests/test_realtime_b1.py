@@ -19,7 +19,7 @@ Nota de autenticación SSE (B1):
 import asyncio
 import json
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 
 import pytest
 from sqlalchemy import select
@@ -288,6 +288,8 @@ def test_event_bus_subscriber_count_decrements_on_disconnect():
         # Enviar evento para que el consumer salga
         bus.publish(tenant_id, route_id, "ping", {})
         await consumer_task
+        # El aclose() del generador async se procesa en el siguiente tick del event loop
+        await asyncio.sleep(0)
 
         assert bus.active_subscriber_count(tenant_id, route_id) == 0
 
@@ -326,9 +328,10 @@ def test_sse_stream_route_not_in_tenant_returns_404(client, db_session):
         id=uuid.uuid4(),
         tenant_id=other_tenant.id,
         name="Zona B1",
-        code="ZB1",
+        default_cutoff_time=time(17, 0),
+        timezone="Europe/Madrid",
+        active=True,
         created_at=now,
-        updated_at=now,
     )
     db_session.add(zone)
     db_session.flush()
@@ -350,7 +353,7 @@ def test_sse_stream_route_not_in_tenant_returns_404(client, db_session):
         id=uuid.uuid4(),
         tenant_id=other_tenant.id,
         plan_id=plan.id,
-        vehicle_id=None,
+        vehicle_id=uuid.uuid4(),  # Route.vehicle_id no tiene FK constraint
         driver_id=None,
         service_date=date.today(),
         status=RouteStatus.draft,
