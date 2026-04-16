@@ -99,6 +99,7 @@ python3 backend/scripts/smoke_google_optimization.py
 
 ## Estado actual de DEMO-OPT-001
 
-- Timestamp fix: aplicado en `f370e81`
-- Test green sobre bloque_e: PENDIENTE
-- Evidence green (smoke 200): PENDIENTE — bloquea dataset geo-ready
+- CERRADO_CON_EVIDENCIA_LOCAL — commit `59bd16d`
+- Smoke 200: confirmado. 2 paradas optimizadas, ETAs reales de Google, totalDuration=2693s.
+- Evidence: `docs/evidence/DEMO-OPT-001.json`
+- Fixes: seed.py backfill fuerza coordenadas Mallorca; `_build_result` maneja `skippedShipments` sin crashear.

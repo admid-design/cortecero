@@ -1,0 +1,76 @@
+{
+  "ticket": "GOOGLE-SMOKE-001",
+  "bloque": "DEMO-OPT-001",
+  "generated_at": "2026-04-16T13:43:17+00:00",
+  "entorno": "http://localhost:8000",
+  "tenant": "demo-cortecero",
+  "proyecto_google": "samurai-system",
+  "adc": "~/.config/kelko/google/route-optimization-sa.json",
+
+  "ruta": {
+    "route_id": "9089efaf-8d27-4b96-9b3c-c106ca586f06",
+    "status_antes": "draft",
+    "vehicle_id": "ab8d9a86-da8b-447f-814a-b12d790e3b9a",
+    "paradas_antes": 2,
+    "status_http": 200,
+    "elapsed_s": 2.012
+  },
+
+  "resultado": {
+    "status_despues": "planned",
+    "optimization_request_id": "9089efaf-8d27-4b96-9b3c-c106ca586f06",
+    "provider": "google",
+    "paradas_optimizadas": 2,
+    "secuencias_antes": [1, 2],
+    "secuencias_despues": [1, 2],
+    "stops": [
+      {
+        "seq": 1,
+        "order_id": "b2aad227-ed78-4e60-9c40-47724249c8e7",
+        "eta": "2026-04-16T13:49:20Z"
+      },
+      {
+        "seq": 2,
+        "order_id": "f0b7b37d-803f-47f0-8759-478778f0d85d",
+        "eta": "2026-04-16T14:08:51Z"
+      }
+    ]
+  },
+
+  "response_summary": {
+    "routes_count": 1,
+    "visits_count": 2,
+    "total_duration_s": 2693,
+    "top_level_keys": ["routes", "metrics", "provider", "requestLabel", "validationErrors"]
+  },
+
+  "verificaciones": {
+    "http_200": true,
+    "all_passed": true
+  },
+
+  "estado_final": "GO",
+
+  "fixes_aplicados": [
+    {
+      "commit": "59bd16d",
+      "file": "backend/app/seed.py",
+      "descripcion": "Backfill fuerza coordenadas Mallorca siempre que difieran del seed. Clientes 02-05 tenian Madrid (~40.10, -3.70) en DB."
+    },
+    {
+      "commit": "59bd16d",
+      "file": "backend/app/optimization/google_provider.py",
+      "descripcion": "_build_result maneja skippedShipments sin crashear. Solo lanza error si shipment ausente sin justificacion o todos omitidos."
+    },
+    {
+      "commit": "641c73a",
+      "file": "backend/app/seed.py",
+      "descripcion": "Coordenadas canónicas Palma de Mallorca en _customer_geo (zone_a) y municipios costeros Mallorca (zone_b)."
+    },
+    {
+      "commit": "641c73a",
+      "file": "backend/scripts/prepare_google_smoke_dataset.py",
+      "descripcion": "Python 3.9 compat: from datetime import timezone; UTC = timezone.utc."
+    }
+  ]
+}

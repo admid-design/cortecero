@@ -4,7 +4,7 @@
 > Todo lo que aquí se afirma debe tener evidencia: código existente, test verde o smoke ejecutado.
 > Si una capacidad no aparece aquí, no asumas que existe.
 
-Última actualización: R8 activo — Fase A (MAP-001 evidence green, POD-001 tests green, GPS-001 tests green). Abril 2026.
+Última actualización: R8 activo — Fase A completa (MAP-001, POD-001, GPS-001 verificados; DEMO-OPT-001 evidence green). Abril 2026.
 
 ---
 
@@ -74,7 +74,7 @@
 | Routing: flujo dispatcher (bloque C) | VERIFICADO | tests + CI |
 | Routing: ejecución conductor (bloque D) | VERIFICADO | tests + CI |
 | Routing: optimize con mock provider | VERIFICADO | tests + CI |
-| Routing: optimize con Google provider | PARCIAL — timestamps fix aplicado; smoke pendiente de dataset geo-ready |
+| Routing: optimize con Google provider | VERIFICADO — smoke 200 con ETAs reales (DEMO-OPT-001, commit `59bd16d`). Evidence en `docs/evidence/DEMO-OPT-001.json` |
 | Routing: driver auth con user_id explícito | VERIFICADO | PILOT-HARDEN-001 + CI |
 | Frontend: panel dispatcher | VERIFICADO | tests + CI build |
 | Frontend: PWA conductor | VERIFICADO | tests + CI build |
@@ -163,8 +163,10 @@ Service account montado en Docker: `~/.config/kelko/google/route-optimization-sa
 
 - R1–R6: cerradas
 - R7: cerrada (routing + optimización Google + demo — smoke pendiente)
-- R8: abierta — Fase A (MAP-001, POD-001, GPS-001) en implementación
+- R8: Fase A COMPLETA
   - MAP-001: `RouteMapCard.tsx` + marcador conductor — VERIFICADO LOCAL (evidence green en browser; `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` configurada)
   - POD-001: `stop_proofs` migration + endpoints + modal firma — VERIFICADO LOCAL (183 tests en verde, commit `62cdb79`)
   - GPS-001: `driver_positions` migration + endpoints + hook GPS + two-query logic — VERIFICADO LOCAL (183 tests en verde, commit `62cdb79`)
-- Bloque pendiente: `DEMO-OPT-001` (smoke Google Route Optimization — dataset geo-ready bloqueado)
+  - DEMO-OPT-001: Google Route Optimization smoke 200 — CERRADO_CON_EVIDENCIA_LOCAL (commit `59bd16d`, evidence en `docs/evidence/DEMO-OPT-001.json`)
+    - Fixes aplicados: seed.py backfill fuerza coordenadas Mallorca; `_build_result` maneja `skippedShipments` sin crashear
+    - Resultado: 2 paradas, ETAs reales (seq1=13:49Z, seq2=14:08Z), totalDuration=2693s, provider=google
