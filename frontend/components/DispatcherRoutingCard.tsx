@@ -1,6 +1,7 @@
 import React from "react";
 import type {
   AvailableVehicleItem,
+  DriverPositionOut,
   ReadyToDispatchItem,
   RouteEventItem,
   RoutingRoute,
@@ -47,6 +48,8 @@ type DispatcherRoutingCardProps = {
   onOptimizeRoute: (routeId: string) => void;
   onDispatchRoute: (routeId: string) => void;
   onMoveStop: () => void;
+  /** Posición actual del conductor — actualizada por polling en page.tsx. */
+  driverPosition?: DriverPositionOut | null;
 };
 
 function routeStatusBadgeClass(status: RoutingRouteStatus): string {
@@ -95,6 +98,7 @@ export function DispatcherRoutingCard({
   onOptimizeRoute,
   onDispatchRoute,
   onMoveStop,
+  driverPosition,
 }: DispatcherRoutingCardProps) {
   return (
     <div className="card grid">
@@ -202,6 +206,7 @@ export function DispatcherRoutingCard({
         routeDetailLoading={routeDetailLoading}
         selectedRoute={selectedRoute}
         routeEvents={routeEvents}
+        driverPosition={driverPosition}
       />
 
       <div className="card grid">
