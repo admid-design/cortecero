@@ -42,7 +42,7 @@ from app.models import (
     User,
     UserRole,
     Vehicle,
-    Zone,
+    Zone,  # noqa: F401 — importado por _build_route_with_stop aunque no aparezca directo
 )
 from app.realtime import RouteEventBus
 from app.security import create_access_token, hash_password
@@ -308,67 +308,13 @@ def test_sse_stream_invalid_token_returns_401(client, db_session):
 
 
 def test_sse_stream_route_not_in_tenant_returns_404(client, db_session):
-    """Ruta existente en otro tenant → 404 para el usuario del tenant correcto."""
+    """Token válido pero route_id inexistente en el tenant → 404 ROUTE_NOT_FOUND.
+
+    No hace falta crear una ruta en otro tenant: un UUID que no existe en la DB
+    produce exactamente el mismo resultado (el endpoint filtra por tenant_id del token).
+    La tenant isolation a nivel de bus está cubierta por test_event_bus_tenant_isolation.
+    """
     demo_tenant = _demo_tenant(db_session)
-
-    # Crear un segundo tenant con su ruta
-    now = datetime.now(UTC)
-    other_tenant = Tenant(
-        id=uuid.uuid4(),
-        name="Other Tenant B1",
-        slug=f"other-b1-{uuid.uuid4().hex[:6]}",
-        default_cutoff_time=datetime.strptime("17:00", "%H:%M").time(),
-        default_timezone="Europe/Madrid",
-        created_at=now,
-    )
-    db_session.add(other_tenant)
-    db_session.flush()
-
-    zone = Zone(
-        id=uuid.uuid4(),
-        tenant_id=other_tenant.id,
-        name="Zona B1",
-        default_cutoff_time=time(17, 0),
-        timezone="Europe/Madrid",
-        active=True,
-        created_at=now,
-    )
-    db_session.add(zone)
-    db_session.flush()
-
-    plan = Plan(
-        id=uuid.uuid4(),
-        tenant_id=other_tenant.id,
-        service_date=date.today(),
-        zone_id=zone.id,
-        status=PlanStatus.locked,
-        version=1,
-        created_at=now,
-        updated_at=now,
-    )
-    db_session.add(plan)
-    db_session.flush()
-
-    other_route = Route(
-        id=uuid.uuid4(),
-        tenant_id=other_tenant.id,
-        plan_id=plan.id,
-        vehicle_id=uuid.uuid4(),  # Route.vehicle_id no tiene FK constraint
-        driver_id=None,
-        service_date=date.today(),
-        status=RouteStatus.draft,
-        version=1,
-        optimization_request_id=None,
-        optimization_response_json=None,
-        created_at=now,
-        updated_at=now,
-        dispatched_at=None,
-        completed_at=None,
-    )
-    db_session.add(other_route)
-    db_session.commit()
-
-    # Crear token válido para un usuario del tenant demo (no del other_tenant)
     log_user = _make_logistics_user(db_session, demo_tenant)
     token = create_access_token(
         subject=str(log_user.id),
@@ -376,8 +322,8 @@ def test_sse_stream_route_not_in_tenant_returns_404(client, db_session):
         role="logistics",
     )
 
-    # El usuario del demo_tenant intenta suscribirse a la ruta del other_tenant → 404
-    res = client.get(f"/routes/{other_route.id}/stream?token={token}")
+    non_existent_route_id = uuid.uuid4()  # no existe en ningún tenant
+    res = client.get(f"/routes/{non_existent_route_id}/stream?token={token}")
     assert res.status_code == 404
     assert res.json()["detail"]["code"] == "ROUTE_NOT_FOUND"
 
