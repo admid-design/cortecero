@@ -475,6 +475,43 @@ paths:
               schema:
                 $ref: '#/components/schemas/Order'
 
+  /orders/{order_id}/return-to-planning:
+    post:
+      tags: [Orders]
+      summary: Retornar pedido fallido a la cola de planificación
+      description: >
+        Mueve un pedido con estado 'failed_delivery' de vuelta a 'ready_for_planning'.
+        Solo accesible por logistics y admin. Emite evento order.returned_to_planning
+        en la última ruta que contenía el pedido.
+      parameters:
+        - in: path
+          name: order_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Pedido retornado a planificación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReturnToPlanningResponse'
+        "404":
+          description: Pedido no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "409":
+          description: El pedido no está en estado returnable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+      security:
+        - bearerAuth: []
+
   /plans:
     get:
       tags: [Plans]
@@ -2563,6 +2600,21 @@ components:
       bearerFormat: JWT
 
   schemas:
+    ReturnToPlanningResponse:
+      type: object
+      required: [order_id, previous_status, new_status, returned_at]
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        previous_status:
+          type: string
+        new_status:
+          type: string
+        returned_at:
+          type: string
+          format: date-time
+
     OrderIngestionInput:
       type: object
       required: [customer_id, external_ref, service_date, created_at, lines]

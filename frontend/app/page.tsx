@@ -13,6 +13,7 @@ import {
   completeStop,
   createStopProof,
   failStop,
+  getActivePositions,
   getDriverPosition,
   skipStop,
   createIncident,
@@ -99,6 +100,7 @@ import { DispatcherRoutingShell } from "../components/DispatcherRoutingShell";
 import { AdminShell } from "../components/AdminShell";
 import { AdminZonesSection } from "../components/AdminZonesSection";
 import { AdminCustomersSection } from "../components/AdminCustomersSection";
+import { OpsMapDashboard } from "../components/OpsMapDashboard";
 type ViewMode = "ops" | "admin";
 type AdminSection = "zones" | "customers" | "users" | "tenant" | "products";
 type OrdersOperationalStateFilter = "all" | "eligible" | "restricted";
@@ -287,6 +289,8 @@ export default function HomePage() {
   const [driverSuccess, setDriverSuccess] = useState<string | null>(null);
   // Posición del conductor vista desde el dispatcher (polling cada 30s)
   const [dispatcherDriverPosition, setDispatcherDriverPosition] = useState<DriverPositionOut | null>(null);
+  // Posiciones de toda la flota activa (polling cada 30s — fleet view)
+  const [activePositions, setActivePositions] = useState<DriverPositionOut[]>([]);
 
   const isAuthenticated = useMemo(() => token.length > 0, [token]);
   const isAdmin = useMemo(() => role === "admin", [role]);
@@ -590,6 +594,40 @@ export default function HomePage() {
       }
     };
   }, [shouldPollDriverPosition, token, selectedDispatcherRouteId]);
+
+  // Polling de posiciones de toda la flota cada 30 s — fleet view en mapa dispatcher
+  const pollFleetPositionsRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    const isDispatcherView = role === "admin" || role === "logistics";
+    if (!token || !isDispatcherView) {
+      if (pollFleetPositionsRef.current) {
+        clearInterval(pollFleetPositionsRef.current);
+        pollFleetPositionsRef.current = null;
+      }
+      setActivePositions([]);
+      return;
+    }
+
+    const poll = async () => {
+      try {
+        const positions = await getActivePositions(token);
+        setActivePositions(positions);
+      } catch {
+        // sin conductores activos o endpoint no disponible
+      }
+    };
+
+    void poll(); // primera llamada inmediata
+    pollFleetPositionsRef.current = setInterval(() => void poll(), 30_000);
+
+    return () => {
+      if (pollFleetPositionsRef.current) {
+        clearInterval(pollFleetPositionsRef.current);
+        pollFleetPositionsRef.current = null;
+      }
+    };
+  }, [token, role]);
 
   const onSnapshotOrderChange = useCallback((orderId: string) => {
     setSelectedSnapshotOrderId(orderId);
@@ -1278,6 +1316,66 @@ export default function HomePage() {
     }
   }
 
+  // ── OpsMapDashboard — renderizado full-screen antes del AppShell ─────────────
+  if (isAuthenticated && !isDriver && viewMode === "ops") {
+    return (
+      <OpsMapDashboard
+        role={role}
+        onLogout={onLogout}
+        onSwitchToAdmin={
+          isAdmin
+            ? () => {
+                setViewMode("admin");
+                void refreshZones();
+              }
+            : undefined
+        }
+        isAdmin={isAdmin}
+        error={error}
+        summary={summary}
+        serviceDate={serviceDate}
+        onServiceDateChange={setServiceDate}
+        routeStatus={dispatcherRouteStatus}
+        onRouteStatusChange={setDispatcherRouteStatus}
+        loading={dispatcherLoading}
+        routes={dispatcherRoutes}
+        selectedRouteId={selectedDispatcherRouteId}
+        onSelectedRouteIdChange={onSelectDispatcherRoute}
+        selectedRoute={selectedDispatcherRoute}
+        routeEvents={selectedDispatcherRouteEvents}
+        routeDetailLoading={dispatcherRouteDetailLoading}
+        canManage={canManageRouting}
+        driverPosition={dispatcherDriverPosition}
+        activePositions={activePositions}
+        optimizingRouteId={dispatcherOptimizingRouteId}
+        dispatchingRouteId={dispatcherDispatchingRouteId}
+        onOptimizeRoute={(id) => void onOptimizeDispatcherRoute(id)}
+        onDispatchRoute={(id) => void onDispatchDispatcherRoute(id)}
+        onRefresh={() => void refreshDispatcher()}
+        readyOrders={dispatcherReadyOrders}
+        availableVehicles={dispatcherVehicles}
+        planId={dispatcherPlanId}
+        onPlanIdChange={setDispatcherPlanId}
+        planVehicleId={dispatcherPlanVehicleId}
+        onPlanVehicleIdChange={setDispatcherPlanVehicleId}
+        planDriverId={dispatcherPlanDriverId}
+        onPlanDriverIdChange={setDispatcherPlanDriverId}
+        planOrderIds={dispatcherPlanOrderIds}
+        onPlanOrderIdsChange={setDispatcherPlanOrderIds}
+        creatingPlan={dispatcherPlanCreating}
+        onCreatePlan={() => void onCreateDispatcherRoutePlan()}
+        moveSourceRouteId={dispatcherMoveSourceRouteId}
+        onMoveSourceRouteIdChange={setDispatcherMoveSourceRouteId}
+        moveStopId={dispatcherMoveStopId}
+        onMoveStopIdChange={setDispatcherMoveStopId}
+        moveTargetRouteId={dispatcherMoveTargetRouteId}
+        onMoveTargetRouteIdChange={setDispatcherMoveTargetRouteId}
+        movingStop={dispatcherMovingStop}
+        onMoveStop={() => void onMoveDispatcherStop()}
+      />
+    );
+  }
+
   const shellSidebar = isAuthenticated ? (
     <SidebarNav
       title={isDriver ? "Modo conductor" : "Ops"}
@@ -1354,11 +1452,63 @@ export default function HomePage() {
       sidebar={shellSidebar}
     >
       {!isAuthenticated && (
-        <div className="card grid cols-2">
-          <input placeholder="tenant_slug" value={tenantSlug} onChange={(e) => setTenantSlug(e.target.value)} />
-          <input placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <input placeholder="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <button onClick={onLogin}>Entrar</button>
+        <div className="login-screen">
+          <div className="login-card">
+            <div className="login-logo">
+              <div className="login-logo-icon">C</div>
+              <div>
+                <div className="login-logo-name">CorteCero</div>
+                <div className="login-logo-sub">Panel operativo</div>
+              </div>
+            </div>
+
+            <div className="login-tagline">
+              Gestión de rutas y distribución con trazabilidad operativa
+            </div>
+
+            <div className="login-form">
+              <div className="login-field">
+                <label className="login-label">Organización</label>
+                <input
+                  className="login-input"
+                  placeholder="demo-cortecero"
+                  value={tenantSlug}
+                  onChange={(e) => setTenantSlug(e.target.value)}
+                  autoComplete="organization"
+                />
+              </div>
+              <div className="login-field">
+                <label className="login-label">Email</label>
+                <input
+                  className="login-input"
+                  placeholder="usuario@empresa.com"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                />
+              </div>
+              <div className="login-field">
+                <label className="login-label">Contraseña</label>
+                <input
+                  className="login-input"
+                  placeholder="••••••••"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  onKeyDown={(e) => e.key === "Enter" && onLogin()}
+                />
+              </div>
+              <button className="login-btn" onClick={onLogin}>
+                Entrar →
+              </button>
+            </div>
+
+            <div className="login-footer">
+              Acceso restringido · Solo usuarios autorizados
+            </div>
+          </div>
         </div>
       )}
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { RouteStopStatus, RoutingRoute } from "../lib/api";
+import type { DriverPositionOut, RouteStopStatus, RoutingRoute } from "../lib/api";
 
 type LocalDriverPosition = {
   lat?: number | null;
@@ -23,10 +23,20 @@ type GoogleMapsWindow = Window & {
   __corteCeroGoogleMapsPromise?: Promise<void>;
 };
 
+// Depósito: POLIGON INDUSTRIAL SON LLAUT, Santa Maria del Camí, Mallorca
+const FALLBACK_DEPOT_LAT = 39.648;
+const FALLBACK_DEPOT_LNG = 2.787;
+
 function parseCoordinate(value: number | null | undefined): number | null {
   if (typeof value !== "number") return null;
   if (!Number.isFinite(value)) return null;
   return value;
+}
+
+/** Genera una URL de icono SVG con emoji para usar como marcador de Google Maps */
+function emojiIconUrl(emoji: string, size = 36): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><text y="${Math.round(size * 0.85)}" font-size="${Math.round(size * 0.8)}" x="${Math.round(size / 2)}" text-anchor="middle">${emoji}</text></svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
 function stopStatusColor(status: RouteStopStatus): string {
@@ -104,23 +114,29 @@ async function loadGoogleMapsScript(apiKey: string): Promise<void> {
 }
 
 type RouteMapCardProps = {
-  route: RoutingRoute;
+  route: RoutingRoute | null;
   /** Posición actual del conductor — actualizada por polling desde el padre. */
   driverPosition?: LocalDriverPosition | null;
+  /** Vehículo seleccionado en el panel de flota (sin ruta activa). */
+  selectedVehicleId?: string | null;
+  selectedVehicleName?: string | null;
+  /** Posiciones de toda la flota activa — cuando se provee, reemplaza el marcador único de conductor. */
+  activePositions?: DriverPositionOut[] | null;
 };
 
-export function RouteMapCard({ route, driverPosition }: RouteMapCardProps) {
+export function RouteMapCard({ route, driverPosition, selectedVehicleId, selectedVehicleName, activePositions }: RouteMapCardProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
   const [mapsLoaded, setMapsLoaded] = useState(false);
 
   const mapApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
-  const depotLat = parseCoordinate(process.env.NEXT_PUBLIC_DEPOT_LAT ? Number(process.env.NEXT_PUBLIC_DEPOT_LAT) : null);
-  const depotLng = parseCoordinate(process.env.NEXT_PUBLIC_DEPOT_LNG ? Number(process.env.NEXT_PUBLIC_DEPOT_LNG) : null);
+  // Usar coordenadas de env var o fallback a Santa Maria del Camí
+  const depotLat = parseCoordinate(process.env.NEXT_PUBLIC_DEPOT_LAT ? Number(process.env.NEXT_PUBLIC_DEPOT_LAT) : null) ?? FALLBACK_DEPOT_LAT;
+  const depotLng = parseCoordinate(process.env.NEXT_PUBLIC_DEPOT_LNG ? Number(process.env.NEXT_PUBLIC_DEPOT_LNG) : null) ?? FALLBACK_DEPOT_LNG;
 
   const stopPoints = useMemo<RouteMapPoint[]>(
     () =>
-      route.stops
+      (route?.stops ?? [])
         .map((stop) => {
           const lat = parseCoordinate(stop.customer_lat);
           const lng = parseCoordinate(stop.customer_lng);
@@ -135,11 +151,11 @@ export function RouteMapCard({ route, driverPosition }: RouteMapCardProps) {
         })
         .filter((point): point is RouteMapPoint => point != null)
         .sort((a, b) => a.sequenceNumber - b.sequenceNumber),
-    [route.stops],
+    [route?.stops],
   );
 
   const transitionGeometryPaths = useMemo<Array<Array<{ lat: number; lng: number }>>>(() => {
-    const geometry = route.route_geometry;
+    const geometry = route?.route_geometry;
     if (!geometry || geometry.encoding !== "google_encoded_polyline") return [];
     return geometry.transition_polylines
       .map((encoded) => {
@@ -151,7 +167,7 @@ export function RouteMapCard({ route, driverPosition }: RouteMapCardProps) {
         }
       })
       .filter((path) => path.length > 1);
-  }, [route.route_geometry]);
+  }, [route?.route_geometry]);
 
   const hasTransitionGeometry = transitionGeometryPaths.length > 0;
 
@@ -192,42 +208,58 @@ export function RouteMapCard({ route, driverPosition }: RouteMapCardProps) {
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
-      center: { lat: 40.4168, lng: -3.7038 },
-      zoom: 10,
+      center: { lat: depotLat, lng: depotLng },
+      zoom: 11,
+      maxZoom: 13,
+      zoomControlOptions: {
+        position: maps.ControlPosition.TOP_RIGHT,
+      },
     });
 
     const bounds = new maps.LatLngBounds();
     const markers: Array<{ setMap: (map: any) => void }> = [];
     const polylines: Array<{ setMap: (map: any) => void }> = [];
 
-    const fallbackPath: Array<{ lat: number; lng: number }> = [];
-    if (depotLat != null && depotLng != null) {
-      markers.push(
-        new maps.Marker({
-          map,
-          position: { lat: depotLat, lng: depotLng },
-          title: "Depot",
-          label: "D",
-        }),
-      );
-      bounds.extend({ lat: depotLat, lng: depotLng });
-      fallbackPath.push({ lat: depotLat, lng: depotLng });
-    }
+    // Icono de depósito (almacén)
+    const depotIcon = {
+      url: emojiIconUrl("🏭", 36),
+      scaledSize: new maps.Size(36, 36),
+      anchor: new maps.Point(18, 30),
+    };
+
+    markers.push(
+      new maps.Marker({
+        map,
+        position: { lat: depotLat, lng: depotLng },
+        title: "Depósito — Son Llaut, Santa Maria del Camí",
+        icon: depotIcon,
+        zIndex: 10,
+      }),
+    );
+    bounds.extend({ lat: depotLat, lng: depotLng });
+
+    const fallbackPath: Array<{ lat: number; lng: number }> = [{ lat: depotLat, lng: depotLng }];
 
     for (const stop of stopPoints) {
+      // Icono de caja/paquete con color de estado como fondo
+      const boxIcon = {
+        url: emojiIconUrl("📦", 34),
+        scaledSize: new maps.Size(34, 34),
+        anchor: new maps.Point(17, 28),
+      };
       const marker = new maps.Marker({
         map,
         position: { lat: stop.lat, lng: stop.lng },
-        title: `Stop #${stop.sequenceNumber}`,
-        label: String(stop.sequenceNumber),
-        icon: {
-          path: maps.SymbolPath.CIRCLE,
-          scale: 8,
-          fillColor: stopStatusColor(stop.status),
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 2,
+        title: `Parada #${stop.sequenceNumber}`,
+        icon: boxIcon,
+        label: {
+          text: String(stop.sequenceNumber),
+          color: "#ffffff",
+          fontSize: "10px",
+          fontWeight: "700",
+          className: "map-stop-label",
         },
+        zIndex: 5,
       });
       markers.push(marker);
       bounds.extend({ lat: stop.lat, lng: stop.lng });
@@ -263,22 +295,56 @@ export function RouteMapCard({ route, driverPosition }: RouteMapCardProps) {
       );
     }
 
-    if (!bounds.isEmpty()) {
+    // fitBounds solo cuando hay paradas — sin paradas se mantiene zoom:11 inicial
+    if (stopPoints.length > 0 && !bounds.isEmpty()) {
       map.fitBounds(bounds);
-      if (!hasTransitionGeometry && fallbackPath.length <= 1) {
-        map.setZoom(13);
-      }
+      // maxZoom:13 en las opciones del mapa ya limita el zoom máximo
     }
 
     return () => {
       for (const marker of markers) marker.setMap(null);
       for (const polyline of polylines) polyline.setMap(null);
     };
-  }, [mapsLoaded, stopPoints, depotLat, depotLng, hasTransitionGeometry, transitionGeometryPaths]);
+  }, [mapsLoaded, stopPoints, depotLat, depotLng, hasTransitionGeometry, transitionGeometryPaths, route]);
+
+  // Marcador de vehículo seleccionado — independiente del redibujado del mapa, sin cambio de zoom
+  const selectedVehicleMarkerRef = useRef<{ setPosition: (pos: any) => void; setMap: (map: any) => void } | null>(null);
+
+  useEffect(() => {
+    if (!mapsLoaded) return;
+    const mapsWindow = window as GoogleMapsWindow;
+    const maps = mapsWindow.google?.maps;
+    if (!maps || !mapRef.current) return;
+
+    // Limpiar marcador anterior
+    selectedVehicleMarkerRef.current?.setMap(null);
+    selectedVehicleMarkerRef.current = null;
+
+    // Solo mostrar cuando no hay ruta activa y hay vehículo seleccionado
+    if (route || !selectedVehicleId) return;
+
+    const mapObj = (mapRef.current as any).__gm_map ?? mapInstanceRef.current;
+    if (!mapObj) return;
+
+    selectedVehicleMarkerRef.current = new maps.Marker({
+      map: mapObj,
+      position: { lat: depotLat, lng: depotLng + 0.002 },
+      title: selectedVehicleName ?? "Vehículo seleccionado",
+      icon: {
+        url: emojiIconUrl("🚚", 40),
+        scaledSize: new maps.Size(40, 40),
+        anchor: new maps.Point(20, 34),
+      },
+      zIndex: 20,
+    });
+    // Sin setCenter ni setZoom — el mapa mantiene su posición actual
+  }, [mapsLoaded, selectedVehicleId, selectedVehicleName, route, depotLat, depotLng]);
 
   // Marcador separado para el conductor — se actualiza sin redibujar todo el mapa
   const driverMarkerRef = useRef<{ setPosition: (pos: any) => void; setMap: (map: any) => void } | null>(null);
   const mapInstanceRef = useRef<any>(null);
+  // Marcadores de flota — uno por conductor activo (fleet view)
+  const activeDriverMarkersRef = useRef<Array<{ setPosition: (pos: any) => void; setMap: (map: any) => void }>>([]);
 
   useEffect(() => {
     if (!mapsLoaded || !mapRef.current) return;
@@ -297,6 +363,14 @@ export function RouteMapCard({ route, driverPosition }: RouteMapCardProps) {
     const mapsWindow = window as GoogleMapsWindow;
     const maps = mapsWindow.google?.maps;
     if (!maps || !mapRef.current) return;
+
+    // En fleet view (activePositions disponibles) se suprimen los marcadores de conductor único
+    const fleetMode = activePositions != null && activePositions.length > 0;
+    if (fleetMode) {
+      driverMarkerRef.current?.setMap(null);
+      driverMarkerRef.current = null;
+      return;
+    }
 
     const driverLat = parseCoordinate(driverPosition?.lat ?? null);
     const driverLng = parseCoordinate(driverPosition?.lng ?? null);
@@ -321,20 +395,53 @@ export function RouteMapCard({ route, driverPosition }: RouteMapCardProps) {
       driverMarkerRef.current = new maps.Marker({
         map: mapObj,
         position: { lat: driverLat, lng: driverLng },
-        title: "Conductor",
+        title: "Conductor en ruta",
         icon: {
-          path: maps.SymbolPath.FORWARD_CLOSED_ARROW,
-          scale: 6,
-          fillColor: "#7c3aed",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 2,
-          rotation: driverPosition?.heading ?? 0,
+          url: emojiIconUrl("🚚", 40),
+          scaledSize: new maps.Size(40, 40),
+          anchor: new maps.Point(20, 34),
         },
         zIndex: 999,
       });
     }
-  }, [mapsLoaded, driverPosition]);
+  }, [mapsLoaded, driverPosition, activePositions]);
+
+  // Marcadores de flota — actualizados de forma independiente cuando llegan posiciones activas
+  useEffect(() => {
+    if (!mapsLoaded) return;
+    const mapsWindow = window as GoogleMapsWindow;
+    const maps = mapsWindow.google?.maps;
+    if (!maps || !mapRef.current) return;
+
+    // Limpiar marcadores anteriores
+    for (const m of activeDriverMarkersRef.current) m.setMap(null);
+    activeDriverMarkersRef.current = [];
+
+    if (!activePositions || activePositions.length === 0) return;
+
+    const mapEl = mapRef.current;
+    const mapObj = (mapEl as any).__gm_map ?? mapInstanceRef.current;
+    if (!mapObj) return;
+
+    for (const pos of activePositions) {
+      const lat = parseCoordinate(pos.lat);
+      const lng = parseCoordinate(pos.lng);
+      if (lat == null || lng == null) continue;
+
+      const marker = new maps.Marker({
+        map: mapObj,
+        position: { lat, lng },
+        title: `Conductor ${pos.driver_id.slice(0, 8)}`,
+        icon: {
+          url: emojiIconUrl("🚚", 40),
+          scaledSize: new maps.Size(40, 40),
+          anchor: new maps.Point(20, 34),
+        },
+        zIndex: 998,
+      });
+      activeDriverMarkersRef.current.push(marker);
+    }
+  }, [mapsLoaded, activePositions]);
 
   return (
     <div className="card grid route-map-card">
@@ -344,33 +451,30 @@ export function RouteMapCard({ route, driverPosition }: RouteMapCardProps) {
         {depotLat != null && depotLng != null && <span className="pill">depot: disponible</span>}
         {hasTransitionGeometry ? <span className="pill">geometría vial: disponible</span> : <span className="pill">fallback: recto</span>}
       </div>
-      <div className="row route-map-legend" style={{ gap: 8 }}>
-        <span className="route-legend-item">
-          <span className="route-dot pending" /> pending
-        </span>
-        <span className="route-legend-item">
-          <span className="route-dot moving" /> en_route/arrived
-        </span>
-        <span className="route-legend-item">
-          <span className="route-dot completed" /> completed
-        </span>
-        <span className="route-legend-item">
-          <span className="route-dot failed" /> failed
-        </span>
-        {driverPosition && (
+      {route && (
+        <div className="row route-map-legend" style={{ gap: 8 }}>
           <span className="route-legend-item">
-            <span className="route-dot" style={{ background: "#7c3aed" }} /> conductor
+            <span className="route-dot pending" /> pending
           </span>
-        )}
-      </div>
-      {mapError && <p style={{ margin: 0, color: "#6b7280" }}>{mapError}</p>}
-      {!mapError && stopPoints.length === 0 && (
-        <p style={{ margin: 0, color: "#6b7280" }}>
-          Esta ruta no tiene coordenadas de cliente; no se puede dibujar recorrido.
-        </p>
-      )}
-      {!mapError && stopPoints.length > 0 && !hasTransitionGeometry && (
-        <p style={{ margin: 0, color: "#6b7280" }}>Sin geometría vial disponible; se dibuja recorrido mínimo por segmentos.</p>
+          <span className="route-legend-item">
+            <span className="route-dot moving" /> en_route/arrived
+          </span>
+          <span className="route-legend-item">
+            <span className="route-dot completed" /> completed
+          </span>
+          <span className="route-legend-item">
+            <span className="route-dot failed" /> failed
+          </span>
+          {activePositions && activePositions.length > 0 ? (
+            <span className="route-legend-item">
+              <span className="route-dot" style={{ background: "#7c3aed" }} /> flota activa ({activePositions.length})
+            </span>
+          ) : driverPosition && (
+            <span className="route-legend-item">
+              <span className="route-dot" style={{ background: "#7c3aed" }} /> conductor
+            </span>
+          )}
+        </div>
       )}
       <div ref={mapRef} className="route-map-canvas" />
     </div>

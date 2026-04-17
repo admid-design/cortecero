@@ -4,7 +4,7 @@
 > Todo lo que aquí se afirma debe tener evidencia: código existente, test verde o smoke ejecutado.
 > Si una capacidad no aparece aquí, no asumas que existe.
 
-Última actualización: R8 activo — Fase A completa + REALTIME-001 (B1) implementado (tests pendientes de ejecución local). Abril 2026.
+Última actualización: R8 activo — Fase A completa + B1–B4 + C1 + F1 + F2 + F4–F6 + FLEET-VIEW-001 VERIFICADO LOCAL (283 tests backend en verde, build frontend limpio, 2026-04-17). Abril 2026.
 
 ---
 
@@ -89,18 +89,26 @@
 
 | Capacidad | Estado real |
 |---|---|
-| SSE transport layer backend (REALTIME-001 B1) | IMPLEMENTADO — `RouteEventBus` + `GET /routes/{id}/stream` + hooks en arrive/complete/fail/skip/driver-location. Tests en `test_realtime_b1.py`. Pendiente ejecución Docker local para cerrar como VERIFICADO LOCAL. Limitación: asyncio.Queue in-process, no compartido entre workers gunicorn. Auth por query param JWT solo para B1/smoke. |
+| SSE transport layer backend (REALTIME-001 B1) | VERIFICADO LOCAL — 7 tests en verde (2026-04-17). `RouteEventBus` + `GET /routes/{id}/stream` + hooks en arrive/complete/fail/skip/driver-location. Limitación documentada: asyncio.Queue in-process, no compartido entre workers gunicorn. Auth por query param JWT provisional para B1. |
 | Seguimiento GPS en tiempo real en frontend (SSE/push) | NO EXISTE — frontend sigue usando polling 30 s; backend SSE existe pero frontend no lo consume aún |
-| ETA dinámico post-incidencia | NO EXISTE — ETA es estático post-optimize |
+| ETA dinámico (recálculo manual) | VERIFICADO LOCAL — `POST /routes/{id}/recalculate-eta` + `GET /routes/{id}/delay-alerts`. Haversine + velocidad media 40 km/h. Alerta automática si retraso ≥ 15 min. 15 tests en verde (2026-04-17). Migration 022. |
 | Reoptimización automática ante incidencias | NO EXISTE — trigger manual existe, flujo automático no |
 | Prueba de entrega: firma | VERIFICADO LOCAL — backend + frontend + tests en verde; e2e con device real pendiente |
 | Prueba de entrega: foto | NO EXISTE — schema preparado, UI no implementada |
 | Notificación de ETA a cliente final | NO EXISTE |
-| Fleet view (vista de flota en mapa) | PARCIAL — endpoint `/driver/active-positions` implementado; UI dispatcher no tiene vista fleet aún |
+| Fleet view (vista de flota en mapa) | VERIFICADO LOCAL — `GET /driver/active-positions` + polling 30s en `page.tsx` + marcadores 🚚 por conductor en `RouteMapCard` + badge GPS 📍 en panel de flota `OpsMapDashboard`. Requiere conductores con GPS activo para evidencia e2e. Build frontend limpio (2026-04-17). |
 | Asistente IA en dispatcher | NO EXISTE |
 | Asistente IA en app del conductor | NO EXISTE |
 | Multi-vehicle en UI (fleet view) | NO EXISTE — backend soporta múltiples vehículos, UI no los visualiza juntos |
 | Tráfico en tiempo real visible | PARCIAL — flag `considerRoadTraffic: true` enviado a Google; no hay visualización |
+| Time windows por cliente en optimizer (TW-001 F1) | VERIFICADO LOCAL — `CustomerOperationalProfile.window_start/window_end` → `OptimizationWaypoint` → `timeWindows` en payload Google. `_build_time_windows` con recorte al rango global. 14 tests en verde (2026-04-17). |
+| Capacidad de vehículo en optimizer (CAPACITY-001 F2) | VERIFICADO LOCAL — `Vehicle.capacity_kg` → `loadLimits` Google; `Order.total_weight_kg` → `loadDemands` Google. Conversión kg→gramos (int64). 13 tests en verde (2026-04-17). |
+| Doble viaje por día (DOUBLE-TRIP-001 F4) | VERIFICADO LOCAL — `Route.trip_number` (1/2) + `startTimeWindows` en Google payload para viaje 2. Cálculo automático trip_start_after = última ETA trip1 + service_minutes + 30min buffer. Migration 023. 8 tests en verde (2026-04-17). |
+| Mercancías peligrosas ADR (ADR-001 F5) | VERIFICADO LOCAL — `Vehicle.is_adr_certified` + `Order.requires_adr` + validación pre-optimización → 422 `ADR_VEHICLE_REQUIRED` si hay pedido ADR y vehículo no certificado. Flags propagados a `OptimizationRequest/Waypoint`. Migration 024. 8 tests en verde (2026-04-17). |
+| Zona de bajas emisiones ZBE (ZBE-001 F6) | VERIFICADO LOCAL — `Customer.in_zbe_zone` + `Vehicle.is_zbe_allowed` + validación pre-optimización → 422 `ZBE_VEHICLE_REQUIRED` si hay cliente en ZBE y vehículo no autorizado. Flags propagados a `OptimizationRequest/Waypoint`. Migration 025. 8 tests en verde (2026-04-17). |
+| Chat interno dispatcher↔conductor (CHAT-001 B3) | VERIFICADO LOCAL — `POST /routes/{id}/messages` + `GET /routes/{id}/messages`. Tabla append-only `route_messages`. SSE integrado (`chat_message` event). author_role: dispatcher/driver. Migration 026. 9 tests en verde (2026-04-17). |
+| Edición de ruta en vivo (LIVE-EDIT-001 B4) | VERIFICADO LOCAL — `POST /routes/{id}/add-stop` + `POST /routes/{id}/stops/{id}/remove` + `move-stop` extendido a `in_progress`. SSE `stop_added`/`stop_removed`. 11 tests en verde (2026-04-17). |
+| Devolución de pedidos fallidos (RETURN-001 C1) | VERIFICADO LOCAL — `POST /orders/{id}/return-to-planning`. Transición `failed_delivery` → `ready_for_planning`. Emite `order.returned_to_planning` en última ruta del pedido. Audit log. 7 tests en verde (2026-04-17). |
 
 ---
 
@@ -171,10 +179,14 @@ Service account montado en Docker: `~/.config/kelko/google/route-optimization-sa
   - DEMO-OPT-001: Google Route Optimization smoke 200 — CERRADO_CON_EVIDENCIA_LOCAL (commit `59bd16d`, evidence en `docs/evidence/DEMO-OPT-001.json`)
     - Fixes aplicados: seed.py backfill fuerza coordenadas Mallorca; `_build_result` maneja `skippedShipments` sin crashear
     - Resultado: 2 paradas, ETAs reales (seq1=13:49Z, seq2=14:08Z), totalDuration=2693s, provider=google
-- R8: Fase B1 — REALTIME-001 implementado (pendiente test green local)
+- R8: Fase B1 — REALTIME-001: VERIFICADO LOCAL (7/7 tests en verde, 2026-04-17)
+- R8: Fase B2 — ETA-001: VERIFICADO LOCAL (15/15 tests en verde, 2026-04-17). Migration 022. Haversine calculator + delay_alert events.
   - `backend/app/realtime.py` — RouteEventBus: publish/subscribe asyncio.Queue in-process
   - `GET /routes/{id}/stream` — SSE endpoint con auth JWT query param (provisional B1)
   - Hooks `event_bus.publish()` en stop_arrive, stop_complete, stop_fail, stop_skip, update_driver_location
   - `backend/tests/test_realtime_b1.py` — 7 tests: unit bus, SSE auth 401/404, publish hooks via monkeypatch
   - OpenAPI actualizado con `/routes/{route_id}/stream`
   - Limitación documentada: asyncio.Queue no compartido entre workers gunicorn (fix futuro: Redis)
+- R8: Fase B3 — CHAT-001: VERIFICADO LOCAL (9/9 tests en verde, 2026-04-17). Migration 026. Chat dispatcher↔conductor en ruta.
+- R8: Fase B4 — LIVE-EDIT-001: VERIFICADO LOCAL (11/11 tests en verde, 2026-04-17). add-stop + remove-stop + move-stop extendido a in_progress.
+- R8: Fase C1 — RETURN-001: VERIFICADO LOCAL (7/7 tests en verde, 2026-04-17). `POST /orders/{id}/return-to-planning`. failed_delivery → ready_for_planning.

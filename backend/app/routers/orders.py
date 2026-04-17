@@ -18,8 +18,7 @@ from app.domain import (
     initial_order_status,
     resolve_cutoff,
 )
-from app.errors import not_found
-from app.errors import unprocessable
+from app.errors import conflict, not_found, unprocessable
 from app.models import (
     Customer,
     CustomerOperationalException,
@@ -36,6 +35,10 @@ from app.models import (
     OrderStatus,
     Plan,
     PlanStatus,
+    RouteEvent,
+    RouteEventActorType,
+    RouteEventType,
+    RouteStop,
     SourceChannel,
     Tenant,
     UserRole,
@@ -60,6 +63,7 @@ from app.schemas import (
     PendingQueueListResponse,
     PendingQueueItemOut,
     PendingQueueReason,
+    ReturnToPlanningResponse,
 )
 
 
@@ -1131,3 +1135,109 @@ def update_order_weight(
     operational_by_order = _build_operational_evaluation_map(db, tenant=tenant, orders=[order])
     operational = operational_by_order.get(order.id) or _default_operational_evaluation()
     return _serialize_order(order, lines, operational=operational)
+
+
+# ============================================================================
+# BLOQUE C1 — Gestión de devoluciones (RETURN-001)
+# POST /orders/{order_id}/return-to-planning
+# ============================================================================
+
+
+_RETURNABLE_STATUSES = (OrderStatus.failed_delivery,)
+
+
+@router.post(
+    "/orders/{order_id}/return-to-planning",
+    response_model=ReturnToPlanningResponse,
+    summary="Retornar pedido fallido a la cola de planificación",
+)
+def return_order_to_planning(
+    order_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+) -> ReturnToPlanningResponse:
+    """
+    Mueve un pedido con estado 'failed_delivery' de vuelta a 'ready_for_planning'.
+
+    Precondición: el pedido debe estar en estado 'failed_delivery'.
+    El pedido queda disponible para ser asignado en una nueva ruta.
+
+    Emite evento 'order.returned_to_planning' en la última ruta que contenía
+    el pedido (si existe). El evento queda como registro de auditoría de ruta.
+    """
+    order = db.scalar(
+        select(Order).where(Order.id == order_id, Order.tenant_id == current.tenant_id)
+    )
+    if not order:
+        raise not_found("ORDER_NOT_FOUND", "Pedido no encontrado")
+
+    if order.status not in _RETURNABLE_STATUSES:
+        raise conflict(
+            "INVALID_STATE_TRANSITION",
+            f"Solo se pueden retornar pedidos en estado 'failed_delivery'. "
+            f"Estado actual: '{order.status.value}'",
+        )
+
+    previous_status = order.status.value
+    now = datetime.now(UTC)
+
+    # Actualizar estado del pedido
+    order.status = OrderStatus.ready_for_planning
+    order.updated_at = now
+
+    # Buscar la última RouteStop del pedido para emitir el evento en la ruta correcta
+    last_stop = db.scalar(
+        select(RouteStop)
+        .where(
+            RouteStop.order_id == order_id,
+            RouteStop.tenant_id == current.tenant_id,
+        )
+        .order_by(RouteStop.created_at.desc())
+        .limit(1)
+    )
+
+    if last_stop is not None:
+        # Emitir evento de auditoría en la ruta
+        db.add(
+            RouteEvent(
+                id=uuid.uuid4(),
+                tenant_id=current.tenant_id,
+                route_id=last_stop.route_id,
+                route_stop_id=None,  # parada puede ya no existir; evitar FK hacia fila borrada
+                event_type=RouteEventType.order_returned_to_planning,
+                actor_type=RouteEventActorType.dispatcher,
+                actor_id=current.id,
+                ts=now,
+                metadata_json={
+                    "order_id": str(order_id),
+                    "previous_status": previous_status,
+                    "stop_id": str(last_stop.id),
+                },
+            )
+        )
+
+    write_audit(
+        db,
+        tenant_id=current.tenant_id,
+        entity_type=EntityType.order,
+        entity_id=order.id,
+        action="order.returned_to_planning",
+        actor_id=current.id,
+        metadata={
+            "previous_status": previous_status,
+            "new_status": OrderStatus.ready_for_planning.value,
+        },
+    )
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise conflict("RESOURCE_CONFLICT", "No se pudo retornar el pedido a planificación") from exc
+
+    return ReturnToPlanningResponse(
+        order_id=order_id,
+        previous_status=previous_status,
+        new_status=OrderStatus.ready_for_planning.value,
+        returned_at=now,
+    )

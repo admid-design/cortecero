@@ -641,6 +641,7 @@ class RouteStopOut(APIModel):
     order_id: uuid.UUID
     sequence_number: int
     estimated_arrival_at: datetime | None
+    recalculated_eta_at: datetime | None = None
     estimated_service_minutes: int
     status: Literal["pending", "en_route", "arrived", "completed", "failed", "skipped"]
     arrived_at: datetime | None
@@ -667,6 +668,8 @@ class RouteOut(APIModel):
     service_date: date
     status: Literal["draft", "planned", "dispatched", "in_progress", "completed", "cancelled"]
     version: int
+    # F4 — DOUBLE-TRIP-001
+    trip_number: int = 1
     optimization_request_id: str | None
     optimization_response_json: dict | None
     route_geometry: RouteGeometryOut | None = None
@@ -799,3 +802,72 @@ class DriverPositionOut(BaseModel):
     speed_kmh: float | None
     heading: float | None
     recorded_at: datetime
+
+
+# ── ETA Recalculation (B2 — ETA-001) ─────────────────────────────────────────
+
+class EtaStopResult(BaseModel):
+    stop_id: uuid.UUID
+    sequence_number: int
+    original_eta: datetime | None
+    recalculated_eta: datetime
+    delay_minutes: float
+    delay_alert: bool
+
+
+class RecalculateEtaResponse(BaseModel):
+    route_id: uuid.UUID
+    stops_updated: int
+    delay_alerts_created: int
+    results: list[EtaStopResult]
+
+
+class DelayAlertOut(BaseModel):
+    event_id: uuid.UUID
+    route_id: uuid.UUID
+    stop_id: uuid.UUID | None
+    original_eta: datetime | None
+    recalculated_eta: datetime | None
+    delay_minutes: float | None
+    ts: datetime
+
+
+# ── Chat interno (B3 — CHAT-001) ──────────────────────────────────────────────
+
+class RouteMessageIn(BaseModel):
+    body: str = Field(..., min_length=1, max_length=2000)
+
+
+class RouteMessageOut(APIModel):
+    id: uuid.UUID
+    route_id: uuid.UUID
+    author_user_id: uuid.UUID
+    author_role: str
+    body: str
+    created_at: datetime
+
+
+# ── Live-edit de ruta (B4 — LIVE-EDIT-001) ────────────────────────────────────
+
+class AddStopRequest(BaseModel):
+    order_id: uuid.UUID
+
+
+class AddStopResponse(BaseModel):
+    order_id: uuid.UUID
+    route_id: uuid.UUID
+    stop_id: uuid.UUID
+    sequence_number: int
+
+
+class RemoveStopResponse(BaseModel):
+    order_id: uuid.UUID
+    route_id: uuid.UUID
+    removed_stop_id: uuid.UUID
+
+
+class ReturnToPlanningResponse(BaseModel):
+    order_id: uuid.UUID
+    previous_status: str
+    new_status: str
+    returned_at: datetime
