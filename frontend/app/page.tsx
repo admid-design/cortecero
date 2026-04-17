@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouteStream, type StreamEventType } from "../lib/useRouteStream";
 
 import {
   type AdminUser,
@@ -558,42 +559,61 @@ export default function HomePage() {
     [loadDispatcherRouteDetail],
   );
 
-  // Polling de posición del conductor cada 30 s cuando hay una ruta activa seleccionada.
+  // SSE de posición del conductor — R8-SSE-FE
+  // Reemplaza el polling 30s anterior. Fallback automático a polling si SSE falla.
   const dispatcherSelectedRouteStatus = selectedDispatcherRoute?.status ?? null;
   const shouldPollDriverPosition =
     selectedDispatcherRouteId !== "" &&
     (dispatcherSelectedRouteStatus === "dispatched" || dispatcherSelectedRouteStatus === "in_progress");
 
-  const pollDriverPositionRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
+  // Fetch inicial al seleccionar ruta activa (SSE no envía estado acumulado al conectar).
   useEffect(() => {
     if (!shouldPollDriverPosition || !token || !selectedDispatcherRouteId) {
-      if (pollDriverPositionRef.current) {
-        clearInterval(pollDriverPositionRef.current);
-        pollDriverPositionRef.current = null;
-      }
+      setDispatcherDriverPosition(null);
       return;
     }
-
-    const poll = async () => {
-      try {
-        const pos = await getDriverPosition(token, selectedDispatcherRouteId);
-        setDispatcherDriverPosition(pos);
-      } catch {
-        // posición aún no disponible — sin conductor en ruta o ruta sin GPS
-      }
-    };
-
-    void poll(); // primera llamada inmediata
-    pollDriverPositionRef.current = setInterval(() => void poll(), 30_000);
-
-    return () => {
-      if (pollDriverPositionRef.current) {
-        clearInterval(pollDriverPositionRef.current);
-        pollDriverPositionRef.current = null;
-      }
-    };
+    void getDriverPosition(token, selectedDispatcherRouteId)
+      .then(setDispatcherDriverPosition)
+      .catch(() => {
+        // Sin posición aún — conductor no ha publicado GPS todavía.
+      });
   }, [shouldPollDriverPosition, token, selectedDispatcherRouteId]);
+
+  // Callback estable para onEvent SSE.
+  const onDriverStreamEvent = useCallback(
+    (type: StreamEventType, data: unknown) => {
+      if (type === "driver_position_updated") {
+        const d = data as { lat: number; lng: number; recorded_at: string };
+        setDispatcherDriverPosition((prev) =>
+          prev
+            ? { ...prev, lat: d.lat, lng: d.lng, recorded_at: d.recorded_at }
+            : null, // Sin fetch inicial aún — ignorar hasta que llegue el primer poll.
+        );
+      }
+    },
+    [],
+  );
+
+  // Callback estable para fallback polling cuando SSE está degradado.
+  const onDriverStreamFallback = useCallback(() => {
+    if (!token || !selectedDispatcherRouteId) return;
+    void getDriverPosition(token, selectedDispatcherRouteId)
+      .then(setDispatcherDriverPosition)
+      .catch(() => {});
+  }, [token, selectedDispatcherRouteId]);
+
+  // Abre stream SSE. En modo degradado (sseDriverDegraded=true) activa polling 30s.
+  const { degraded: sseDriverDegraded } = useRouteStream({
+    routeId: selectedDispatcherRouteId,
+    token: token ?? "",
+    enabled: shouldPollDriverPosition && !!token,
+    onEvent: onDriverStreamEvent,
+    onFallbackPoll: onDriverStreamFallback,
+    fallbackIntervalMs: 30_000,
+  });
+
+  // sseDriverDegraded expuesto para posible indicador visual futuro (no bloqueante).
+  void sseDriverDegraded;
 
   // Polling de posiciones de toda la flota cada 30 s — fleet view en mapa dispatcher
   const pollFleetPositionsRef = useRef<ReturnType<typeof setInterval> | null>(null);
