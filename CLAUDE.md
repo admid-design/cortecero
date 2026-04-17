@@ -61,7 +61,7 @@ cortecero/
 │   ├── as-is.md              # estado real verificado
 │   ├── contracts/            # error-contract.md
 │   ├── domain/cortecero/     # dominio operativo
-│   └── R7_BACKLOG.md         # backlog activo
+│   └── R8_BACKLOG.md         # backlog activo
 ├── scripts/                  # wrappers operativos de una orden
 ├── .claude/
 │   ├── rules/                # reglas por contexto
@@ -229,37 +229,31 @@ Estado final: CERRADO_LOCAL | CERRADO_CON_EVIDENCIA_LOCAL | PROMULGADO | BLOQUEA
 
 ---
 
-## Fase activa actual
+## Fase activa actual — R8
 
-**Foco único actual:** Google Maps Platform
+Ver detalle completo en `docs/R8_BACKLOG.md`.
 
-### Scope abierto
-- E.2 Google real provider
-- MAP-001 backend geometry
-- MAP-001 frontend render real
-- smoke/evidence de integración Google
+### Bloques completados (VERIFICADO LOCAL)
+- Fase A completa: GPS-001, POD-001, MAP-001 backend + frontend
+- B1: REALTIME-001 (SSE backend)
+- B2: ETA-001 (recálculo haversine + delay_alerts)
+- B3: CHAT-001 (chat dispatcher↔conductor)
+- B4: LIVE-EDIT-001 (add/remove/move-stop en in_progress)
+- C1: RETURN-001 (return-to-planning)
+- E.2: DEMO-OPT-001 smoke 200 real con Google
+- FLEET-VIEW-001: panel OpsMapDashboard
+- F1–F6: time windows, capacidad, doble viaje, ADR, ZBE
 
-### Scope congelado temporalmente
-- Skin/dashboard general
-- Admin no relacionado con Maps
-- IA
-- Fleet view
-- POD frontend
-- GPS frontend
-- Refactors transversales no necesarios para validar Maps
+### Pendiente activo (orden de prioridad)
+1. **CI verde en `3e5980d`** — confirmar backend-tests #139
+2. **R8-SMOKE** — Google smoke dataset geo-ready (reproducible)
+3. **R8-SSE-FE** — SSE frontend, reemplazar polling 30s
+4. **R8-POD-FOTO** — foto en proof of delivery (decisión storage pendiente)
 
-**Regla:** no abrir trabajo fuera de Google Maps Platform salvo que bloquee directamente un smoke o evidencia del flujo Maps.
-
----
-
-## Huecos conocidos del repo (actualizado)
-
-- E.2 Google Route Optimization ya tiene smoke 200 real (`DEMO-OPT-001`) con evidencia local
-- MAP-001 frontend render real aún no está cerrado formalmente
-- GPS frontend en dispositivo real no está cerrado formalmente
-- POD frontend en dispositivo real no está cerrado formalmente
-- SSE / realtime no existe aún como capa cerrada
-- Fleet view UI no existe aún
-- Asistente IA no existe en ninguna capa
-
-Con ese cambio, Claude va a gastar bastante menos contexto inútil y te seguirá mejor la fase activa.
+### Huecos conocidos
+- SSE backend usa asyncio.Queue in-process → no escala con gunicorn multi-worker (fix R9: Redis)
+- MAP-001 frontend: evidence en browser local; sin CI automatizado con API key
+- GPS-001 y POD-001 frontend: evidence en device real pendiente
+- POD foto: schema preparado, UI no implementada, storage no decidido
+- Notificaciones (D1): congeladas, pendiente proveedor email/SMS
+- Asistente IA: no existe en ninguna capa
