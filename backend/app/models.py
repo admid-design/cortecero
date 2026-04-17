@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Integer,
     Numeric,
+    SmallInteger,
     String,
     Text,
     Time,
@@ -154,6 +155,8 @@ class Customer(Base):
     lat: Mapped[float | None] = mapped_column(Numeric(9, 6), nullable=True)
     lng: Mapped[float | None] = mapped_column(Numeric(9, 6), nullable=True)
     delivery_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # F6 — ZBE-001: el cliente está en zona de bajas emisiones (requiere vehículo autorizado ZBE)
+    in_zbe_zone: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (
@@ -238,6 +241,8 @@ class Order(Base):
         default=OrderIntakeType.new_order,
     )
     total_weight_kg: Mapped[float | None] = mapped_column(Numeric(14, 3), nullable=True)
+    # F5 — ADR-001: el pedido contiene mercancías peligrosas (requiere vehículo ADR certificado)
+    requires_adr: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -296,6 +301,10 @@ class Vehicle(Base):
     code: Mapped[str] = mapped_column(Text, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     capacity_kg: Mapped[float | None] = mapped_column(Numeric(14, 3), nullable=True)
+    # F5 — ADR-001: el vehículo está habilitado para transportar mercancías peligrosas
+    is_adr_certified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # F6 — ZBE-001: el vehículo puede circular por zona de bajas emisiones
+    is_zbe_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -463,6 +472,7 @@ class RouteEventType(str, enum.Enum):
     incident_reviewed = "incident.reviewed"
     incident_resolved = "incident.resolved"
     order_returned_to_planning = "order.returned_to_planning"
+    delay_alert = "delay_alert"
 
 
 class RouteEventActorType(str, enum.Enum):
@@ -512,6 +522,8 @@ class Route(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     optimization_request_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     optimization_response_json: Mapped[dict | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
+    # F4 — DOUBLE-TRIP-001: número de viaje del vehículo en el día (1 = primero, 2 = segundo).
+    trip_number: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -533,6 +545,7 @@ class RouteStop(Base):
     order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
     estimated_arrival_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    recalculated_eta_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     estimated_service_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
     status: Mapped[RouteStopStatus] = mapped_column(Enum(RouteStopStatus, name="route_stop_status"), nullable=False, default=RouteStopStatus.pending)
     arrived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -628,3 +641,25 @@ class DriverPosition(Base):
     heading: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RouteMessage(Base):
+    """Mensaje de chat interno en una ruta.  Bloque B3 (CHAT-001).
+
+    Tabla append-only: dispatcher ↔ conductor.
+    author_role: 'dispatcher' | 'driver'  (denormalizado para lectura eficiente)
+    """
+
+    __tablename__ = "route_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    route_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    author_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    author_role: Mapped[str] = mapped_column(Text, nullable=False)  # 'dispatcher' | 'driver'
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(["route_id", "tenant_id"], ["routes.id", "routes.tenant_id"], ondelete="CASCADE"),
+    )

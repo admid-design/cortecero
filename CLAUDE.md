@@ -221,12 +221,45 @@ Estado final: CERRADO_LOCAL | CERRADO_CON_EVIDENCIA_LOCAL | PROMULGADO | BLOQUEA
 ```
 
 ---
+## Imports automáticos
 
-## Huecos conocidos del repo (a abril 2026)
+@AGENTS.md
+@docs/as-is.md
+@docs/platform-freeze-v3.md
 
-- `test_routing_bloque_e.py` tiene 5 tests fallando (DEMO-OPT-001 pendiente)
-- Smoke Google sin evidencia 200 final (dataset geo-ready bloqueado)
-- Sin mapa operativo en frontend (MAP-001 identificado, no iniciado)
-- Sin proof-of-delivery
-- Sin seguimiento GPS en tiempo real
-- Sin asistente IA en ninguna capa
+---
+
+## Fase activa actual
+
+**Foco único actual:** Google Maps Platform
+
+### Scope abierto
+- E.2 Google real provider
+- MAP-001 backend geometry
+- MAP-001 frontend render real
+- smoke/evidence de integración Google
+
+### Scope congelado temporalmente
+- Skin/dashboard general
+- Admin no relacionado con Maps
+- IA
+- Fleet view
+- POD frontend
+- GPS frontend
+- Refactors transversales no necesarios para validar Maps
+
+**Regla:** no abrir trabajo fuera de Google Maps Platform salvo que bloquee directamente un smoke o evidencia del flujo Maps.
+
+---
+
+## Huecos conocidos del repo (actualizado)
+
+- E.2 Google Route Optimization ya tiene smoke 200 real (`DEMO-OPT-001`) con evidencia local
+- MAP-001 frontend render real aún no está cerrado formalmente
+- GPS frontend en dispositivo real no está cerrado formalmente
+- POD frontend en dispositivo real no está cerrado formalmente
+- SSE / realtime no existe aún como capa cerrada
+- Fleet view UI no existe aún
+- Asistente IA no existe en ninguna capa
+
+Con ese cambio, Claude va a gastar bastante menos contexto inútil y te seguirá mejor la fase activa.

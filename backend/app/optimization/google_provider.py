@@ -10,6 +10,8 @@ No persiste secretos ni credenciales en el repo.
 
 from __future__ import annotations
 
+import json
+import os
 import uuid
 from datetime import UTC, datetime, time, timedelta
 
@@ -51,11 +53,22 @@ class GoogleRouteOptimizationProvider(RouteOptimizationProvider):
         self.timeout_seconds = timeout_seconds
 
     def _fetch_access_token(self) -> str:
-        credentials, _ = google_auth_default(scopes=[_CLOUD_PLATFORM_SCOPE])
+        # Soporte para credenciales en variable de entorno (Vercel / entornos serverless).
+        # Si GOOGLE_APPLICATION_CREDENTIALS_JSON existe, carga el service account desde JSON.
+        # Si no, usa Application Default Credentials (ADC) estándar (Docker, GCE, etc.).
+        credentials_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+        if credentials_json:
+            from google.oauth2 import service_account
+            info = json.loads(credentials_json)
+            credentials = service_account.Credentials.from_service_account_info(
+                info, scopes=[_CLOUD_PLATFORM_SCOPE]
+            )
+        else:
+            credentials, _ = google_auth_default(scopes=[_CLOUD_PLATFORM_SCOPE])
         if not credentials.valid or not credentials.token:
             credentials.refresh(GoogleAuthRequest())
         if not credentials.token:
-            raise RuntimeError("Unable to obtain Google access token from ADC")
+            raise RuntimeError("Unable to obtain Google access token")
         return credentials.token
 
     def _build_parent(self) -> str:
@@ -79,42 +92,106 @@ class GoogleRouteOptimizationProvider(RouteOptimizationProvider):
         global_end = service_end if service_end > global_start else (global_start + timedelta(hours=12))
         return global_start, global_end
 
+    def _build_time_windows(
+        self,
+        waypoint: "OptimizationWaypoint",
+        service_date: "date | None",
+        global_start: datetime,
+        global_end: datetime,
+    ) -> list[dict] | None:
+        """
+        Construye la lista timeWindows para un waypoint si tiene ventana definida.
+        Retorna None si el waypoint no tiene restricción horaria.
+
+        La ventana se ancla a service_date (o a global_start.date() como fallback).
+        Si window_end cae antes o igual que window_start (p. ej. 09:00-08:00),
+        se ignora la ventana para evitar enviar restricciones imposibles a Google.
+        """
+        if waypoint.window_start is None or waypoint.window_end is None:
+            return None
+
+        anchor_date = service_date if service_date is not None else global_start.date()
+        from datetime import datetime as _dt
+        window_start_dt = _dt.combine(anchor_date, waypoint.window_start, tzinfo=UTC)
+        window_end_dt = _dt.combine(anchor_date, waypoint.window_end, tzinfo=UTC)
+
+        if window_end_dt <= window_start_dt:
+            return None  # ventana inválida — ignorar
+
+        # Recortar al rango global para evitar ventanas fuera del horizonte
+        window_start_dt = max(window_start_dt, global_start)
+        window_end_dt = min(window_end_dt, global_end)
+
+        if window_end_dt <= window_start_dt:
+            return None  # ventana recortada quedó vacía
+
+        return [
+            {
+                "startTime": _to_rfc3339_utc(window_start_dt),
+                "endTime": _to_rfc3339_utc(window_end_dt),
+            }
+        ]
+
     def _build_body(self, request: OptimizationRequest) -> dict:
         global_start, global_end = self._build_global_window(request)
         shipments = []
         for waypoint in request.waypoints:
+            delivery: dict = {
+                "arrivalLocation": {
+                    "latitude": waypoint.lat,
+                    "longitude": waypoint.lng,
+                },
+                "duration": f"{max(1, waypoint.service_minutes) * 60}s",
+            }
+            time_windows = self._build_time_windows(
+                waypoint, request.service_date, global_start, global_end
+            )
+            if time_windows:
+                delivery["timeWindows"] = time_windows
+
+            # F2 — CAPACITY-001: demanda de carga del pedido en gramos (int64).
+            # Usamos gramos para preservar decimales de kg sin perder precisión.
+            if waypoint.weight_kg is not None:
+                delivery["loadDemands"] = {
+                    "weight_kg": {"amount": str(round(waypoint.weight_kg * 1000))}
+                }
+
             shipments.append(
                 {
                     "label": str(waypoint.order_id),
-                    "deliveries": [
-                        {
-                            "arrivalLocation": {
-                                "latitude": waypoint.lat,
-                                "longitude": waypoint.lng,
-                            },
-                            "duration": f"{max(1, waypoint.service_minutes) * 60}s",
-                        }
-                    ],
+                    "deliveries": [delivery],
                 }
             )
+
+        # F2 — CAPACITY-001: límite de carga del vehículo en gramos.
+        vehicle: dict = {
+            "label": "vehicle-0",
+            "startLocation": {
+                "latitude": request.depot_lat,
+                "longitude": request.depot_lng,
+            },
+            "endLocation": {
+                "latitude": request.depot_lat,
+                "longitude": request.depot_lng,
+            },
+        }
+        if request.vehicle_capacity_kg is not None:
+            vehicle["loadLimits"] = {
+                "weight_kg": {"maxLoad": str(round(request.vehicle_capacity_kg * 1000))}
+            }
+
+        # F4 — DOUBLE-TRIP-001: restricción de inicio para segundo viaje.
+        # startTimeWindows con solo startTime indica "no antes de este momento".
+        if request.trip_start_after is not None:
+            vehicle["startTimeWindows"] = [
+                {"startTime": _to_rfc3339_utc(request.trip_start_after)}
+            ]
 
         model = {
             "globalStartTime": _to_rfc3339_utc(global_start),
             "globalEndTime": _to_rfc3339_utc(global_end),
             "shipments": shipments,
-            "vehicles": [
-                {
-                    "label": "vehicle-0",
-                    "startLocation": {
-                        "latitude": request.depot_lat,
-                        "longitude": request.depot_lng,
-                    },
-                    "endLocation": {
-                        "latitude": request.depot_lat,
-                        "longitude": request.depot_lng,
-                    },
-                }
-            ],
+            "vehicles": [vehicle],
         }
         return {
             "label": str(request.route_id),

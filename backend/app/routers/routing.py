@@ -22,7 +22,7 @@ Idempotencia: todos los endpoints de Bloque D aceptan idempotency_key.
 """
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -35,6 +35,7 @@ from app.config import settings
 from app.db import get_db
 from app.deps import CurrentUser, require_roles
 from app.errors import conflict, forbidden, not_found, unprocessable
+from app.eta.calculator import calculate_eta, delay_minutes as eta_delay_minutes
 from app.realtime import event_bus
 from app.security import decode_token
 from app.optimization.google_provider import GoogleRouteOptimizationProvider
@@ -42,6 +43,7 @@ from app.optimization.mock_provider import MockRouteOptimizationProvider
 from app.optimization.protocol import OptimizationRequest, OptimizationWaypoint, RouteOptimizationProvider
 from app.models import (
     Customer,
+    CustomerOperationalProfile,
     Driver,
     DriverPosition,
     Incident,
@@ -56,6 +58,7 @@ from app.models import (
     RouteEvent,
     RouteEventActorType,
     RouteEventType,
+    RouteMessage,
     RouteStatus,
     RouteStop,
     RouteStopStatus,
@@ -65,12 +68,20 @@ from app.models import (
     Vehicle,
 )
 from app.schemas import (
+    DelayAlertOut,
     DriverLocationUpdateRequest,
     DriverPositionOut,
+    EtaStopResult,
     IncidentResolveRequest,
     IncidentCreateRequest,
     IncidentOut,
     IncidentsListResponse,
+    RecalculateEtaResponse,
+    AddStopRequest,
+    AddStopResponse,
+    RemoveStopResponse,
+    RouteMessageIn,
+    RouteMessageOut,
     RouteNextStopResponse,
     RouteEventsListResponse,
     RouteEventOut,
@@ -484,6 +495,15 @@ def plan_routes(
                     f"Pedido {order_uuid} en estado '{order.status.value}' no puede asignarse a ruta",
                 )
 
+        # F4 — DOUBLE-TRIP-001: trip_number opcional (1 o 2), default 1
+        trip_number_raw = route_input.get("trip_number", 1)
+        try:
+            trip_number = int(trip_number_raw)
+            if trip_number not in (1, 2):
+                raise ValueError
+        except (TypeError, ValueError):
+            raise unprocessable("INVALID_ROUTE", "trip_number debe ser 1 o 2")
+
         # Crear ruta en estado draft; la optimización aplica secuencia final
         # y transiciona la ruta a planned.
         route = Route(
@@ -495,6 +515,7 @@ def plan_routes(
             service_date=svc_date,
             status=RouteStatus.draft,
             version=next_version,
+            trip_number=trip_number,
             optimization_request_id=None,
             optimization_response_json=None,
             created_at=now,
@@ -698,12 +719,28 @@ def optimize_route(
             missing_geo.append(str(order.id))
             continue
 
+        # F1 — TW-001: leer ventana horaria del perfil operacional del cliente
+        profile = db.scalar(
+            select(CustomerOperationalProfile).where(
+                CustomerOperationalProfile.customer_id == customer.id,
+                CustomerOperationalProfile.tenant_id == current.tenant_id,
+            )
+        )
+
         waypoints.append(
             OptimizationWaypoint(
                 order_id=order.id,
                 lat=float(customer.lat),
                 lng=float(customer.lng),
                 service_minutes=stop.estimated_service_minutes,
+                window_start=profile.window_start if profile else None,
+                window_end=profile.window_end if profile else None,
+                # F2 — CAPACITY-001: peso del pedido para restricción de capacidad
+                weight_kg=float(order.total_weight_kg) if order.total_weight_kg else None,
+                # F5 — ADR-001: el pedido requiere vehículo ADR certificado
+                requires_adr=bool(order.requires_adr),
+                # F6 — ZBE-001: el cliente está en zona de bajas emisiones
+                requires_zbe=bool(customer.in_zbe_zone),
             )
         )
 
@@ -713,12 +750,86 @@ def optimize_route(
             f"Los siguientes pedidos tienen cliente sin coordenadas: {', '.join(missing_geo)}",
         )
 
+    # F2 — CAPACITY-001: capacidad del vehículo para restricción de carga
+    # F5 — ADR-001: certificación ADR del vehículo
+    vehicle = db.scalar(
+        select(Vehicle).where(Vehicle.id == route.vehicle_id, Vehicle.tenant_id == current.tenant_id)
+    )
+    vehicle_capacity_kg = float(vehicle.capacity_kg) if vehicle and vehicle.capacity_kg else None
+    vehicle_adr_certified = bool(vehicle.is_adr_certified) if vehicle else False
+    vehicle_zbe_allowed = bool(vehicle.is_zbe_allowed) if vehicle else False
+
+    # F5 — ADR-001: validación pre-optimización
+    adr_orders = [wp for wp in waypoints if wp.requires_adr]
+    if adr_orders and not vehicle_adr_certified:
+        raise unprocessable(
+            "ADR_VEHICLE_REQUIRED",
+            f"La ruta contiene {len(adr_orders)} pedido(s) con mercancías peligrosas "
+            "pero el vehículo asignado no tiene certificación ADR",
+        )
+
+    # F6 — ZBE-001: validación pre-optimización
+    zbe_stops = [wp for wp in waypoints if wp.requires_zbe]
+    if zbe_stops and not vehicle_zbe_allowed:
+        raise unprocessable(
+            "ZBE_VEHICLE_REQUIRED",
+            f"La ruta contiene {len(zbe_stops)} parada(s) en zona de bajas emisiones "
+            "pero el vehículo asignado no está autorizado para circular en ZBE",
+        )
+
+    # F4 — DOUBLE-TRIP-001: si es viaje 2, calcular fin esperado del viaje 1
+    trip_start_after: datetime | None = None
+    if route.trip_number == 2:
+        trip1 = db.scalar(
+            select(Route).where(
+                Route.tenant_id == current.tenant_id,
+                Route.vehicle_id == route.vehicle_id,
+                Route.service_date == route.service_date,
+                Route.trip_number == 1,
+                Route.status.in_([
+                    RouteStatus.planned, RouteStatus.dispatched,
+                    RouteStatus.in_progress, RouteStatus.completed,
+                ]),
+            )
+        )
+        if not trip1:
+            raise unprocessable(
+                "TRIP1_NOT_PLANNED",
+                "El viaje 1 del vehículo en esta fecha debe estar planificado antes de optimizar el viaje 2",
+            )
+        # Obtener paradas del viaje 1 con ETA para calcular fin esperado
+        trip1_stops = list(
+            db.scalars(
+                select(RouteStop).where(
+                    RouteStop.route_id == trip1.id,
+                    RouteStop.tenant_id == current.tenant_id,
+                    RouteStop.estimated_arrival_at.is_not(None),
+                ).order_by(RouteStop.sequence_number.desc())
+            )
+        )
+        if not trip1_stops:
+            raise unprocessable(
+                "TRIP1_NO_ETA",
+                "El viaje 1 no tiene ETAs calculadas; optimiza el viaje 1 primero",
+            )
+        last_stop = trip1_stops[0]
+        # Fin estimado = última ETA + tiempo de servicio + 30 min de buffer (vuelta a depósito + recarga)
+        trip_start_after = (
+            last_stop.estimated_arrival_at
+            + timedelta(minutes=last_stop.estimated_service_minutes)
+            + timedelta(minutes=30)
+        )
+
     request = OptimizationRequest(
         route_id=route.id,
         depot_lat=settings.route_optimization_depot_lat,
         depot_lng=settings.route_optimization_depot_lng,
         service_date=route.service_date,
         waypoints=waypoints,
+        vehicle_capacity_kg=vehicle_capacity_kg,
+        trip_start_after=trip_start_after,
+        vehicle_adr_certified=vehicle_adr_certified,
+        vehicle_zbe_allowed=vehicle_zbe_allowed,
     )
     provider = _get_optimization_provider()
     try:
@@ -815,8 +926,8 @@ def move_stop(
     )
     if not source_route:
         raise not_found("ENTITY_NOT_FOUND", "Ruta origen no encontrada")
-    if source_route.status not in (RouteStatus.planned, RouteStatus.dispatched):
-        raise unprocessable("INVALID_STATE_TRANSITION", "Solo se pueden mover paradas de rutas en estado planned o dispatched")
+    if source_route.status not in (RouteStatus.planned, RouteStatus.dispatched, RouteStatus.in_progress):
+        raise unprocessable("INVALID_STATE_TRANSITION", "Solo se pueden mover paradas de rutas en estado planned, dispatched o in_progress")
 
     # Verificar parada existe en ruta origen
     stop = db.scalar(
@@ -837,8 +948,8 @@ def move_stop(
     )
     if not target_route:
         raise not_found("ENTITY_NOT_FOUND", "Ruta destino no encontrada")
-    if target_route.status not in (RouteStatus.planned, RouteStatus.dispatched):
-        raise unprocessable("INVALID_STATE_TRANSITION", "Solo se pueden añadir paradas a rutas en estado planned o dispatched")
+    if target_route.status not in (RouteStatus.planned, RouteStatus.dispatched, RouteStatus.in_progress):
+        raise unprocessable("INVALID_STATE_TRANSITION", "Solo se pueden añadir paradas a rutas en estado planned, dispatched o in_progress")
 
     # Verificar que el pedido no está ya en la ruta destino
     existing_in_target = db.scalar(
@@ -2295,4 +2406,539 @@ async def route_stream(
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",  # Nginx: desactivar buffering para SSE
         },
+    )
+
+
+# ============================================================================
+# POST /routes/{route_id}/recalculate-eta  (B2 — ETA-001)
+# ============================================================================
+
+_DELAY_ALERT_THRESHOLD_MINUTES = 15.0
+
+
+@router.post("/routes/{route_id}/recalculate-eta", response_model=RecalculateEtaResponse)
+def recalculate_eta(
+    route_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+) -> RecalculateEtaResponse:
+    """
+    Recalcula la ETA de las paradas pendientes/en_route basándose en la
+    posición actual del conductor. Actualiza recalculated_eta_at en cada parada.
+    Si el retraso supera 15 min sobre la ETA original → crea evento delay_alert.
+    Emite SSE eta_updated con el resumen.
+
+    Requiere que el conductor haya publicado al menos una posición GPS.
+    """
+    now = datetime.now(UTC)
+
+    route = db.scalar(
+        select(Route).where(Route.id == route_id, Route.tenant_id == current.tenant_id)
+    )
+    if not route:
+        raise not_found("ROUTE_NOT_FOUND", "Ruta no encontrada")
+
+    if route.status not in (RouteStatus.dispatched, RouteStatus.in_progress):
+        raise conflict(
+            "ROUTE_NOT_ACTIVE",
+            f"Solo se puede recalcular ETA en rutas activas. Estado actual: {route.status.value}",
+        )
+
+    # --- Posición actual del conductor ---
+    driver_pos = db.scalar(
+        select(DriverPosition)
+        .where(
+            DriverPosition.tenant_id == current.tenant_id,
+            DriverPosition.route_id == route_id,
+        )
+        .order_by(DriverPosition.recorded_at.desc())
+    )
+    if driver_pos is None:
+        raise not_found(
+            "DRIVER_POSITION_NOT_FOUND",
+            "El conductor aún no ha publicado su posición GPS. "
+            "La app del conductor debe estar activa con la ruta en curso.",
+        )
+
+    driver_lat = float(driver_pos.lat)
+    driver_lng = float(driver_pos.lng)
+
+    # --- Paradas pendientes/en_route con geo del cliente ---
+    pending_statuses = (RouteStopStatus.pending, RouteStopStatus.en_route)
+    stops = list(
+        db.scalars(
+            select(RouteStop)
+            .where(
+                RouteStop.tenant_id == current.tenant_id,
+                RouteStop.route_id == route_id,
+                RouteStop.status.in_(pending_statuses),
+            )
+            .order_by(RouteStop.sequence_number)
+        )
+    )
+
+    if not stops:
+        return RecalculateEtaResponse(
+            route_id=route_id,
+            stops_updated=0,
+            delay_alerts_created=0,
+            results=[],
+        )
+
+    geo_by_order_id = _load_customer_geo_by_order_id(
+        db,
+        tenant_id=current.tenant_id,
+        order_ids=[s.order_id for s in stops],
+    )
+
+    results: list[EtaStopResult] = []
+    delay_alerts_created = 0
+    reference_time = now
+
+    for stop in stops:
+        lat, lng = geo_by_order_id.get(stop.order_id, (None, None))
+        if lat is None or lng is None:
+            # Sin geo → no podemos calcular; saltamos sin error
+            continue
+
+        new_eta = calculate_eta(
+            current_lat=driver_lat,
+            current_lng=driver_lng,
+            stop_lat=lat,
+            stop_lng=lng,
+            reference_time=reference_time,
+        )
+
+        original_eta = stop.estimated_arrival_at
+        delay_mins = eta_delay_minutes(original_eta, new_eta) if original_eta else 0.0
+        is_delay = original_eta is not None and delay_mins >= _DELAY_ALERT_THRESHOLD_MINUTES
+
+        # Actualizar recalculated_eta_at
+        stop.recalculated_eta_at = new_eta
+        stop.updated_at = now
+
+        if is_delay:
+            _emit_event(
+                db,
+                tenant_id=current.tenant_id,
+                route_id=route_id,
+                route_stop_id=stop.id,
+                event_type=RouteEventType.delay_alert,
+                actor_type=RouteEventActorType.system,
+                actor_id=None,
+                metadata={
+                    "stop_id": str(stop.id),
+                    "sequence_number": stop.sequence_number,
+                    "original_eta": original_eta.isoformat() if original_eta else None,
+                    "recalculated_eta": new_eta.isoformat(),
+                    "delay_minutes": round(delay_mins, 1),
+                },
+            )
+            delay_alerts_created += 1
+
+        results.append(
+            EtaStopResult(
+                stop_id=stop.id,
+                sequence_number=stop.sequence_number,
+                original_eta=original_eta,
+                recalculated_eta=new_eta,
+                delay_minutes=round(delay_mins, 1),
+                delay_alert=is_delay,
+            )
+        )
+
+        # Avanzar reference_time para calcular cadena de ETAs secuencialmente
+        reference_time = new_eta + timedelta(minutes=stop.estimated_service_minutes)
+
+    db.commit()
+
+    # Emitir SSE
+    event_bus.publish(
+        str(current.tenant_id),
+        str(route_id),
+        "eta_updated",
+        {
+            "route_id": str(route_id),
+            "stops_updated": len(results),
+            "delay_alerts": delay_alerts_created,
+        },
+    )
+
+    return RecalculateEtaResponse(
+        route_id=route_id,
+        stops_updated=len(results),
+        delay_alerts_created=delay_alerts_created,
+        results=results,
+    )
+
+
+# ============================================================================
+# GET /routes/{route_id}/delay-alerts  (B2 — ETA-001)
+# ============================================================================
+
+
+@router.get("/routes/{route_id}/delay-alerts", response_model=list[DelayAlertOut])
+def get_delay_alerts(
+    route_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+) -> list[DelayAlertOut]:
+    """Lista todos los eventos delay_alert de una ruta, ordenados por timestamp desc."""
+    route = db.scalar(
+        select(Route).where(Route.id == route_id, Route.tenant_id == current.tenant_id)
+    )
+    if not route:
+        raise not_found("ROUTE_NOT_FOUND", "Ruta no encontrada")
+
+    events = list(
+        db.scalars(
+            select(RouteEvent)
+            .where(
+                RouteEvent.tenant_id == current.tenant_id,
+                RouteEvent.route_id == route_id,
+                RouteEvent.event_type == RouteEventType.delay_alert,
+            )
+            .order_by(RouteEvent.ts.desc())
+        )
+    )
+
+    return [
+        DelayAlertOut(
+            event_id=ev.id,
+            route_id=ev.route_id,
+            stop_id=ev.route_stop_id,
+            original_eta=datetime.fromisoformat(ev.metadata_json["original_eta"])
+            if ev.metadata_json.get("original_eta")
+            else None,
+            recalculated_eta=datetime.fromisoformat(ev.metadata_json["recalculated_eta"])
+            if ev.metadata_json.get("recalculated_eta")
+            else None,
+            delay_minutes=ev.metadata_json.get("delay_minutes"),
+            ts=ev.ts,
+        )
+        for ev in events
+    ]
+
+
+# ============================================================================
+# BLOQUE B4 — LIVE-EDIT-001: edición de ruta en vivo
+# ============================================================================
+
+_LIVE_EDIT_ROUTE_STATUSES = (
+    RouteStatus.planned,
+    RouteStatus.dispatched,
+    RouteStatus.in_progress,
+)
+
+
+@router.post(
+    "/routes/{route_id}/add-stop",
+    response_model=AddStopResponse,
+    status_code=201,
+    summary="Añadir un pedido a una ruta en vivo",
+)
+def add_stop(
+    route_id: uuid.UUID,
+    payload: AddStopRequest,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+) -> AddStopResponse:
+    """
+    Añade un pedido a una ruta ya planificada, despachada o en curso.
+
+    El pedido debe existir en el mismo tenant y tener un cliente con coordenadas.
+    Si el pedido ya tiene una parada activa en otra ruta → 409 RESOURCE_CONFLICT.
+    """
+    route = db.scalar(
+        select(Route).where(Route.id == route_id, Route.tenant_id == current.tenant_id)
+    )
+    if not route:
+        raise not_found("ROUTE_NOT_FOUND", "Ruta no encontrada")
+    if route.status not in _LIVE_EDIT_ROUTE_STATUSES:
+        raise unprocessable(
+            "INVALID_STATE_TRANSITION",
+            f"Solo se pueden añadir paradas a rutas en estado planned, dispatched o in_progress. Estado actual: '{route.status.value}'",
+        )
+
+    order = db.scalar(
+        select(Order).where(Order.id == payload.order_id, Order.tenant_id == current.tenant_id)
+    )
+    if not order:
+        raise not_found("ORDER_NOT_FOUND", "Pedido no encontrado")
+
+    # Verificar que el pedido no está ya en otra ruta activa
+    existing_stop = db.scalar(
+        select(RouteStop).where(
+            RouteStop.order_id == payload.order_id,
+            RouteStop.tenant_id == current.tenant_id,
+            RouteStop.status == RouteStopStatus.pending,
+        )
+    )
+    if existing_stop:
+        raise conflict(
+            "RESOURCE_CONFLICT",
+            "El pedido ya tiene una parada activa en una ruta",
+        )
+
+    # Calcular siguiente sequence_number
+    max_seq = db.scalar(
+        select(RouteStop.sequence_number)
+        .where(RouteStop.route_id == route_id, RouteStop.tenant_id == current.tenant_id)
+        .order_by(RouteStop.sequence_number.desc())
+        .limit(1)
+    )
+    new_seq = (max_seq or 0) + 1
+
+    now = datetime.now(UTC)
+    new_stop = RouteStop(
+        id=uuid.uuid4(),
+        tenant_id=current.tenant_id,
+        route_id=route_id,
+        order_id=payload.order_id,
+        sequence_number=new_seq,
+        estimated_arrival_at=None,
+        estimated_service_minutes=10,
+        status=RouteStopStatus.pending,
+        arrived_at=None,
+        completed_at=None,
+        failed_at=None,
+        failure_reason=None,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(new_stop)
+    db.flush()
+
+    _emit_event(
+        db,
+        tenant_id=current.tenant_id,
+        route_id=route_id,
+        route_stop_id=new_stop.id,
+        event_type=RouteEventType.stop_en_route,
+        actor_type=RouteEventActorType.dispatcher,
+        actor_id=current.id,
+        metadata={
+            "order_id": str(payload.order_id),
+            "sequence_number": new_seq,
+            "action": "live_add_stop",
+        },
+    )
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise conflict("RESOURCE_CONFLICT", "No se pudo añadir la parada") from exc
+
+    # SSE: notificar suscriptores
+    event_bus.publish(
+        str(current.tenant_id),
+        str(route_id),
+        "stop_added",
+        {
+            "stop_id": str(new_stop.id),
+            "order_id": str(payload.order_id),
+            "sequence_number": new_seq,
+        },
+    )
+
+    return AddStopResponse(
+        order_id=payload.order_id,
+        route_id=route_id,
+        stop_id=new_stop.id,
+        sequence_number=new_seq,
+    )
+
+
+@router.post(
+    "/routes/{route_id}/stops/{stop_id}/remove",
+    response_model=RemoveStopResponse,
+    summary="Eliminar una parada pendiente de una ruta en vivo",
+)
+def remove_stop(
+    route_id: uuid.UUID,
+    stop_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+) -> RemoveStopResponse:
+    """
+    Elimina una parada pendiente de una ruta activa.
+
+    Solo se pueden eliminar paradas en estado 'pending'.
+    La ruta puede estar en cualquier estado activo (planned, dispatched, in_progress).
+    """
+    route = db.scalar(
+        select(Route).where(Route.id == route_id, Route.tenant_id == current.tenant_id)
+    )
+    if not route:
+        raise not_found("ROUTE_NOT_FOUND", "Ruta no encontrada")
+    if route.status not in _LIVE_EDIT_ROUTE_STATUSES:
+        raise unprocessable(
+            "INVALID_STATE_TRANSITION",
+            f"Solo se pueden eliminar paradas de rutas activas. Estado actual: '{route.status.value}'",
+        )
+
+    stop = db.scalar(
+        select(RouteStop).where(
+            RouteStop.id == stop_id,
+            RouteStop.route_id == route_id,
+            RouteStop.tenant_id == current.tenant_id,
+        )
+    )
+    if not stop:
+        raise not_found("STOP_NOT_FOUND", "Parada no encontrada en esta ruta")
+    if stop.status != RouteStopStatus.pending:
+        raise unprocessable(
+            "INVALID_STATE_TRANSITION",
+            f"Solo se pueden eliminar paradas en estado 'pending'. Estado actual: '{stop.status.value}'",
+        )
+
+    order_id = stop.order_id
+    removed_stop_id = stop.id
+
+    # route_stop_id=None para evitar que la FK CASCADE intente borrar el evento
+    # al eliminar la parada (route_events es append-only — trigger bloquea DELETEs)
+    _emit_event(
+        db,
+        tenant_id=current.tenant_id,
+        route_id=route_id,
+        route_stop_id=None,
+        event_type=RouteEventType.stop_skipped,
+        actor_type=RouteEventActorType.dispatcher,
+        actor_id=current.id,
+        metadata={
+            "order_id": str(order_id),
+            "stop_id": str(removed_stop_id),
+            "action": "live_remove_stop",
+            "sequence_number": stop.sequence_number,
+        },
+    )
+
+    db.delete(stop)
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise conflict("RESOURCE_CONFLICT", "No se pudo eliminar la parada") from exc
+
+    # SSE: notificar suscriptores
+    event_bus.publish(
+        str(current.tenant_id),
+        str(route_id),
+        "stop_removed",
+        {
+            "stop_id": str(removed_stop_id),
+            "order_id": str(order_id),
+        },
+    )
+
+    return RemoveStopResponse(
+        order_id=order_id,
+        route_id=route_id,
+        removed_stop_id=removed_stop_id,
+    )
+
+
+# ============================================================================
+# BLOQUE B3 — CHAT-001: mensajes internos dispatcher ↔ conductor
+# ============================================================================
+
+_CHAT_ROLES = {UserRole.logistics, UserRole.admin, UserRole.driver}
+
+
+@router.post(
+    "/routes/{route_id}/messages",
+    response_model=RouteMessageOut,
+    status_code=201,
+    summary="Enviar mensaje de chat en una ruta",
+)
+def send_route_message(
+    route_id: uuid.UUID,
+    body: RouteMessageIn,
+    db: Session = Depends(get_db),
+    current: User = Depends(require_roles(UserRole.logistics, UserRole.admin, UserRole.driver)),
+) -> RouteMessage:
+    """
+    Envía un mensaje al hilo de chat de la ruta.
+
+    Accesible por logistics, admin y driver.
+    El autor queda registrado con su user_id y role.
+    Emite evento SSE chat_message a todos los suscriptores activos de la ruta.
+    """
+    route = db.scalar(
+        select(Route).where(Route.id == route_id, Route.tenant_id == current.tenant_id)
+    )
+    if not route:
+        raise not_found("ROUTE_NOT_FOUND", "Ruta no encontrada")
+
+    # Determinar author_role legible
+    role_map = {
+        UserRole.logistics: "dispatcher",
+        UserRole.admin: "dispatcher",
+        UserRole.driver: "driver",
+    }
+    author_role = role_map.get(current.role, current.role)
+
+    now = datetime.now(UTC)
+    msg = RouteMessage(
+        id=uuid.uuid4(),
+        tenant_id=current.tenant_id,
+        route_id=route_id,
+        author_user_id=current.id,
+        author_role=author_role,
+        body=body.body,
+        created_at=now,
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+
+    # SSE: notificar suscriptores activos de la ruta (REALTIME-001 / CHAT-001)
+    event_bus.publish(
+        str(current.tenant_id),
+        str(route_id),
+        "chat_message",
+        {
+            "message_id": str(msg.id),
+            "author_user_id": str(msg.author_user_id),
+            "author_role": msg.author_role,
+            "body": msg.body,
+            "created_at": msg.created_at.isoformat(),
+        },
+    )
+
+    return msg
+
+
+@router.get(
+    "/routes/{route_id}/messages",
+    response_model=list[RouteMessageOut],
+    summary="Historial de mensajes de chat de una ruta",
+)
+def list_route_messages(
+    route_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current: User = Depends(require_roles(UserRole.logistics, UserRole.admin, UserRole.driver)),
+) -> list[RouteMessage]:
+    """
+    Devuelve todos los mensajes del hilo de chat de la ruta, ordenados cronológicamente.
+
+    Accesible por logistics, admin y driver asignado.
+    """
+    route = db.scalar(
+        select(Route).where(Route.id == route_id, Route.tenant_id == current.tenant_id)
+    )
+    if not route:
+        raise not_found("ROUTE_NOT_FOUND", "Ruta no encontrada")
+
+    return list(
+        db.scalars(
+            select(RouteMessage)
+            .where(
+                RouteMessage.tenant_id == current.tenant_id,
+                RouteMessage.route_id == route_id,
+            )
+            .order_by(RouteMessage.created_at.asc())
+        )
     )

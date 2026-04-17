@@ -2615,6 +2615,19 @@ components:
           type: string
           format: date-time
 
+    ErrorDetail:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+
     OrderIngestionInput:
       type: object
       required: [customer_id, external_ref, service_date, created_at, lines]

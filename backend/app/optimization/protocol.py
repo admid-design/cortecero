@@ -15,7 +15,7 @@ Proveedores previstos en E.2:
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Protocol
 
 
@@ -27,6 +27,17 @@ class OptimizationWaypoint:
     lat: float
     lng: float
     service_minutes: int = 10
+    # F1 — TW-001: ventana horaria de entrega del cliente (time en hora local UTC).
+    # Si ambos son None, no se envía restricción de ventana al proveedor.
+    window_start: time | None = None
+    window_end: time | None = None
+    # F2 — CAPACITY-001: peso del pedido en kg.
+    # Si None, no se envía demanda de carga al proveedor.
+    weight_kg: float | None = None
+    # F5 — ADR-001: el pedido contiene mercancías peligrosas.
+    requires_adr: bool = False
+    # F6 — ZBE-001: el cliente está en zona de bajas emisiones (requiere vehículo ZBE autorizado).
+    requires_zbe: bool = False
 
 
 @dataclass
@@ -44,6 +55,16 @@ class OptimizationRequest:
     depot_lng: float
     service_date: date | None = None
     waypoints: list[OptimizationWaypoint] = field(default_factory=list)
+    # F2 — CAPACITY-001: capacidad máxima del vehículo en kg.
+    # Si None, no se envía restricción de carga al proveedor.
+    vehicle_capacity_kg: float | None = None
+    # F4 — DOUBLE-TRIP-001: momento mínimo de inicio del vehículo (para viaje 2).
+    # Si None, el vehículo puede arrancar en cualquier momento dentro del globalStartTime.
+    trip_start_after: datetime | None = None
+    # F5 — ADR-001: el vehículo está certificado para mercancías peligrosas.
+    vehicle_adr_certified: bool = False
+    # F6 — ZBE-001: el vehículo está autorizado para circular por zona de bajas emisiones.
+    vehicle_zbe_allowed: bool = False
 
 
 @dataclass
