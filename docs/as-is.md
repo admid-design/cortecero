@@ -119,14 +119,15 @@
 - Script: `backend/scripts/smoke_google_optimization.py`
 - Modos: `SMOKE_LIST_ROUTES`, `SMOKE_CREATE_ROUTE`, `CORTECERO_ROUTE_ID`
 - Dataset helper: `backend/scripts/prepare_google_smoke_dataset.py`
-- Estado actual: **BLOQUEADO por dataset** — tenant demo no tiene órdenes geo-ready suficientes
-- Fix de timestamps (nanos) aplicado en `f370e81` pero no smoke con evidencia 200 aún
+- Estado actual: **CERRADO_CON_EVIDENCIA_LOCAL** — smoke HTTP 200 real ejecutado con Google Route Optimization API
+- Evidence: `docs/evidence/DEMO-OPT-001.json` — 2 paradas, ETAs reales (seq1=13:49Z, seq2=14:08Z), totalDuration=2693s, provider=google
+- Fix timestamps (nanos): `59bd16d`. Seed geo Mallorca: `641c73a`. Cierre: `3e39b16`.
 
 ### Test suite
 
-- Backend: `pytest` en Docker — **183 tests en verde** (commit `62cdb79`, HEAD local)
+- Backend: `pytest` en Docker — **283 tests en verde** (commit `3e5980d`, CI verde en `main`)
 - Frontend: `npm test` — CI verde en `main`
-- `test_routing_bloque_e.py` tiene 5 tests que requieren `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID` — excluidos de CI estándar (bloque `DEMO-OPT-001` pendiente)
+- `test_routing_bloque_e.py` tiene 5 tests que requieren `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID` — excluidos de CI estándar (DEMO-OPT-001 cerrado con evidencia local)
 - Nuevos archivos de test en HEAD: `test_routing_gps_a3.py` (GPS-001), `test_routing_proof_a2.py` (POD-001)
 
 ---

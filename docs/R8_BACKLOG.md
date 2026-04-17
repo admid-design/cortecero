@@ -9,13 +9,13 @@
 
 | ID | Bloque | Estado | Tests | Commit |
 |----|--------|--------|-------|--------|
-| R8-A-GPS | GPS-001 backend — `POST /driver/location`, `GET /routes/{id}/driver-position`, `GET /driver/active-positions` | VERIFICADO LOCAL | test_routing_gps_a3.py (✓) | `62cdb79` |
-| R8-A-POD | POD-001 backend — `POST /stops/{id}/proof`, `GET /stops/{id}/proof`, migration stop_proofs | VERIFICADO LOCAL | test_routing_proof_a2.py (✓) | `62cdb79` |
-| R8-A-MAP-BE | MAP-001 backend — `route_geometry` derivada de `optimization_response_json` | VERIFICADO LOCAL | test_map_geom_001.py (✓) | salvage |
+| R8-A-GPS | GPS-001 backend — `POST /driver/location`, `GET /routes/{id}/driver-position`, `GET /driver/active-positions` | VERIFICADO LOCAL | test_routing_gps_a3.py (✓) | `d1e0ff8` (fix `62cdb79`) |
+| R8-A-POD | POD-001 backend — `POST /stops/{id}/proof`, `GET /stops/{id}/proof`, migration stop_proofs | VERIFICADO LOCAL | test_routing_proof_a2.py (✓) | `d1e0ff8` (fix `62cdb79`) |
+| R8-A-MAP-BE | MAP-001 backend — `route_geometry` derivada de `optimization_response_json` | VERIFICADO LOCAL | test_map_geom_001.py (✓) | `a8b9a0d` |
 | R8-A-MAP-FE | MAP-001 frontend — `RouteMapCard.tsx` con Google Maps JS API, marcadores por estado, marcador conductor (polling 30s) | VERIFICADO LOCAL | evidence en browser con API key | `62cdb79` |
 | R8-A-GPS-FE | GPS-001 frontend — hook `useGpsTracking` publica posición durante `in_progress` | VERIFICADO LOCAL | incluido en DriverRoutingCard | `62cdb79` |
 | R8-A-POD-FE | POD-001 frontend — modal firma canvas en `DriverRoutingCard` | VERIFICADO LOCAL | incluido en DriverRoutingCard | `62cdb79` |
-| R8-E2 | DEMO-OPT-001 — Google Route Optimization smoke 200 real | CERRADO_CON_EVIDENCIA_LOCAL | — | `59bd16d` |
+| R8-E2 | DEMO-OPT-001 — Google Route Optimization smoke 200 real | CERRADO_CON_EVIDENCIA_LOCAL | — | `3e39b16` (fix `59bd16d`) |
 | R8-FLEET | FLEET-VIEW-001 — panel OpsMapDashboard con marcadores de flota | VERIFICADO LOCAL | build frontend limpio | `777a4d0` |
 | R8-B1 | REALTIME-001 — SSE backend (`GET /routes/{id}/stream`), RouteEventBus, hooks en transiciones | VERIFICADO LOCAL | test_realtime_b1.py (7/7 ✓) | `8f35c01` |
 | R8-B2 | ETA-001 — `POST /routes/{id}/recalculate-eta`, `GET /routes/{id}/delay-alerts`, haversine calculator, migration 022 | VERIFICADO LOCAL | test_eta_b2.py (15/15 ✓) | `3e5980d` |
@@ -27,24 +27,16 @@
 | R8-F4 | DOUBLE-TRIP-001 — `Route.trip_number` + `startTimeWindows` para viaje 2, migration 023 | VERIFICADO LOCAL | test_double_trip_f4.py (8/8 ✓) | `3e5980d` |
 | R8-F5 | ADR-001 — `Vehicle.is_adr_certified` + `Order.requires_adr` + validación pre-optimize, migration 024 | VERIFICADO LOCAL | test_adr_f5.py (8/8 ✓) | `3e5980d` |
 | R8-F6 | ZBE-001 — `Customer.in_zbe_zone` + `Vehicle.is_zbe_allowed` + validación pre-optimize, migration 025 | VERIFICADO LOCAL | test_zbe_f6.py (8/8 ✓) | `3e5980d` |
+| R8-SMOKE | Dataset geo-ready + smoke Google Route Optimization 200 real | CERRADO_CON_EVIDENCIA_LOCAL | — | `3e39b16` |
 
 ---
 
 ## Pendiente activo
 
-### R8-SMOKE — Google smoke dataset
-- **Objetivo**: Preparar órdenes geo-ready en tenant demo y ejecutar smoke Google real para evidence DEMO-OPT-001 reproducible
-- **Comando**:
-  ```bash
-  python3 backend/scripts/prepare_google_smoke_dataset.py
-  SMOKE_LIST_ROUTES=1 python3 backend/scripts/smoke_google_optimization.py
-  CORTECERO_ROUTE_ID=<uuid> \
-    GOOGLE_APPLICATION_CREDENTIALS=~/.config/kelko/google/route-optimization-sa.json \
-    GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID=samurai-system \
-    python3 backend/scripts/smoke_google_optimization.py
-  ```
-- **Bloqueado por**: CI verde en `3e5980d`
-- **Cierre**: evidence JSON en `docs/evidence/`
+### ~~R8-SMOKE — Google smoke dataset~~ — CERRADO_CON_EVIDENCIA_LOCAL
+- Evidence en `docs/evidence/DEMO-OPT-001.json` — HTTP 200, provider=google, 2 paradas, ETAs reales
+- Smoke reproducible con `CORTECERO_ROUTE_ID` + `GOOGLE_APPLICATION_CREDENTIALS` + `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID=samurai-system`
+- Commits: `59bd16d` (fix timestamps/skippedShipments) + `3e39b16` (cierre documentado) + `641c73a` (seed geo Mallorca)
 
 ### R8-SSE-FE — SSE frontend
 - **Objetivo**: Conectar `GET /routes/{id}/stream` en frontend para reemplazar polling 30s en `RouteMapCard` y `DriverRoutingCard`
