@@ -2,6 +2,13 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  APIError,
+  formatError,
+  createStopProof,
+  getProofUploadUrl,
+  confirmProofPhoto,
+} from "../lib/api";
 import type {
   IncidentCreateRequest,
   IncidentSeverity,
@@ -351,17 +358,43 @@ function StopDetail({
   );
 }
 
-// ── Signature Modal (A2 — POD-001) ──────────────────────────────────────────
+// ── Proof Modal (R8-POD-FOTO-UI) — evolución de SignatureModal ───────────────
 
-type SignatureModalProps = {
+type ProofTab = "signature" | "photo";
+type PhotoFlowState = "idle" | "creating_proof" | "uploading" | "confirming" | "error";
+
+const PHOTO_STATE_LABELS: Record<PhotoFlowState, string> = {
+  idle: "Subir foto",
+  creating_proof: "Creando registro…",
+  uploading: "Subiendo foto…",
+  confirming: "Confirmando…",
+  error: "Reintentar",
+};
+
+export type ProofModalProps = {
   stopId: string;
-  loading: boolean;
-  onConfirm: (stopId: string, signatureDataUrl: string, signedBy: string) => void;
-  onSkipSignature: (stopId: string) => void;
+  token: string | null;
+  apiBaseUrl: string;
+  proofLoading: boolean;
+  /** Pestaña inicial — útil para tests. Por defecto "signature". */
+  defaultTab?: ProofTab;
+  onConfirmSignature: (stopId: string, signatureDataUrl: string, signedBy: string) => void;
+  onComplete: (stopId: string) => void;
   onCancel: () => void;
 };
 
-function SignatureModal({ stopId, loading, onConfirm, onSkipSignature, onCancel }: SignatureModalProps) {
+export function ProofModal({
+  stopId,
+  token,
+  proofLoading,
+  defaultTab = "signature",
+  onConfirmSignature,
+  onComplete,
+  onCancel,
+}: ProofModalProps) {
+  const [activeTab, setActiveTab] = useState<ProofTab>(defaultTab);
+
+  // ── Signature state ──────────────────────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSig, setHasSig] = useState(false);
@@ -375,7 +408,6 @@ function SignatureModal({ stopId, loading, onConfirm, onSkipSignature, onCancel 
     }
     return { x: (e as React.MouseEvent).clientX - rect.left, y: (e as React.MouseEvent).clientY - rect.top };
   }
-
   function startDraw(e: React.TouchEvent | React.MouseEvent) {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -383,7 +415,6 @@ function SignatureModal({ stopId, loading, onConfirm, onSkipSignature, onCancel 
     setIsDrawing(true);
     lastPos.current = getPos(e, canvas);
   }
-
   function draw(e: React.TouchEvent | React.MouseEvent) {
     if (!isDrawing) return;
     const canvas = canvasRef.current;
@@ -402,12 +433,7 @@ function SignatureModal({ stopId, loading, onConfirm, onSkipSignature, onCancel 
     lastPos.current = pos;
     setHasSig(true);
   }
-
-  function stopDraw() {
-    setIsDrawing(false);
-    lastPos.current = null;
-  }
-
+  function stopDraw() { setIsDrawing(false); lastPos.current = null; }
   function clearCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -415,84 +441,258 @@ function SignatureModal({ stopId, loading, onConfirm, onSkipSignature, onCancel 
     ctx?.clearRect(0, 0, canvas.width, canvas.height);
     setHasSig(false);
   }
-
-  function handleConfirm() {
+  function handleConfirmSignature() {
     const canvas = canvasRef.current;
     if (!canvas || !hasSig) return;
-    const dataUrl = canvas.toDataURL("image/png");
-    onConfirm(stopId, dataUrl, signedBy.trim());
+    onConfirmSignature(stopId, canvas.toDataURL("image/png"), signedBy.trim());
+  }
+
+  // ── Photo state ──────────────────────────────────────────────────────────
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [photoState, setPhotoState] = useState<PhotoFlowState>("idle");
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
+  const photoAvailable = !!token;
+  const photoInProgress = photoState !== "idle" && photoState !== "error";
+
+  async function handlePhotoUpload() {
+    if (!selectedFile || !token) return;
+    setPhotoError(null);
+
+    // Step 1 — create proof (photo-only); 409 = proof already exists → continue
+    setPhotoState("creating_proof");
+    try {
+      await createStopProof(token, stopId, { proof_type: "photo" });
+    } catch (err) {
+      if (!(err instanceof APIError && err.status === 409)) {
+        setPhotoState("error");
+        setPhotoError(`Error al crear registro: ${formatError(err)}`);
+        return;
+      }
+    }
+
+    // Step 2 — get presigned upload URL
+    let uploadUrl: string;
+    let objectKey: string;
+    try {
+      const urlData = await getProofUploadUrl(token, stopId);
+      uploadUrl = urlData.upload_url;
+      objectKey = urlData.object_key;
+    } catch (err) {
+      setPhotoState("error");
+      setPhotoError(`Error al obtener URL de subida: ${formatError(err)}`);
+      return;
+    }
+
+    // Step 3 — compress + PUT directly to R2 (no Authorization header)
+    setPhotoState("uploading");
+    let blob: Blob;
+    try {
+      blob = await compressImage(selectedFile);
+    } catch {
+      blob = selectedFile;
+    }
+    try {
+      const res = await fetch(uploadUrl, {
+        method: "PUT",
+        body: blob,
+        headers: { "Content-Type": "image/jpeg" },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      setPhotoState("error");
+      setPhotoError(`Error al subir foto: ${formatError(err)}`);
+      return;
+    }
+
+    // Step 4 — confirm photo_url in backend
+    setPhotoState("confirming");
+    try {
+      await confirmProofPhoto(token, stopId, objectKey);
+    } catch (err) {
+      setPhotoState("error");
+      setPhotoError(`Error al confirmar foto: ${formatError(err)}`);
+      return;
+    }
+
+    // Step 5 — done
+    setPhotoState("idle");
+    onComplete(stopId);
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl">
-        <h3 className="mb-1 text-base font-semibold text-gray-900">Firma del receptor</h3>
-        <p className="mb-3 text-xs text-gray-500">Pide al cliente que firme en el recuadro</p>
+        <h3 className="mb-3 text-base font-semibold text-gray-900">Prueba de entrega</h3>
 
-        {/* Canvas de firma */}
-        <div className="mb-3 overflow-hidden rounded-lg border-2 border-dashed border-gray-300 bg-gray-50">
-          <canvas
-            ref={canvasRef}
-            width={320}
-            height={150}
-            className="block w-full touch-none"
-            style={{ cursor: "crosshair" }}
-            onMouseDown={startDraw}
-            onMouseMove={draw}
-            onMouseUp={stopDraw}
-            onMouseLeave={stopDraw}
-            onTouchStart={startDraw}
-            onTouchMove={draw}
-            onTouchEnd={stopDraw}
-          />
+        {/* Tab bar */}
+        <div className="mb-4 flex overflow-hidden rounded-lg border border-gray-200">
+          <button
+            className={`flex-1 py-2 text-sm font-medium transition-colors ${
+              activeTab === "signature"
+                ? "bg-gray-900 text-white"
+                : "bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+            onClick={() => setActiveTab("signature")}
+          >
+            Firma
+          </button>
+          <button
+            className={`flex-1 py-2 text-sm font-medium transition-colors ${
+              activeTab === "photo"
+                ? "bg-gray-900 text-white"
+                : "bg-white text-gray-600 hover:bg-gray-50"
+            } disabled:cursor-not-allowed disabled:opacity-40`}
+            onClick={() => setActiveTab("photo")}
+            disabled={!photoAvailable}
+            title={!photoAvailable ? "Sin token de sesión — foto no disponible" : undefined}
+          >
+            Foto{!photoAvailable ? " (sin conexión)" : ""}
+          </button>
         </div>
 
-        {hasSig && (
-          <button
-            className="mb-3 text-xs text-gray-400 underline"
-            onClick={clearCanvas}
-          >
-            Borrar firma
-          </button>
+        {/* ── Signature tab ─────────────────────────────────────────────── */}
+        {activeTab === "signature" && (
+          <>
+            <p className="mb-3 text-xs text-gray-500">Pide al cliente que firme en el recuadro</p>
+            <div className="mb-3 overflow-hidden rounded-lg border-2 border-dashed border-gray-300 bg-gray-50">
+              <canvas
+                ref={canvasRef}
+                width={320}
+                height={150}
+                className="block w-full touch-none"
+                style={{ cursor: "crosshair" }}
+                onMouseDown={startDraw}
+                onMouseMove={draw}
+                onMouseUp={stopDraw}
+                onMouseLeave={stopDraw}
+                onTouchStart={startDraw}
+                onTouchMove={draw}
+                onTouchEnd={stopDraw}
+              />
+            </div>
+            {hasSig && (
+              <button className="mb-3 text-xs text-gray-400 underline" onClick={clearCanvas}>
+                Borrar firma
+              </button>
+            )}
+            <label className="mb-1 block text-xs font-medium text-gray-700">
+              Nombre del receptor <span className="text-gray-400">(opcional)</span>
+            </label>
+            <input
+              className="mb-4 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+              placeholder="Ej: María García"
+              value={signedBy}
+              onChange={(e) => setSignedBy(e.target.value)}
+            />
+            <button
+              className="mb-2 w-full rounded bg-green-600 px-3 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+              onClick={handleConfirmSignature}
+              disabled={!hasSig || proofLoading}
+            >
+              {proofLoading ? "Guardando…" : "Completar con firma"}
+            </button>
+          </>
         )}
 
-        {/* Nombre del receptor (opcional) */}
-        <label className="mb-1 block text-xs font-medium text-gray-700">
-          Nombre del receptor <span className="text-gray-400">(opcional)</span>
-        </label>
-        <input
-          className="mb-4 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-          placeholder="Ej: María García"
-          value={signedBy}
-          onChange={(e) => setSignedBy(e.target.value)}
-        />
+        {/* ── Photo tab ─────────────────────────────────────────────────── */}
+        {activeTab === "photo" && (
+          <>
+            <p className="mb-3 text-xs text-gray-500">
+              Toma o selecciona una foto de la entrega
+            </p>
+            <label className="mb-3 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-4 hover:bg-gray-100">
+              <span className="mb-1 text-sm text-gray-600">
+                {selectedFile ? selectedFile.name : "Toca para abrir cámara o galería"}
+              </span>
+              {selectedFile && (
+                <span className="text-xs text-gray-400">
+                  {(selectedFile.size / 1024).toFixed(0)} KB
+                </span>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setSelectedFile(f);
+                  setPhotoState("idle");
+                  setPhotoError(null);
+                }}
+              />
+            </label>
 
-        <div className="flex flex-col gap-2">
-          <button
-            className="w-full rounded bg-green-600 px-3 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
-            onClick={handleConfirm}
-            disabled={!hasSig || loading}
-          >
-            {loading ? "Guardando…" : "Completar con firma"}
-          </button>
-          <button
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            onClick={() => onSkipSignature(stopId)}
-            disabled={loading}
-          >
-            Completar sin firma
-          </button>
-          <button
-            className="w-full rounded px-3 py-2 text-xs text-gray-400 hover:bg-gray-50"
-            onClick={onCancel}
-            disabled={loading}
-          >
-            Cancelar
-          </button>
-        </div>
+            {photoError && (
+              <p className="mb-2 rounded bg-red-50 px-3 py-2 text-xs text-red-700">
+                {photoError}
+              </p>
+            )}
+
+            <button
+              className="mb-2 w-full rounded bg-green-600 px-3 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+              onClick={handlePhotoUpload}
+              disabled={!selectedFile || photoInProgress}
+            >
+              {PHOTO_STATE_LABELS[photoState]}
+            </button>
+          </>
+        )}
+
+        {/* ── Footer siempre visible ─────────────────────────────────────── */}
+        <button
+          className="mb-1 w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          onClick={() => onComplete(stopId)}
+          disabled={proofLoading || photoInProgress}
+        >
+          Completar sin prueba
+        </button>
+        <button
+          className="w-full rounded px-3 py-2 text-xs text-gray-400 hover:bg-gray-50"
+          onClick={onCancel}
+          disabled={proofLoading || photoInProgress}
+        >
+          Cancelar
+        </button>
       </div>
     </div>
   );
+}
+
+// ── Image compression helper (R8-POD-FOTO-UI) ────────────────────────────────
+
+function compressImage(file: File, maxBytes = 500 * 1024): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    if (file.size <= maxBytes) {
+      resolve(file);
+      return;
+    }
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("canvas context unavailable"));
+        return;
+      }
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { reject(new Error("compression failed")); return; }
+          resolve(blob);
+        },
+        "image/jpeg",
+        0.75,
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("image load failed")); };
+    img.src = url;
+  });
 }
 
 // ── GPS tracking hook (A3 — GPS-001) ─────────────────────────────────────────
@@ -720,16 +920,18 @@ export function DriverRoutingCard({
         </>
       )}
 
-      {/* Signature modal — se abre al pulsar "Completar" */}
+      {/* Proof modal — se abre al pulsar "Completar" (firma + foto + sin prueba) */}
       {signatureStopId && (
-        <SignatureModal
+        <ProofModal
           stopId={signatureStopId}
-          loading={sigLoadingThisStop}
-          onConfirm={(stopId, dataUrl, signedBy) => {
+          token={token}
+          apiBaseUrl={apiBaseUrl}
+          proofLoading={sigLoadingThisStop}
+          onConfirmSignature={(stopId, dataUrl, signedBy) => {
             onCompleteWithProof(stopId, dataUrl, signedBy);
             setSignatureStopId(null);
           }}
-          onSkipSignature={(stopId) => {
+          onComplete={(stopId) => {
             onComplete(stopId);
             setSignatureStopId(null);
           }}

@@ -1056,6 +1056,33 @@ export async function getStopProof(token: string, stopId: string): Promise<StopP
   return request<StopProofOut>(`/stops/${stopId}/proof`, { token });
 }
 
+// ── Stop Proof Photo — R8-POD-FOTO ────────────────────────────────────────────
+
+export type ProofUploadUrlOut = {
+  upload_url: string;
+  object_key: string;
+  expires_in: number;
+};
+
+export async function getProofUploadUrl(
+  token: string,
+  stopId: string,
+): Promise<ProofUploadUrlOut> {
+  return request<ProofUploadUrlOut>(`/stops/${stopId}/proof-upload-url`, { token, method: "POST" });
+}
+
+export async function confirmProofPhoto(
+  token: string,
+  stopId: string,
+  objectKey: string,
+): Promise<StopProofOut> {
+  return request<StopProofOut>(`/stops/${stopId}/proof/photo`, {
+    token,
+    method: "PATCH",
+    body: { object_key: objectKey },
+  });
+}
+
 // ── Driver Position — A3 (GPS-001) ───────────────────────────────────────────
 
 export type DriverPositionOut = {

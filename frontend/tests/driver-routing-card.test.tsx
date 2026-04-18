@@ -3,7 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { DriverRoutingCard } from "../components/DriverRoutingCard";
+import { DriverRoutingCard, ProofModal } from "../components/DriverRoutingCard";
 import type {
   IncidentCreateRequest,
   RouteNextStopResponse,
@@ -300,4 +300,60 @@ test("shows Cargando rutas when loading=true and no routes", () => {
     />,
   );
   assert.match(html, /Cargando rutas/);
+});
+
+// ── ProofModal tests (R8-POD-FOTO-UI) ────────────────────────────────────────
+
+function renderProofModal(token: string | null, defaultTab?: "signature" | "photo"): string {
+  return renderToStaticMarkup(
+    <ProofModal
+      stopId="stop-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+      token={token}
+      apiBaseUrl="http://localhost:8000"
+      proofLoading={false}
+      defaultTab={defaultTab}
+      onConfirmSignature={NO_OP}
+      onComplete={NO_OP}
+      onCancel={NO_OP}
+    />,
+  );
+}
+
+test("ProofModal renders Firma and Foto tab buttons", () => {
+  const html = renderProofModal("tok");
+  assert.match(html, /Firma/);
+  assert.match(html, /Foto/);
+});
+
+test("ProofModal renders Completar sin prueba footer button", () => {
+  const html = renderProofModal("tok");
+  assert.match(html, /Completar sin prueba/);
+});
+
+test("ProofModal Foto tab disabled and labeled when token is null", () => {
+  const html = renderProofModal(null);
+  assert.match(html, /sin conexi[oó]n/i);
+});
+
+test("ProofModal Foto tab not disabled when token is provided", () => {
+  const html = renderProofModal("tok");
+  assert.doesNotMatch(html, /sin conexi[oó]n/i);
+});
+
+test("ProofModal signature tab shows canvas", () => {
+  const html = renderProofModal("tok", "signature");
+  assert.match(html, /canvas/i);
+  assert.match(html, /Pide al cliente que firme/);
+});
+
+test("ProofModal photo tab shows file input area", () => {
+  const html = renderProofModal("tok", "photo");
+  assert.match(html, /c[aá]mara/i);
+  assert.match(html, /Toca para abrir/);
+});
+
+test("ProofModal photo tab with null token still renders tab button as disabled", () => {
+  const html = renderProofModal(null, "signature");
+  // The foto button should carry the disabled attribute
+  assert.match(html, /disabled/);
 });
