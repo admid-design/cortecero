@@ -352,7 +352,7 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
 - F1–F6: time windows, capacidad, doble viaje, ADR, ZBE
 
 ### Bloques completados (continuación)
-- R8-POD-FOTO: presigned R2 upload + confirmación foto (292 tests en verde, 2026-04-18)
+- R8-POD-FOTO: presigned R2 upload + confirmación foto + `ProofModal` UI en `DriverRoutingCard` (292 tests en verde, commit `c095510`, 2026-04-18)
 - DEMO-SEED-001: seed demo realista para lunes (2026-04-18)
   - service_date = today (cola visible inmediatamente)
   - Depósito: 39.65779, 2.79008 (Poligon Industrial Son Llaut, Santa Maria del Camí)
@@ -363,17 +363,20 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
   - Reset queue: pedidos planned sin RouteStop → ready_for_planning al reiniciar
 - DEMO-SEED-001-TESTS: fix colisión Plans en 5 archivos de test (2026-04-18)
   - check-first en proof_a2, gps_a3, foto_r8, bloque_e (×2)
+- HARDENING-SEC-001: eliminado `/debug/db`; JWT guard en lifespan; credenciales frontend limpiadas (2026-04-18)
+- HARDENING-DB-001: FK constraints stop_proofs + route_messages, índices rendimiento, migration 027, `StopProof` models.py alineado (commit `094a702`, 2026-04-18) — Neon pendiente manual
+- DEMO-DB-RESEED-001: `seed()` en lifespan FastAPI → cold start Vercel siembra Neon (commit `e6cbd34`, 2026-04-18) — verificado: 30 pedidos + 9 vehículos activos
 
 ### Pendiente activo (orden de prioridad)
-1. **R8-POD-FOTO-UI** — integrar foto en PWA conductor (DriverRoutingCard)
-2. **R8-POD-FOTO-R2-REAL** — smoke con bucket R2 real (credenciales necesarias)
-3. **R8-SMOKE** — Google smoke dataset geo-ready (reproducible)
+1. **Aplicar migration 027 en Neon** — `DATABASE_URL=<neon_url> python3 backend/scripts/apply_migration.py` (cierra HARDENING-DB-001 → PROMULGADO)
+2. **R8-POD-FOTO-R2-REAL** — smoke con bucket R2 real (credenciales: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`)
+3. **Confirmar CI green `094a702`** — run 24614267738 in_progress → HARDENING-DB-001 → PROMULGADO
 
 ### Huecos conocidos
 - SSE backend usa asyncio.Queue in-process → no escala con gunicorn multi-worker (fix R9: Redis)
 - MAP-001 frontend: evidence en browser local; sin CI automatizado con API key
 - GPS-001 y POD-001 frontend: evidence en device real pendiente
-- POD foto: backend CERRADO_LOCAL, UI no implementada, R2 real no probado
+- POD foto: UI implementada (ProofModal); R2 bucket real no probado
+- Migration 027: en repo, no aplicada aún en Neon (HARDENING-DB-001 pendiente)
 - Notificaciones (D1): congeladas, pendiente proveedor email/SMS
 - Asistente IA: no existe en ninguna capa
-- Vercel: verificar que NEXT_PUBLIC_DEPOT_LAT/LNG no sobreescriben el fallback correcto

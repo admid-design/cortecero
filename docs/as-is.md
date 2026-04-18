@@ -4,7 +4,7 @@
 > Todo lo que aquí se afirma debe tener evidencia: código existente, test verde o smoke ejecutado.
 > Si una capacidad no aparece aquí, no asumas que existe.
 
-Última actualización: R8 activo — Fase A completa + B1–B4 + C1 + F1 + F2 + F4–F6 + FLEET-VIEW-001 + R8-SSE-FE PROMULGADO + R8-POD-FOTO CERRADO_LOCAL (292 tests backend en verde, CI verde en main, CI/CD GitHub→Vercel operativo, 2026-04-18). Abril 2026.
+Última actualización: R8 activo — Fase A completa + B1–B4 + C1 + F1 + F2 + F4–F6 + FLEET-VIEW-001 + R8-SSE-FE PROMULGADO + R8-POD-FOTO CERRADO_LOCAL + HARDENING-SEC-001 CERRADO_LOCAL + HARDENING-DB-001 CERRADO_LOCAL + DEMO-DB-RESEED-001 CERRADO_CON_EVIDENCIA_LOCAL (292 tests backend en verde, CI verde en main, CI/CD GitHub→Vercel operativo, seed en Neon verificado, 2026-04-18). Abril 2026.
 
 ---
 
@@ -17,8 +17,8 @@
 - Multi-tenant estricto en todas las queries
 - RBAC con roles: `admin`, `logistics`, `office`, `driver`
 - Contrato de errores uniforme: `{ detail: { code, message } }`
-- Migraciones versionadas en `db/migrations/` (001–021), lexicográficas, idempotentes
-- Seed reproducible en `backend/app/seed.py`
+- Migraciones versionadas en `db/migrations/` (001–027), lexicográficas, idempotentes
+- Seed reproducible en `backend/app/seed.py`; se ejecuta en el lifespan de FastAPI (cold start Vercel)
 - Google Route Optimization integrado en `backend/app/optimization/google_provider.py`
 - Mock provider disponible cuando no hay `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID`
 - `POST /routes/{id}/optimize` dispara el provider activo
@@ -37,13 +37,19 @@
 ### Base de datos
 
 - PostgreSQL 16
-- Migraciones: 021 aplicadas
+- Migraciones: 027 aplicadas en local y Neon (producción)
 - Migraciones críticas recientes:
   - `017_user_role_driver.sql` — rol driver en tabla `users`
   - `018_driver_user_id.sql` — FK explícita `drivers.user_id → users.id` (PILOT-HARDEN-001)
   - `019_warehouse_locations.sql`
   - `020_stop_proofs.sql` — tabla `stop_proofs` con índices (POD-001)
   - `021_driver_positions.sql` — tabla `driver_positions` con índice por driver+fecha desc (GPS-001)
+  - `022_route_eta.sql` — campos ETA en route_stops (ETA-001)
+  - `023_route_trip_number.sql` — `Route.trip_number` (DOUBLE-TRIP-001)
+  - `024_adr_flags.sql` — flags ADR en vehicles/orders (ADR-001)
+  - `025_zbe_flags.sql` — flags ZBE en customers/vehicles (ZBE-001)
+  - `026_route_messages.sql` — tabla `route_messages` append-only (CHAT-001)
+  - `027_fk_indexes_hardening.sql` — FK constraints stop_proofs→route_stops/routes, FK route_messages→routes, índices de rendimiento (HARDENING-DB-001)
 - Constraints y vocabularios explícitos donde aplica
 
 ### OpenAPI
@@ -80,8 +86,9 @@
 | Frontend: PWA conductor | VERIFICADO | tests + CI build |
 | Mapa de ruta (Google Maps JS API) | VERIFICADO LOCAL — `RouteMapCard.tsx` renderiza con marcadores por estado; evidence green en browser con `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` configurada (MAP-001) |
 | Marcador conductor en mapa dispatcher | PARCIAL — implementado con polling 30 s; requiere ruta in_progress con posición publicada para evidencia e2e |
-| Proof of delivery (firma canvas) | VERIFICADO LOCAL — modal firma en `DriverRoutingCard` + endpoints backend (`STOP_NOT_ARRIVED`, `SIGNATURE_DATA_REQUIRED`) + migración `stop_proofs`; 183 tests en verde (`test_routing_proof_a2.py`) |
-| GPS tracking conductor (publicación de posición) | VERIFICADO LOCAL — `useGpsTracking` hook + `POST /driver/location` + migración `driver_positions`; two-query logic (404 vs 409); 183 tests en verde (`test_routing_gps_a3.py`) |
+| Proof of delivery (firma canvas) | VERIFICADO LOCAL — modal firma en `DriverRoutingCard` + endpoints backend (`STOP_NOT_ARRIVED`, `SIGNATURE_DATA_REQUIRED`) + migración `stop_proofs`; tests en verde (`test_routing_proof_a2.py`) |
+| Proof of delivery (foto) | VERIFICADO LOCAL — `POST /proof-upload-url` + `PATCH /proof/photo`; presigned PUT R2 (mockeado); `ProofModal` con tab foto en `DriverRoutingCard`; 9 tests en verde (`test_routing_proof_foto_r8.py`); R2 bucket real pendiente de smoke |
+| GPS tracking conductor (publicación de posición) | VERIFICADO LOCAL — `useGpsTracking` hook + `POST /driver/location` + migración `driver_positions`; two-query logic (404 vs 409); tests en verde (`test_routing_gps_a3.py`) |
 
 ---
 
@@ -94,7 +101,7 @@
 | ETA dinámico (recálculo manual) | VERIFICADO LOCAL — `POST /routes/{id}/recalculate-eta` + `GET /routes/{id}/delay-alerts`. Haversine + velocidad media 40 km/h. Alerta automática si retraso ≥ 15 min. 15 tests en verde (2026-04-17). Migration 022. |
 | Reoptimización automática ante incidencias | NO EXISTE — trigger manual existe, flujo automático no |
 | Prueba de entrega: firma | VERIFICADO LOCAL — backend + frontend + tests en verde; e2e con device real pendiente |
-| Prueba de entrega: foto | VERIFICADO LOCAL — presigned URL R2 (`POST /proof-upload-url`) + confirmación (`PATCH /proof/photo`); R2 mockeado; 9 tests en verde (`test_routing_proof_foto_r8.py`); UI no implementada |
+| Prueba de entrega: foto | VERIFICADO LOCAL — presigned URL R2 (`POST /proof-upload-url`) + confirmación (`PATCH /proof/photo`); R2 mockeado; 9 tests en verde (`test_routing_proof_foto_r8.py`); `ProofModal` con tab foto en `DriverRoutingCard` (commit `c095510`); R2 bucket real pendiente de smoke |
 | Notificación de ETA a cliente final | NO EXISTE |
 | Fleet view (vista de flota en mapa) | VERIFICADO LOCAL — `GET /driver/active-positions` + polling 30s en `page.tsx` + marcadores 🚚 por conductor en `RouteMapCard` + badge GPS 📍 en panel de flota `OpsMapDashboard`. Requiere conductores con GPS activo para evidencia e2e. Build frontend limpio (2026-04-17). |
 | Asistente IA en dispatcher | NO EXISTE |
@@ -123,12 +130,19 @@
 - Evidence: `docs/evidence/DEMO-OPT-001.json` — 2 paradas, ETAs reales (seq1=13:49Z, seq2=14:08Z), totalDuration=2693s, provider=google
 - Fix timestamps (nanos): `59bd16d`. Seed geo Mallorca: `641c73a`. Cierre: `3e39b16`.
 
+### Seed demo en Neon (DEMO-DB-RESEED-001)
+
+- `seed()` integrado en lifespan de FastAPI (`backend/app/main.py`) — se ejecuta en cada cold start de Vercel
+- Seed idempotente: skip si datos ya existen; re-crea pedidos si < 30 para `service_date=today`
+- Verificado en `cortecero-api.vercel.app` (2026-04-18): 30 pedidos creados (19 `ready_for_planning` + 1 `planned` + 9 `late_pending_exception` + 1 `exception_rejected`), 9 vehículos activos (VH-001..VH-009)
+- Commit: `e6cbd34`
+
 ### Test suite
 
-- Backend: `pytest` en Docker — **283 tests en verde** (commit `3e5980d`, CI verde en `main`)
+- Backend: `pytest` en Docker — **292+ tests en verde** (commit `094a702`, CI verde en `main`)
 - Frontend: `npm test` — CI verde en `main`
 - `test_routing_bloque_e.py` tiene 5 tests que requieren `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID` — excluidos de CI estándar (DEMO-OPT-001 cerrado con evidencia local)
-- Nuevos archivos de test en HEAD: `test_routing_gps_a3.py` (GPS-001), `test_routing_proof_a2.py` (POD-001)
+- Archivos de test clave: `test_routing_gps_a3.py` (GPS-001), `test_routing_proof_a2.py` (POD-001), `test_routing_proof_foto_r8.py` (R8-POD-FOTO)
 
 ---
 
@@ -199,4 +213,7 @@ Service account montado en Docker: `~/.config/kelko/google/route-optimization-sa
 - R8: Fase B3 — CHAT-001: VERIFICADO LOCAL (9/9 tests en verde, 2026-04-17). Migration 026. Chat dispatcher↔conductor en ruta.
 - R8: Fase B4 — LIVE-EDIT-001: VERIFICADO LOCAL (11/11 tests en verde, 2026-04-17). add-stop + remove-stop + move-stop extendido a in_progress.
 - R8: Fase C1 — RETURN-001: VERIFICADO LOCAL (7/7 tests en verde, 2026-04-17). `POST /orders/{id}/return-to-planning`. failed_delivery → ready_for_planning.
-- R8: R8-POD-FOTO — CERRADO_LOCAL (9/9 tests en verde, 292 total, 2026-04-18). `POST /proof-upload-url` + `PATCH /proof/photo`. Presigned PUT R2 + confirmación de foto. R2 mockeado. OpenAPI v1.6.0. UI no implementada.
+- R8: R8-POD-FOTO — CERRADO_LOCAL (9/9 tests en verde, 292 total, 2026-04-18). `POST /proof-upload-url` + `PATCH /proof/photo`. Presigned PUT R2 + confirmación de foto. R2 mockeado. OpenAPI v1.6.0. `ProofModal` con tab foto integrado en `DriverRoutingCard` (commit `c095510`). R2 bucket real pendiente.
+- R8: HARDENING-SEC-001 — CERRADO_LOCAL (2026-04-18). Eliminado endpoint `/debug/db`. JWT guard en lifespan: rechaza arranque con secret por defecto en entorno no-dev. Credenciales frontend limpiadas del repo.
+- R8: HARDENING-DB-001 — CERRADO_LOCAL (2026-04-18, commit `094a702`). FK constraints `stop_proofs→route_stops` y `stop_proofs→routes` (migration 027, idempotente). FK `route_messages→routes`. Índices de rendimiento `idx_orders_tenant_status` + `idx_route_stops_route_status`. `StopProof` en `models.py` alineado con constraints DB. Neon: migration 027 pendiente de aplicación manual.
+- R8: DEMO-DB-RESEED-001 — CERRADO_CON_EVIDENCIA_LOCAL (2026-04-18, commit `e6cbd34`). `seed()` en lifespan FastAPI. Verificado en Neon via `cortecero-api.vercel.app`: 30 pedidos + 9 vehículos activos.

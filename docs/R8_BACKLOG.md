@@ -23,6 +23,11 @@
 | R8-B4 | LIVE-EDIT-001 — `add-stop`, `remove-stop`, `move-stop` extendido a in_progress, SSE events | VERIFICADO LOCAL | test_live_edit_b4.py (11/11 ✓) | `3e5980d` |
 | R8-C1 | RETURN-001 — `POST /orders/{id}/return-to-planning`, failed_delivery → ready_for_planning | VERIFICADO LOCAL | test_return_c1.py (7/7 ✓) | `3e5980d` |
 | R8-SSE-FE | SSE frontend — hook `useRouteStream`, reemplaza polling 30s en `RouteMapCard`; MAX_RETRIES=3, fallback a polling | **PROMULGADO** | CI verde: backend-tests ✅ openapi-check ✅ frontend-smoke ✅ (`8e28ede`) | `8e28ede` |
+| R8-POD-FOTO | Proof of delivery foto — `POST /proof-upload-url` + `PATCH /proof/photo` + `ProofModal` tab foto en `DriverRoutingCard`; R2 mockeado | CERRADO_LOCAL | test_routing_proof_foto_r8.py (9/9 ✓), 292 total | `c095510` + DEMO-SEED-001 fixes |
+| HARDENING-SEC-001 | Seguridad — eliminado `/debug/db`, JWT guard en lifespan, credenciales frontend limpiadas | CERRADO_LOCAL | — | (sin commit único; aplicado en sesión 2026-04-18) |
+| HARDENING-DB-001 | FK constraints stop_proofs→route_stops/routes + route_messages→routes + índices rendimiento; `StopProof` models.py alineado | CERRADO_LOCAL (Neon pendiente) | test_routing_proof_foto_r8.py (9/9 ✓) | `094a702` |
+| DEMO-DB-RESEED-001 | Seed idempotente en lifespan FastAPI → cold start Vercel siembra datos demo en Neon | CERRADO_CON_EVIDENCIA_LOCAL | 30 pedidos + 9 vehículos verificados en Neon | `e6cbd34` |
+| DEMO-SEED-001 | Seed demo realista — 15 clientes Mallorca, 12 vehículos, 8 conductores, 30 pedidos/día, service_date=today | CERRADO_LOCAL | fix colisión Plans en 5 archivos test | `(2026-04-18)` |
 | R8-F1 | TW-001 — Time windows por cliente en optimizer (`window_start/end` → `timeWindows` Google) | VERIFICADO LOCAL | test_tw_f1.py (14/14 ✓) | `3e5980d` |
 | R8-F2 | CAPACITY-001 — Capacidad de vehículo en optimizer (`capacity_kg` → `loadLimits` Google) | VERIFICADO LOCAL | test_capacity_f2.py (13/13 ✓) | `3e5980d` |
 | R8-F4 | DOUBLE-TRIP-001 — `Route.trip_number` + `startTimeWindows` para viaje 2, migration 023 | VERIFICADO LOCAL | test_double_trip_f4.py (8/8 ✓) | `3e5980d` |
@@ -48,14 +53,17 @@
 - **Limitación conocida**: SSE backend usa asyncio.Queue in-process (no multi-worker). Fix R9: Redis pub/sub.
 - **Estado final**: PROMULGADO
 
-### R8-POD-FOTO — Proof of delivery: foto
-- **Objetivo**: Input de cámara en `DriverRoutingCard` para adjuntar foto a entrega
-- **Alcance**:
-  - `<input type="file" accept="image/*" capture="environment">` o API Camera
-  - Upload a backend (storage TBD: base64 en DB o presigned URL)
-  - Schema `stop_proofs` ya preparado con campo `photo_url`
-- **Bloqueado por**: decisión de storage (DB blob vs. S3/presigned)
-- **Cierre**: evidence en dispositivo real o emulado
+### ~~R8-POD-FOTO — Proof of delivery: foto~~ — CERRADO_LOCAL
+
+- Backend: `POST /proof-upload-url` (presigned PUT R2) + `PATCH /proof/photo` (confirmación). R2 mockeado en tests.
+- Frontend: `ProofModal` con tab foto en `DriverRoutingCard` — `<input type="file" accept="image/*" capture="environment">` (commit `c095510`)
+- 9 tests en verde (`test_routing_proof_foto_r8.py`), 292 tests total
+- **Pendiente**: smoke con R2 bucket real (credenciales R2 necesarias → R8-POD-FOTO-R2-REAL)
+
+### R8-POD-FOTO-R2-REAL — Smoke R2 real (PENDIENTE)
+
+- Verificar presigned URL contra bucket R2 real de Cloudflare
+- **Bloqueado por**: credenciales R2 (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`) no configuradas en entorno
 
 ---
 
@@ -80,7 +88,7 @@
 - SSE frontend reemplazando polling en al menos un componente
 - POD foto con decisión de storage y evidence en device
 - `docs/as-is.md` y `openapi/openapi-v1.yaml` alineados con runtime
-- R1–R7 sin degradación semántica (283+ tests en verde)
+- R1–R7 sin degradación semántica (292+ tests en verde)
 
 ---
 
@@ -89,5 +97,10 @@
 ~~1. CI verde `3e5980d` (bloqueante)~~  ✅  
 ~~2. R8-SMOKE — Google smoke dataset~~  ✅  
 ~~3. R8-SSE-FE — SSE frontend~~  ✅ PROMULGADO  
-4. R8-POD-FOTO — POD foto (si storage decidido)  
-5. D1 — Notificaciones (si proveedor decidido)
+~~4. R8-POD-FOTO — POD foto~~  ✅ CERRADO_LOCAL  
+~~5. HARDENING-SEC-001~~  ✅ CERRADO_LOCAL  
+~~6. HARDENING-DB-001~~  ✅ CERRADO_LOCAL (Neon pendiente manual)  
+~~7. DEMO-DB-RESEED-001~~  ✅ CERRADO_CON_EVIDENCIA_LOCAL  
+8. R8-POD-FOTO-R2-REAL — smoke R2 bucket real (si credenciales disponibles)  
+9. Aplicar migration 027 en Neon manualmente (HARDENING-DB-001 final)  
+10. D1 — Notificaciones (si proveedor decidido)
