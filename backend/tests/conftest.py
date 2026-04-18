@@ -4,6 +4,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import psycopg2
 import pytest
+from fastapi.testclient import TestClient
 from psycopg2 import sql
 from sqlalchemy.orm import Session
 
@@ -92,7 +93,6 @@ def _reset_db_per_test() -> None:
 
 @pytest.fixture
 def client() -> TestClient:
-    from fastapi.testclient import TestClient
     with TestClient(app) as test_client:
         yield test_client
 
