@@ -113,37 +113,103 @@ def seed() -> None:
             db.add(zone_b)
             db.flush()
 
-        # Dataset geográfico sintético para demo/local.
-        # No contiene ubicaciones ni direcciones reales de clientes.
-        _customer_geo = [
-            # Centro (zone_a) — Palma de Mallorca
-            # Clientes de zone_a en Palma, alcanzables desde el depot
-            # Poligon Industrial Son Llaut 36, 07320 Santa Maria del Camí (39.6447, 2.7847).
-            ("Cliente 01", 39.5711, 2.6512, "Avenida Jaume III 1, Palma"),
-            ("Cliente 02", 39.5752, 2.6478, "Carrer de Sant Miquel 2, Palma"),
-            ("Cliente 03", 39.5688, 2.6551, "Passeig del Born 3, Palma"),
-            ("Cliente 04", 39.5730, 2.6590, "Carrer de Colom 4, Palma"),
-            ("Cliente 05", 39.5660, 2.6440, "Avinguda d'Argentina 5, Palma"),
-            # Costa (zone_b) — Municipios costeros de Mallorca
-            ("Cliente 06", 39.8517, 3.1191, "Carrer Major 6, Alcúdia"),
-            ("Cliente 07", 39.7064, 3.2030, "Avinguda del Parc 7, Manacor"),
-            ("Cliente 08", 39.6381, 2.9959, "Carrer de l'Arenal 8, Llucmajor"),
-            ("Cliente 09", 39.7208, 2.9133, "Gran Via de Colom 9, Inca"),
-            ("Cliente 10", 39.5830, 2.7920, "Carretera de Manacor 10, Algaida"),
+        # ── Catálogo de productos demo ────────────────────────────────────────────
+        # Estructura basada en distribución real de higiene/limpieza industrial.
+        # Códigos y descripciones sintéticos; sin datos reales.
+        # (code, descripción, peso_kg, volumen_m3)
+        _product_catalog = [
+            # Papel e higiene básica
+            ("PPL-001", "Bobina Secamanos Industrial 6 uds.",          3.0,  0.030),
+            ("PPL-002", "Higiénico Doméstico 2C 108 rollos",          12.0,  0.120),
+            ("PPL-003", "Servilleta 30x30 Blanca 1.000 uds.",          2.5,  0.025),
+            ("PPL-004", "Toalla Entrelazada PP 3.800 uds.",            4.0,  0.040),
+            # Plásticos y limpieza básica
+            ("PLB-001", "Bolsa Basura 52x58 Neg. R.25",                6.0,  0.050),
+            ("PLB-002", "Bolsa Basura 85x105 Neg. R.10",              10.0,  0.080),
+            ("PLB-003", "Fregona Microfibra Blanco/Azul",              1.5,  0.015),
+            ("PLB-004", "Recogedor Antivuelco con Palo",               0.8,  0.010),
+            ("PLB-005", "Escobilla WC Plástico + Soporte",             0.5,  0.005),
+            # Química industrial
+            ("QIM-001", "Lejía 5 L. (Hipoclorito Sodio)",             5.5,  0.006),
+            ("QIM-002", "Lejía 21 L. (Hipoclorito Sodio)",           22.0,  0.022),
+            ("QIM-003", "Desengrasante Industrial 6 kg.",              6.0,  0.006),
+            ("QIM-004", "Limpiador Suelos Concentrado 5 L.",           5.5,  0.006),
+            ("QIM-005", "Detergente Lavavajillas Industrial 24 kg.",  24.0,  0.025),
+            ("QIM-006", "Abrillantador Suelos 21 kg.",                21.0,  0.022),
+            # Higiene personal y EPIs
+            ("HIG-001", "Gel de Manos 5 L.",                          5.2,  0.006),
+            ("HIG-002", "Guante Nitrilo Azul T/M 100 uds.",           0.8,  0.005),
+            ("HIG-003", "Guante Nitrilo Negro T/G 100 uds.",          0.9,  0.005),
+            ("HIG-004", "Estropajo Fibra Verde 6 mts.",               0.3,  0.003),
+            # Piscinas (químicos ADR)
+            ("PSC-001", "Piscina pH- Minorador 24 kg.",              24.0,  0.025),
+            ("PSC-002", "Piscina Hipoclorito Sodio 25 kg.",          25.0,  0.026),
+            ("PSC-003", "Piscina Antialgas 25 kg.",                   25.0,  0.026),
+            ("PSC-004", "Piscina Bromo Pastillas 5 kg.",               5.5,  0.006),
+            # Servicio técnico / SAT
+            ("SAT-001", "Kit Mantenimiento Instalaciones",             2.0,  0.010),
+            ("SAT-002", "Recambio Técnico Genérico",                  1.5,  0.008),
         ]
 
+        # Productos asignados por tipo de cliente (índices en _product_catalog).
+        # Representa la cesta de productos habitual de cada sector.
+        _products_by_biz: dict[str, list[int]] = {
+            "hotel":       [0, 1, 3, 9, 11, 12, 15, 16, 17, 19, 20, 21],
+            "restaurant":  [0, 2, 3, 4, 5, 9, 11, 12, 16, 17, 18],
+            "clinic":      [0, 1, 2, 9, 15, 16, 17, 18, 23],
+            "supermarket": [1, 4, 5, 6, 9, 15, 16],
+            "facility":    [0, 3, 4, 5, 6, 10, 11, 12, 13, 16, 17],
+            "hotel_pool":  [0, 1, 9, 15, 16, 19, 20, 21, 22, 23, 24],
+        }
+
+        # Dataset geográfico + tipo de negocio. Sin datos reales de cliente.
+        # Formato: (nombre_demo, lat, lng, dirección_demo, tipo_negocio)
+        # Cobertura: Palma, Costa Nord, Costa Llevant, Interior, Sud.
+        # Zonas representativas de rutas invierno (3 zonas) y verano (7 zonas).
+        _customer_data = [
+            # Centro (zone_a) — Palma de Mallorca
+            ("Hotel Demo Mediterráneo",          39.5711, 2.6512, "Avinguda Jaume III 1, Palma",            "hotel_pool"),
+            ("Restaurante Demo Son Blai",        39.5752, 2.6478, "Carrer de Sant Miquel 2, Palma",         "restaurant"),
+            ("Clínica Demo Llevant",             39.5688, 2.6551, "Passeig del Born 3, Palma",              "clinic"),
+            ("Supermercado Demo Centre",         39.5730, 2.6590, "Carrer de Colom 4, Palma",               "supermarket"),
+            ("Facility Services Demo Sur",       39.5660, 2.6440, "Avinguda Argentina 5, Palma",            "facility"),
+            # Costa Nord — Alcúdia, Pollença, Can Picafort
+            ("Hotel Demo Costa Nord",            39.8517, 3.1191, "Carrer Major 6, Alcúdia",                "hotel_pool"),
+            ("Resort Demo Pollença",             39.8789, 3.0157, "Port de Pollença 7, Pollença",           "hotel"),
+            ("Hotel Demo Can Picafort",          39.7641, 3.1649, "Passeig de la Mare de Déu 8, Can Picafort", "hotel_pool"),
+            # Costa Llevant — Manacor, Porto Cristo, Cala Millor
+            ("Resort Demo Llevant",              39.7064, 3.2030, "Avinguda del Parc 9, Manacor",           "hotel"),
+            ("Hotel Demo Cala Millor",           39.5909, 3.3684, "Carrer Na Penyal 10, Cala Millor",       "hotel_pool"),
+            # Interior — Inca, Algaida, Sineu
+            ("Clínica Demo Interior",            39.7208, 2.9133, "Gran Via de Colom 11, Inca",             "clinic"),
+            ("Facility Services Demo Algaida",   39.5673, 2.8947, "Carretera Manacor 12, Algaida",          "facility"),
+            ("Supermercado Demo Sineu",          39.6431, 3.0123, "Plaça de Son Fornés 13, Sineu",          "supermarket"),
+            # Costa Sud — Llucmajor, S'Arenal, Campos
+            ("Hostelería Demo S'Arenal",         39.4997, 2.7434, "Carrer de l'Arenal 14, Llucmajor",      "restaurant"),
+            ("Facility Services Demo Campos",    39.4274, 3.0148, "Carrer de Felanitx 15, Campos",         "facility"),
+        ]
+        # Nombres legacy (antes del dataset realista) — para backfill sin duplicados.
+        _legacy_customer_names = [f"Cliente {i + 1:02d}" for i in range(15)]
+
         customers = []
-        for idx in range(10):
-            zone = zone_a if idx < 5 else zone_b
-            name = f"Cliente {idx + 1:02d}"
-            _, lat_val, lng_val, addr = _customer_geo[idx]
-            customer = db.scalar(select(Customer).where(Customer.tenant_id == tenant.id, Customer.name == name))
+        for idx in range(15):
+            zone = zone_a if idx < 5 else zone_b  # 5 Palma (Centro), 10 isla (Costa)
+            new_name, lat_val, lng_val, addr, biz_type = _customer_data[idx]
+            legacy_name = _legacy_customer_names[idx]
+
+            # Busca por nombre nuevo primero, luego por nombre legacy (migración).
+            customer = db.scalar(
+                select(Customer).where(Customer.tenant_id == tenant.id, Customer.name == new_name)
+            ) or db.scalar(
+                select(Customer).where(Customer.tenant_id == tenant.id, Customer.name == legacy_name)
+            )
+
             if not customer:
                 customer = Customer(
                     id=uuid.uuid4(),
                     tenant_id=tenant.id,
                     zone_id=zone.id,
-                    name=name,
+                    name=new_name,
                     priority=0,
                     cutoff_override_time=None,
                     lat=lat_val,
@@ -155,11 +221,11 @@ def seed() -> None:
                 db.add(customer)
                 db.flush()
             else:
-                # Backfill determinista de dataset geo demo para instalaciones existentes.
-                # Fuerza siempre las coordenadas canónicas del seed — sin condición de null —
-                # para que instalaciones con coordenadas antiguas (e.g. Madrid) queden
-                # corregidas a las coordenadas Mallorca geo-coherentes con el depot.
+                # Backfill: nombre, coordenadas y zona a los valores canónicos.
                 needs_update = False
+                if customer.name != new_name:
+                    customer.name = new_name
+                    needs_update = True
                 if customer.zone_id != zone.id:
                     customer.zone_id = zone.id
                     needs_update = True
@@ -182,9 +248,10 @@ def seed() -> None:
         service_date = datetime.now(ZoneInfo("Europe/Madrid")).date()
 
         existing_orders = list(db.scalars(select(Order).where(Order.tenant_id == tenant.id, Order.service_date == service_date)))
-        if len(existing_orders) < 20:
-            for idx in range(20):
+        if len(existing_orders) < 30:
+            for idx in range(30):
                 customer = customers[idx % len(customers)]
+                _, lat_val, lng_val, addr, biz_type = _customer_data[idx % len(_customer_data)]
                 zone = zone_a if customer.zone_id == zone_a.id else zone_b
                 external_ref = f"DEMO-{service_date.strftime('%Y%m%d')}-{idx + 1:03d}"
 
@@ -200,7 +267,7 @@ def seed() -> None:
 
                 cutoff_time = customer.cutoff_override_time or zone.default_cutoff_time or tenant.default_cutoff_time
                 effective_cutoff = build_effective_cutoff_at(service_date, cutoff_time, zone.timezone)
-                created_at = effective_cutoff - timedelta(hours=2) if idx < 12 else effective_cutoff + timedelta(hours=1)
+                created_at = effective_cutoff - timedelta(hours=2) if idx < 20 else effective_cutoff + timedelta(hours=1)
                 is_late, reason = compute_lateness(created_at, effective_cutoff)
 
                 order = Order(
@@ -223,18 +290,27 @@ def seed() -> None:
                 db.add(order)
                 db.flush()
 
-                db.add(
-                    OrderLine(
-                        id=uuid.uuid4(),
-                        tenant_id=tenant.id,
-                        order_id=order.id,
-                        sku=f"SKU-{idx + 1:03d}",
-                        qty=1,
-                        weight_kg=2.5,
-                        volume_m3=0.02,
-                        created_at=now_utc(),
+                # ── OrderLines: múltiples productos por pedido ────────────────
+                # Selección determinista basada en tipo de cliente e índice.
+                # Simula la cesta real (2-6 líneas, pesos realistas por categoría).
+                product_indices = _products_by_biz.get(biz_type, _products_by_biz["facility"])
+                n_lines = 3 + (idx % 4)  # 3-6 líneas por pedido
+                for line_idx in range(n_lines):
+                    prod_idx = product_indices[(idx * 3 + line_idx) % len(product_indices)]
+                    sku, desc, wkg, vm3 = _product_catalog[prod_idx]
+                    qty = 1 + ((idx + line_idx * 2) % 5)  # 1-5 unidades
+                    db.add(
+                        OrderLine(
+                            id=uuid.uuid4(),
+                            tenant_id=tenant.id,
+                            order_id=order.id,
+                            sku=sku,
+                            qty=float(qty),
+                            weight_kg=round(wkg * qty, 2),
+                            volume_m3=round(vm3 * qty, 4),
+                            created_at=now_utc(),
+                        )
                     )
-                )
 
         # ── Reset demo: asegura pedidos visibles en la cola ──────────────────────
         # Si el backend reinicia con datos manipulados de una sesión anterior,
@@ -370,9 +446,9 @@ def seed() -> None:
                 order_obj.zone_id = customers[0].zone_id
                 order_obj.updated_at = now_utc()
 
-        pending_order = by_external.get(f"DEMO-{service_date.strftime('%Y%m%d')}-019")
-        approved_order = by_external.get(f"DEMO-{service_date.strftime('%Y%m%d')}-020")
-        rejected_order = by_external.get(f"DEMO-{service_date.strftime('%Y%m%d')}-018")
+        pending_order = by_external.get(f"DEMO-{service_date.strftime('%Y%m%d')}-029")
+        approved_order = by_external.get(f"DEMO-{service_date.strftime('%Y%m%d')}-030")
+        rejected_order = by_external.get(f"DEMO-{service_date.strftime('%Y%m%d')}-028")
 
         for order_obj, status in [
             (pending_order, ExceptionStatus.pending),
@@ -426,20 +502,33 @@ def seed() -> None:
         # ========================================================================
 
         # ------------------------------------------------------------------
-        # Vehículos demo — estructura basada en flota real (datos sintéticos).
-        # Capacidades representativas; códigos y nombres no identificables.
+        # Vehículos demo — 12 unidades, estructura idéntica a la flota real.
+        # Capacidades verificadas desde ficha de flota operativa.
+        # Códigos y nombres sintéticos; sin matrículas reales.
+        #
+        # Notas operativas (solo para referencia interna; no en UI):
+        #   VH-005: restricción ZBE activa (sin etiqueta ambiental) → rutas fuera de ciudad
+        #   VH-012: restricción ZBE desde 2027 (etiqueta B) → activo hasta entonces
+        #   VH-010, VH-011, VH-012: vehículos de reserva / rotación secundaria
         # ------------------------------------------------------------------
         vehicles = {}
         for code, name, capacity in [
-            ("VH-001", "Camión Demo 14T",   7850.0),
-            ("VH-002", "Camión Demo 12T",   6145.0),
-            ("VH-003", "Camión Demo 10T",   4900.0),
-            ("VH-004", "Camión Demo 9T-A",  4150.0),
-            ("VH-005", "Camión Demo 9T-B",  3460.0),
-            ("VH-006", "Furgón Demo 7.5T",  2645.0),
-            ("VH-007", "Furgón Demo 4.5T",  1850.0),
-            ("VH-008", "Furgón Demo 3.5T",  1342.0),
-            ("VH-009", "Vehículo Reserva Demo", 860.0),
+            # Camiones — carnet C obligatorio
+            ("VH-001", "Camión Demo 14T",         7580.0),  # IVECO ML140E22
+            ("VH-002", "Camión Demo 12T",         6145.0),  # DAF
+            ("VH-003", "Camión Demo 10T",         4975.0),  # IVECO ML100E22
+            ("VH-004", "Camión Demo 9T-A",        4150.0),  # IVECO ML90E18
+            ("VH-005", "Camión Demo 9T-B [ZBE]",  3460.0),  # IVECO ML90E18 2003 – ZBE prohibido
+            # Furgones grandes — carnet B (o C)
+            ("VH-006", "Furgón Demo 8T",          2000.0),  # RENAULT Cartemet
+            ("VH-007", "Furgón Demo 7T",          2600.0),  # IVECO Euro 5
+            # Furgones medianos — carnet B
+            ("VH-008", "Furgón Demo 3.5T-A",      1502.0),  # IVECO C50A10
+            ("VH-009", "Furgón Demo 3.5T-B",      1342.0),  # IVECO C35730 Euro 5
+            # Reserva / rotación secundaria
+            ("VH-010", "Furgón Demo 3.5T-C",       860.0),  # IVECO C35730 2007
+            ("VH-011", "Furgón Demo 2T",            660.0),  # FORD Transit Connect
+            ("VH-012", "Furgón Demo Pequeño",       290.0),  # RENAULT Kangoo – ZBE 2027
         ]:
             vehicle = db.scalar(select(Vehicle).where(Vehicle.tenant_id == tenant.id, Vehicle.code == code))
             if not vehicle:
@@ -449,7 +538,8 @@ def seed() -> None:
                     code=code,
                     name=name,
                     capacity_kg=capacity,
-                    active=(code != "VH-009"),  # reserva fuera de rotación activa
+                    # VH-010/011/012: reserva/rotación secundaria — inactivos por defecto.
+                    active=(code not in ("VH-010", "VH-011", "VH-012")),
                     created_at=now_utc(),
                 )
                 db.add(vehicle)
@@ -460,21 +550,34 @@ def seed() -> None:
                     vehicle.name = name
                 if vehicle.capacity_kg != capacity:
                     vehicle.capacity_kg = capacity
+                # Reactiva vehículos que estaban incorrectamente inactivos (VH-005..009).
+                if code not in ("VH-010", "VH-011", "VH-012") and not vehicle.active:
+                    vehicle.active = True
             vehicles[code] = vehicle
 
         # ------------------------------------------------------------------
-        # Conductores demo — identificadores sintéticos, sin datos reales.
+        # Conductores demo — 8 conductores, estructura basada en flota real.
+        # Tipo de carnet y ADR codificados en el nombre para visibilidad en demo.
+        # Sin nombres reales; teléfonos sintéticos.
+        #
+        # Distribución real replicada:
+        #   Carnet C + ADR (4): camiones VH-001..004
+        #   Carnet B + ADR (3): furgones VH-006, VH-007, VH-009
+        #   Carnet B sin ADR (1): furgones solo rutas no-ADR (VH-008)
         # ------------------------------------------------------------------
         drivers = {}
         for drv_key, name, phone, vehicle_code in [
-            ("driver_a", "Conductor Demo A", "700000101", "VH-001"),
-            ("driver_b", "Conductor Demo B", "700000102", "VH-002"),
-            ("driver_c", "Conductor Demo C", "700000103", "VH-003"),
-            ("driver_d", "Conductor Demo D", "700000104", "VH-004"),
-            ("driver_e", "Conductor Demo E", "700000105", "VH-005"),
-            ("driver_f", "Conductor Demo F", "700000106", "VH-006"),
-            ("driver_g", "Conductor Demo G", "700000107", "VH-007"),
-            ("driver_h", "Conductor Demo H", "700000108", "VH-008"),
+            # Camioneros — carnet C + ADR
+            ("driver_a", "Conductor Demo A (C·ADR)", "700000101", "VH-001"),
+            ("driver_b", "Conductor Demo B (C·ADR)", "700000102", "VH-002"),
+            ("driver_c", "Conductor Demo C (C·ADR)", "700000103", "VH-003"),
+            ("driver_d", "Conductor Demo D (C·ADR)", "700000104", "VH-004"),
+            # Furgoneros — carnet B + ADR
+            ("driver_e", "Conductor Demo E (B·ADR)", "700000105", "VH-006"),
+            ("driver_f", "Conductor Demo F (B·ADR)", "700000106", "VH-007"),
+            ("driver_h", "Conductor Demo H (B·ADR)", "700000108", "VH-009"),
+            # Furgonero — carnet B sin ADR (solo rutas no-químicas)
+            ("driver_g", "Conductor Demo G (B)",     "700000107", "VH-008"),
         ]:
             driver = db.scalar(select(Driver).where(Driver.tenant_id == tenant.id, Driver.phone == phone))
             if not driver:
@@ -491,6 +594,10 @@ def seed() -> None:
                 )
                 db.add(driver)
                 db.flush()
+            else:
+                # Backfill: actualiza nombre si cambia formato canónico.
+                if driver.name != name:
+                    driver.name = name
             drivers[drv_key] = driver
 
         # ------------------------------------------------------------------
@@ -570,10 +677,12 @@ def seed() -> None:
         print(" - office@demo.cortecero.app / office123")
         print(" - logistics@demo.cortecero.app / logistics123")
         print(" - admin@demo.cortecero.app / admin123")
-        print(f"Pedidos en cola (ready_for_planning): {len([o for o in all_today_orders if o.status == OrderStatus.ready_for_planning])}")
+        final_orders = list(db.scalars(select(Order).where(Order.tenant_id == tenant.id, Order.service_date == service_date)))
+        print(f"Pedidos en cola (ready_for_planning): {len([o for o in final_orders if o.status == OrderStatus.ready_for_planning])}")
+        print(f"Pedidos totales hoy: {len(final_orders)}")
         print("Flota demo:")
-        print(f" - {len(vehicles)} vehículos ({sum(1 for v in vehicles.values() if v.active)} activos)")
-        print(f" - {len(drivers)} conductores")
+        print(f" - {len(vehicles)} vehículos ({sum(1 for v in vehicles.values() if v.active)} en rotación activa)")
+        print(f" - {len(drivers)} conductores (4×C·ADR, 3×B·ADR, 1×B)")
         print(f" - {len(routing_demo_zones)} zonas de ruteo")
         print(f" - {len(routes)} rutas draft creadas")
     finally:
