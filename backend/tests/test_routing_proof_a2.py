@@ -136,18 +136,28 @@ def _build_route_with_stop(
     customer = db_session.scalar(select(Customer).where(Customer.tenant_id == tenant_id))
     assert customer is not None
 
-    plan = Plan(
-        id=uuid.uuid4(),
-        tenant_id=tenant_id,
-        service_date=svc_date,
-        zone_id=zone.id,
-        status=PlanStatus.locked,
-        version=1,
-        created_at=now,
-        updated_at=now,
+    # check-first: el seed crea un plan para today en la primera zona;
+    # crear incondicionalmente viola la unique constraint (tenant, date, zone).
+    plan = db_session.scalar(
+        select(Plan).where(
+            Plan.tenant_id == tenant_id,
+            Plan.service_date == svc_date,
+            Plan.zone_id == zone.id,
+        )
     )
-    db_session.add(plan)
-    db_session.flush()
+    if plan is None:
+        plan = Plan(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            service_date=svc_date,
+            zone_id=zone.id,
+            status=PlanStatus.locked,
+            version=1,
+            created_at=now,
+            updated_at=now,
+        )
+        db_session.add(plan)
+        db_session.flush()
 
     route = Route(
         id=uuid.uuid4(),

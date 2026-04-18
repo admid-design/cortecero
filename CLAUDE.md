@@ -243,12 +243,29 @@ stop = RouteStop(
 
 ### 3. Colisión de fechas entre seed y helpers de test
 
-El seed crea Plans para `date.today() + 1` (mañana).
-Helpers que usen `timedelta(days=N % K + 1)` pueden generar mañana cuando `N % K == 0` → UniqueViolation.
-**Siempre usar offset mínimo `+ 2`:**
+El seed crea Plans para `date.today()` (hoy) — zona_a (open) y zona_b (locked).
+Helpers que usen `date.today()` y creen un Plan incondicionalmente para esa zona → UniqueViolation.
+
+**Patrón correcto — check-first antes de insertar:**
 ```python
-svc_date = date.today() + timedelta(days=(uuid.uuid4().int % 300) + 2)
+plan = db_session.scalar(
+    select(Plan).where(
+        Plan.tenant_id == tenant_id,
+        Plan.service_date == svc_date,
+        Plan.zone_id == zone.id,
+    )
+)
+if plan is None:
+    plan = Plan(id=uuid.uuid4(), ...)
+    db_session.add(plan)
+    db_session.flush()
 ```
+
+**Alternativa** — para tests que no necesitan `today`: usar offset determinista lejos del hoy:
+```python
+svc_date = date.today() + timedelta(days=(uuid.uuid4().int % 300) + 1)
+```
+Con el seed en `today`, `+ 1` ya es seguro (antes el seed usaba `tomorrow = today+1` y se necesitaba `+ 2`).
 
 ### 4. El sandbox de shell no tiene Docker
 
