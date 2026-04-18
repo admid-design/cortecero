@@ -210,9 +210,8 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
       fullscreenControl: false,
       center: { lat: depotLat, lng: depotLng },
       zoom: 11,
-      maxZoom: 13,
       zoomControlOptions: {
-        position: maps.ControlPosition.TOP_RIGHT,
+        position: maps.ControlPosition.LEFT_BOTTOM,
       },
     });
 
@@ -298,7 +297,6 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
     // fitBounds solo cuando hay paradas — sin paradas se mantiene zoom:11 inicial
     if (stopPoints.length > 0 && !bounds.isEmpty()) {
       map.fitBounds(bounds);
-      // maxZoom:13 en las opciones del mapa ya limita el zoom máximo
     }
 
     return () => {
