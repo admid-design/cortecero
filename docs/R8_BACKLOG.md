@@ -25,7 +25,7 @@
 | R8-SSE-FE | SSE frontend — hook `useRouteStream`, reemplaza polling 30s en `RouteMapCard`; MAX_RETRIES=3, fallback a polling | **PROMULGADO** | CI verde: backend-tests ✅ openapi-check ✅ frontend-smoke ✅ (`8e28ede`) | `8e28ede` |
 | R8-POD-FOTO | Proof of delivery foto — `POST /proof-upload-url` + `PATCH /proof/photo` + `ProofModal` tab foto en `DriverRoutingCard`; R2 mockeado | CERRADO_LOCAL | test_routing_proof_foto_r8.py (9/9 ✓), 292 total | `c095510` + DEMO-SEED-001 fixes |
 | HARDENING-SEC-001 | Seguridad — eliminado `/debug/db`, JWT guard en lifespan, credenciales frontend limpiadas | CERRADO_LOCAL | — | (sin commit único; aplicado en sesión 2026-04-18) |
-| HARDENING-DB-001 | FK constraints stop_proofs→route_stops/routes + route_messages→routes + índices rendimiento; `StopProof` models.py alineado | CERRADO_LOCAL (Neon pendiente) | test_routing_proof_foto_r8.py (9/9 ✓) | `094a702` |
+| HARDENING-DB-001 | FK constraints stop_proofs→route_stops/routes + route_messages→routes + índices rendimiento; `StopProof` models.py alineado | **PROMULGADO** (5/5 verificado en Neon 2026-04-19) | test_routing_proof_foto_r8.py (9/9 ✓) | `094a702` |
 | DEMO-DB-RESEED-001 | Seed idempotente en lifespan FastAPI → cold start Vercel siembra datos demo en Neon | CERRADO_CON_EVIDENCIA_LOCAL | 30 pedidos + 9 vehículos verificados en Neon | `e6cbd34` |
 | DEMO-SEED-001 | Seed demo realista — 15 clientes Mallorca, 12 vehículos, 8 conductores, 30 pedidos/día, service_date=today | CERRADO_LOCAL | fix colisión Plans en 5 archivos test | `(2026-04-18)` |
 | R8-F1 | TW-001 — Time windows por cliente en optimizer (`window_start/end` → `timeWindows` Google) | VERIFICADO LOCAL | test_tw_f1.py (14/14 ✓) | `3e5980d` |
@@ -99,7 +99,7 @@
 ~~3. R8-SSE-FE — SSE frontend~~  ✅ PROMULGADO  
 ~~4. R8-POD-FOTO — POD foto~~  ✅ CERRADO_LOCAL  
 ~~5. HARDENING-SEC-001~~  ✅ CERRADO_LOCAL  
-~~6. HARDENING-DB-001~~  ✅ CERRADO_LOCAL (Neon pendiente manual)  
+~~6. HARDENING-DB-001~~  ✅ **PROMULGADO** (5/5 en Neon prod)  
 ~~7. DEMO-DB-RESEED-001~~  ✅ CERRADO_CON_EVIDENCIA_LOCAL  
 8. R8-POD-FOTO-R2-REAL — smoke R2 bucket real (si credenciales disponibles)  
 9. Aplicar migration 027 en Neon manualmente (HARDENING-DB-001 final)  

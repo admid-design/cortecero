@@ -4,7 +4,7 @@
 > Todo lo que aquí se afirma debe tener evidencia: código existente, test verde o smoke ejecutado.
 > Si una capacidad no aparece aquí, no asumas que existe.
 
-Última actualización: R8 activo — Fase A completa + B1–B4 + C1 + F1 + F2 + F4–F6 + FLEET-VIEW-001 + R8-SSE-FE PROMULGADO + R8-POD-FOTO CERRADO_LOCAL + HARDENING-SEC-001 CERRADO_LOCAL + HARDENING-DB-001 CERRADO_LOCAL + DEMO-DB-RESEED-001 CERRADO_CON_EVIDENCIA_LOCAL (292 tests backend en verde, CI verde en main, CI/CD GitHub→Vercel operativo, seed en Neon verificado, 2026-04-18). Abril 2026.
+Última actualización: R8 activo — Fase A completa + B1–B4 + C1 + F1 + F2 + F4–F6 + FLEET-VIEW-001 + R8-SSE-FE PROMULGADO + R8-POD-FOTO CERRADO_LOCAL + HARDENING-SEC-001 CERRADO_LOCAL + HARDENING-DB-001 **PROMULGADO** + HARDENING-MIGRATE-NEON-001 CERRADO_LOCAL + DEMO-DB-RESEED-001 CERRADO_CON_EVIDENCIA_LOCAL (292 tests backend en verde, migration 027 verificada 5/5 en Neon prod, 2026-04-19). Abril 2026.
 
 ---
 
@@ -215,5 +215,5 @@ Service account montado en Docker: `~/.config/kelko/google/route-optimization-sa
 - R8: Fase C1 — RETURN-001: VERIFICADO LOCAL (7/7 tests en verde, 2026-04-17). `POST /orders/{id}/return-to-planning`. failed_delivery → ready_for_planning.
 - R8: R8-POD-FOTO — CERRADO_LOCAL (9/9 tests en verde, 292 total, 2026-04-18). `POST /proof-upload-url` + `PATCH /proof/photo`. Presigned PUT R2 + confirmación de foto. R2 mockeado. OpenAPI v1.6.0. `ProofModal` con tab foto integrado en `DriverRoutingCard` (commit `c095510`). R2 bucket real pendiente.
 - R8: HARDENING-SEC-001 — CERRADO_LOCAL (2026-04-18). Eliminado endpoint `/debug/db`. JWT guard en lifespan: rechaza arranque con secret por defecto en entorno no-dev. Credenciales frontend limpiadas del repo.
-- R8: HARDENING-DB-001 — CERRADO_LOCAL (2026-04-18, commit `094a702`). FK constraints `stop_proofs→route_stops` y `stop_proofs→routes` (migration 027, idempotente). FK `route_messages→routes`. Índices de rendimiento `idx_orders_tenant_status` + `idx_route_stops_route_status`. `StopProof` en `models.py` alineado con constraints DB. Neon: migration 027 pendiente de aplicación manual.
+- R8: HARDENING-DB-001 — **PROMULGADO** (commit `094a702`, migración Neon verificada 2026-04-19). FK constraints `stop_proofs→route_stops` y `stop_proofs→routes` + FK `route_messages→routes` + índices `idx_orders_tenant_status` + `idx_route_stops_route_status`. `StopProof` en `models.py` alineado. Verificado: `5/5 PASS` vía `verify_migration_027.py` contra Neon prod.
 - R8: DEMO-DB-RESEED-001 — CERRADO_CON_EVIDENCIA_LOCAL (2026-04-18, commit `e6cbd34`). `seed()` en lifespan FastAPI. Verificado en Neon via `cortecero-api.vercel.app`: 30 pedidos + 9 vehículos activos.
