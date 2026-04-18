@@ -211,7 +211,7 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
       center: { lat: depotLat, lng: depotLng },
       zoom: 11,
       zoomControlOptions: {
-        position: maps.ControlPosition.LEFT_BOTTOM,
+        position: maps.ControlPosition.RIGHT_CENTER,
       },
     });
 
