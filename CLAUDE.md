@@ -203,6 +203,63 @@ Ver lista completa en `AGENTS.md`. Los más críticos:
 
 ---
 
+## Lecciones aprendidas — helpers de test (R8-POD-FOTO)
+
+### 1. SIEMPRE leer models.py antes de escribir helpers que instancian modelos
+
+No inferir nombres de enums ni campos. Cada error cuesta un rebuild completo (~10 min).
+
+Errores cometidos en R8-POD-FOTO:
+
+| Inferido (incorrecto) | Real en models.py |
+|-----------------------|-------------------|
+| `OrderStatus.in_route` | `OrderStatus.dispatched` |
+| `OrderIntakeType.new` | `OrderIntakeType.new_order` |
+| `SourceChannel.manual` | `SourceChannel.office` |
+| `RouteStop(sequence=1)` | `RouteStop(sequence_number=1)` |
+| `RouteStop(customer_id=...)` | campo no existe en RouteStop |
+| `Order(reference=...)` | `Order(external_ref=...)` |
+
+**Regla:** antes de instanciar cualquier modelo en un test helper, abrir `backend/app/models.py` y verificar (1) valores exactos de Enums, (2) campos NOT NULL sin default, (3) campos que NO existen.
+
+### 2. Constraints de DB que el ORM no valida pero la DB sí
+
+PostgreSQL CHECK constraints no se disparan en Python — explotan en `flush()`/`commit()`.
+Leer las migraciones relevantes antes de crear fixtures con estados no triviales.
+
+Ejemplo crítico: `ck_route_stops_arrived_consistency`
+- `status='arrived'` → `arrived_at` NOT NULL obligatorio
+- `status='completed'` → `arrived_at` Y `completed_at` NOT NULL obligatorios
+
+Patrón correcto para helpers con stop_status variable:
+```python
+stop = RouteStop(
+    ...
+    status=stop_status,
+    arrived_at=now if stop_status in (RouteStopStatus.arrived, RouteStopStatus.completed) else None,
+    completed_at=now if stop_status == RouteStopStatus.completed else None,
+)
+```
+
+### 3. Colisión de fechas entre seed y helpers de test
+
+El seed crea Plans para `date.today() + 1` (mañana).
+Helpers que usen `timedelta(days=N % K + 1)` pueden generar mañana cuando `N % K == 0` → UniqueViolation.
+**Siempre usar offset mínimo `+ 2`:**
+```python
+svc_date = date.today() + timedelta(days=(uuid.uuid4().int % 300) + 2)
+```
+
+### 4. El sandbox de shell no tiene Docker
+
+`docker compose` debe correr en la terminal del usuario. El ciclo es:
+1. Claude edita archivos en el repo
+2. Usuario corre `docker compose build --no-cache backend` + `pytest`
+3. Usuario pega el output completo
+4. Claude analiza y aplica el siguiente fix
+
+---
+
 ## Output contract esperado de Claude
 
 Toda entrega debe incluir:
@@ -244,16 +301,18 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
 - FLEET-VIEW-001: panel OpsMapDashboard
 - F1–F6: time windows, capacidad, doble viaje, ADR, ZBE
 
+### Bloques completados (continuación)
+- R8-POD-FOTO: presigned R2 upload + confirmación foto (292 tests en verde, 2026-04-18)
+
 ### Pendiente activo (orden de prioridad)
-1. **CI verde en `3e5980d`** — confirmar backend-tests #139
-2. **R8-SMOKE** — Google smoke dataset geo-ready (reproducible)
-3. **R8-SSE-FE** — SSE frontend, reemplazar polling 30s
-4. **R8-POD-FOTO** — foto en proof of delivery (decisión storage pendiente)
+1. **R8-SMOKE** — Google smoke dataset geo-ready (reproducible)
+2. **R8-POD-FOTO-UI** — integrar foto en PWA conductor (DriverRoutingCard)
+3. **R8-POD-FOTO-R2-REAL** — smoke con bucket R2 real (credenciales necesarias)
 
 ### Huecos conocidos
 - SSE backend usa asyncio.Queue in-process → no escala con gunicorn multi-worker (fix R9: Redis)
 - MAP-001 frontend: evidence en browser local; sin CI automatizado con API key
 - GPS-001 y POD-001 frontend: evidence en device real pendiente
-- POD foto: schema preparado, UI no implementada, storage no decidido
+- POD foto: backend CERRADO_LOCAL, UI no implementada, R2 real no probado
 - Notificaciones (D1): congeladas, pendiente proveedor email/SMS
 - Asistente IA: no existe en ninguna capa
