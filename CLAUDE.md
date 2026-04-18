@@ -275,6 +275,39 @@ Con el seed en `today`, `+ 1` ya es seguro (antes el seed usaba `tomorrow = toda
 3. Usuario pega el output completo
 4. Claude analiza y aplica el siguiente fix
 
+### 5. Cambios en seed.py que afectan service_date — protocolo obligatorio
+
+**Contexto:** Cuando se cambia `service_date` en el seed (ej. de `tomorrow` a `today`), los helpers de test que crean `Plan(...)` para esa fecha en zonas del seed dejan de ser seguros.
+
+**Protocolo — ejecutar ANTES de hacer push:**
+```bash
+# 1. Encontrar todos los helpers que crean Plan directamente
+grep -rn "= Plan(" backend/tests/ --include="*.py"
+
+# 2. Para cada resultado, verificar contexto (-B10):
+#    ¿Hay "if plan is None" en las 10 líneas anteriores? → seguro
+#    ¿Usa tenant_id/zone_id de una entidad fresca (no del seed)? → seguro
+#    ¿Usa while-loop que busca fecha libre? → seguro
+#    Cualquier otro caso → aplicar check-first
+
+# 3. Aplicar check-first a todos los inseguros en UN SOLO COMMIT
+```
+
+**Archivos corregidos en R8 (2026-04-18) por cambio today→tomorrow:**
+- `test_routing_proof_a2.py` — `_build_route_with_stop()`
+- `test_routing_gps_a3.py` — `_build_route()`
+- `test_routing_proof_foto_r8.py` — helper principal
+- `test_routing_bloque_e.py` — `_build_route_for_optimize()` + `test_optimize_422_missing_geo()`
+
+**Lección operativa:** Los fallos en CI aparecen en cascada — el primer commit muestra N fallos, el fix muestra M fallos nuevos, etc. Esto no es que el fix empeoró las cosas; es que el CI corta en el primer fallo de cada archivo. **Siempre barrer todos los archivos de golpe, no uno a uno.**
+
+### 6. grep sobre patrones de código devuelve falsos positivos
+
+`grep "plan = Plan("` detecta también líneas **dentro** de bloques `if plan is None:`.
+El resultado parece un problema cuando no lo es.
+
+Usar siempre contexto amplio (`-B10`) o un script que evalúe el contexto antes de reportar un conflicto.
+
 ---
 
 ## Output contract esperado de Claude
@@ -320,11 +353,21 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
 
 ### Bloques completados (continuación)
 - R8-POD-FOTO: presigned R2 upload + confirmación foto (292 tests en verde, 2026-04-18)
+- DEMO-SEED-001: seed demo realista para lunes (2026-04-18)
+  - service_date = today (cola visible inmediatamente)
+  - Depósito: 39.65779, 2.79008 (Poligon Industrial Son Llaut, Santa Maria del Camí)
+  - 12 vehículos con capacidades reales (7580..290 kg), VH-010/011/012 reserva
+  - 8 conductores con carnet/ADR en nombre (4×C·ADR, 3×B·ADR, 1×B)
+  - 15 clientes con coordenadas reales por toda Mallorca
+  - 30 pedidos/día, catálogo 25 SKUs en 6 categorías
+  - Reset queue: pedidos planned sin RouteStop → ready_for_planning al reiniciar
+- DEMO-SEED-001-TESTS: fix colisión Plans en 5 archivos de test (2026-04-18)
+  - check-first en proof_a2, gps_a3, foto_r8, bloque_e (×2)
 
 ### Pendiente activo (orden de prioridad)
-1. **R8-SMOKE** — Google smoke dataset geo-ready (reproducible)
-2. **R8-POD-FOTO-UI** — integrar foto en PWA conductor (DriverRoutingCard)
-3. **R8-POD-FOTO-R2-REAL** — smoke con bucket R2 real (credenciales necesarias)
+1. **R8-POD-FOTO-UI** — integrar foto en PWA conductor (DriverRoutingCard)
+2. **R8-POD-FOTO-R2-REAL** — smoke con bucket R2 real (credenciales necesarias)
+3. **R8-SMOKE** — Google smoke dataset geo-ready (reproducible)
 
 ### Huecos conocidos
 - SSE backend usa asyncio.Queue in-process → no escala con gunicorn multi-worker (fix R9: Redis)
@@ -333,3 +376,4 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
 - POD foto: backend CERRADO_LOCAL, UI no implementada, R2 real no probado
 - Notificaciones (D1): congeladas, pendiente proveedor email/SMS
 - Asistente IA: no existe en ninguna capa
+- Vercel: verificar que NEXT_PUBLIC_DEPOT_LAT/LNG no sobreescriben el fallback correcto
