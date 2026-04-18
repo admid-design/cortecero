@@ -32,6 +32,10 @@ async def lifespan(app: FastAPI):
             "JWT_SECRET_KEY no puede ser el valor por defecto en entornos no-dev. "
             "Setea JWT_SECRET_KEY en las variables de entorno."
         )
+    # Seed idempotente: aplica datos demo en cada cold start (Vercel serverless).
+    # En local/tests la llamada es no-op si los datos ya existen.
+    from app.seed import seed
+    seed()
     yield
 
 
