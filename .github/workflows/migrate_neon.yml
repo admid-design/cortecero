@@ -1,0 +1,51 @@
+name: Migrate Neon DB
+
+# Ejecución manual desde GitHub Actions → Actions → "Migrate Neon DB" → Run workflow
+# Requiere el secret NEON_DATABASE_URL configurado en el repositorio.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Migración máxima a aplicar (ej: 027). Vacío = todas."
+        required: false
+        default: ""
+      dry_run:
+        description: "Dry run (listar sin ejecutar)"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  migrate:
+    name: Apply migrations → Neon
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install psycopg2
+        run: pip install psycopg2-binary --quiet
+
+      - name: Build migration command
+        id: build_cmd
+        run: |
+          CMD="python3 backend/scripts/apply_migration.py"
+          if [[ -n "${{ inputs.target }}" ]]; then
+            CMD="$CMD --target ${{ inputs.target }}"
+          fi
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            CMD="$CMD --dry-run"
+          fi
+          echo "cmd=$CMD" >> "$GITHUB_OUTPUT"
+
+      - name: Apply migrations
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: ${{ steps.build_cmd.outputs.cmd }}
