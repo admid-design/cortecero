@@ -208,6 +208,7 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
+      zoomControl: true,
       center: { lat: depotLat, lng: depotLng },
       zoom: 11,
       zoomControlOptions: {

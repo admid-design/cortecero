@@ -778,6 +778,17 @@ body.map-first-mode {
   pointer-events: none;
 }
 
+/* Fallback de posición para controles de zoom dentro del layout map-first.
+   Si Maps ignora zoomControlOptions por algún motivo de render/hidratación,
+   evitamos que queden debajo del panel derecho. */
+.mf-map-area .gm-bundled-control {
+  top: 50% !important;
+  left: 14px !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: translateY(-50%);
+}
+
 /* ── Right panel ── */
 .mf-right-panel {
   height: 100vh;
