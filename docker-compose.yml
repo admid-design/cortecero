@@ -22,7 +22,7 @@ services:
     container_name: cortecero-backend
     working_dir: /app
     environment:
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/cortecero
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/cortecero
       JWT_SECRET_KEY: change-me-in-production
       JWT_ALGORITHM: HS256
       JWT_ACCESS_TOKEN_MINUTES: "720"

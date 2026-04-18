@@ -4,7 +4,7 @@
 > Todo lo que aquí se afirma debe tener evidencia: código existente, test verde o smoke ejecutado.
 > Si una capacidad no aparece aquí, no asumas que existe.
 
-Última actualización: R8 activo — Fase A completa + B1–B4 + C1 + F1 + F2 + F4–F6 + FLEET-VIEW-001 + R8-SSE-FE PROMULGADO (283 tests backend en verde, CI verde en main, CI/CD GitHub→Vercel operativo, 2026-04-18). Abril 2026.
+Última actualización: R8 activo — Fase A completa + B1–B4 + C1 + F1 + F2 + F4–F6 + FLEET-VIEW-001 + R8-SSE-FE PROMULGADO + R8-POD-FOTO CERRADO_LOCAL (292 tests backend en verde, CI verde en main, CI/CD GitHub→Vercel operativo, 2026-04-18). Abril 2026.
 
 ---
 
@@ -94,7 +94,7 @@
 | ETA dinámico (recálculo manual) | VERIFICADO LOCAL — `POST /routes/{id}/recalculate-eta` + `GET /routes/{id}/delay-alerts`. Haversine + velocidad media 40 km/h. Alerta automática si retraso ≥ 15 min. 15 tests en verde (2026-04-17). Migration 022. |
 | Reoptimización automática ante incidencias | NO EXISTE — trigger manual existe, flujo automático no |
 | Prueba de entrega: firma | VERIFICADO LOCAL — backend + frontend + tests en verde; e2e con device real pendiente |
-| Prueba de entrega: foto | NO EXISTE — schema preparado, UI no implementada |
+| Prueba de entrega: foto | VERIFICADO LOCAL — presigned URL R2 (`POST /proof-upload-url`) + confirmación (`PATCH /proof/photo`); R2 mockeado; 9 tests en verde (`test_routing_proof_foto_r8.py`); UI no implementada |
 | Notificación de ETA a cliente final | NO EXISTE |
 | Fleet view (vista de flota en mapa) | VERIFICADO LOCAL — `GET /driver/active-positions` + polling 30s en `page.tsx` + marcadores 🚚 por conductor en `RouteMapCard` + badge GPS 📍 en panel de flota `OpsMapDashboard`. Requiere conductores con GPS activo para evidencia e2e. Build frontend limpio (2026-04-17). |
 | Asistente IA en dispatcher | NO EXISTE |
@@ -199,3 +199,4 @@ Service account montado en Docker: `~/.config/kelko/google/route-optimization-sa
 - R8: Fase B3 — CHAT-001: VERIFICADO LOCAL (9/9 tests en verde, 2026-04-17). Migration 026. Chat dispatcher↔conductor en ruta.
 - R8: Fase B4 — LIVE-EDIT-001: VERIFICADO LOCAL (11/11 tests en verde, 2026-04-17). add-stop + remove-stop + move-stop extendido a in_progress.
 - R8: Fase C1 — RETURN-001: VERIFICADO LOCAL (7/7 tests en verde, 2026-04-17). `POST /orders/{id}/return-to-planning`. failed_delivery → ready_for_planning.
+- R8: R8-POD-FOTO — CERRADO_LOCAL (9/9 tests en verde, 292 total, 2026-04-18). `POST /proof-upload-url` + `PATCH /proof/photo`. Presigned PUT R2 + confirmación de foto. R2 mockeado. OpenAPI v1.6.0. UI no implementada.

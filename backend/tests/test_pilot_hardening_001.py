@@ -92,7 +92,8 @@ def _make_user_driver(db_session, tenant: Tenant, *, email: str) -> tuple[User, 
 
 def _make_dispatched_stop(db_session, tenant: Tenant, driver_id: uuid.UUID) -> tuple[Route, RouteStop]:
     now = datetime.now(UTC)
-    svc_date = date.today() + timedelta(days=(uuid.uuid4().int % 300) + 1)
+    # +2 mínimo para nunca colisionar con el Plan de mañana que crea el seed
+    svc_date = date.today() + timedelta(days=(uuid.uuid4().int % 300) + 2)
 
     zone = db_session.scalar(select(Zone).where(Zone.tenant_id == tenant.id))
     customer = db_session.scalar(select(Customer).where(Customer.tenant_id == tenant.id))

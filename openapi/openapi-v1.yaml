@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CorteCero API
-  version: 1.5.2
+  version: 1.6.0
   description: >
     API MVP para control de cut-off, planes diarios por zona, pedidos tardíos,
     excepciones y auditoría.
@@ -2467,6 +2467,76 @@ paths:
         "404":
           description: ENTITY_NOT_FOUND — Parada o proof no encontrado
 
+  /stops/{stop_id}/proof-upload-url:
+    post:
+      tags: [Routing]
+      summary: Generar URL prefirmada para subir foto de entrega (R8-POD-FOTO)
+      description: >
+        Genera una URL PUT prefirmada de Cloudflare R2 válida 300 segundos.
+        La parada debe estar en estado `arrived` o `completed`.
+        El `object_key` devuelto debe usarse en el PATCH /proof/photo para confirmar
+        la foto tras la subida directa al bucket.
+        Requiere rol `driver`, `logistics` o `admin`.
+      parameters:
+        - in: path
+          name: stop_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: URL prefirmada generada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProofUploadUrlOut'
+        "401":
+          description: No autenticado
+        "404":
+          description: ENTITY_NOT_FOUND — Parada no encontrada
+        "409":
+          description: STOP_NOT_ARRIVED — La parada no está en estado arrived/completed
+        "503":
+          description: R2_NOT_CONFIGURED — Credenciales de almacenamiento no configuradas
+
+  /stops/{stop_id}/proof/photo:
+    patch:
+      tags: [Routing]
+      summary: Confirmar foto subida a R2 (R8-POD-FOTO)
+      description: >
+        Tras subir la foto directamente a R2 con la URL prefirmada, el cliente llama
+        a este endpoint para registrar la `photo_url` en el StopProof existente.
+        Valida que el `object_key` pertenezca al tenant de la parada.
+        Requiere un StopProof previo (creado con POST /proof).
+        Requiere rol `driver`, `logistics` o `admin`.
+      parameters:
+        - in: path
+          name: stop_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProofPhotoConfirmRequest'
+      responses:
+        "200":
+          description: photo_url registrada en el proof
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StopProofOut'
+        "401":
+          description: No autenticado
+        "404":
+          description: PROOF_NOT_FOUND — No existe StopProof para esta parada
+        "422":
+          description: INVALID_OBJECT_KEY — object_key no pertenece al tenant
+
   /driver/location:
     post:
       tags: [Routing]
@@ -4464,6 +4534,32 @@ components:
         created_at:
           type: string
           format: date-time
+
+    ProofUploadUrlOut:
+      type: object
+      required: [upload_url, object_key, expires_in]
+      properties:
+        upload_url:
+          type: string
+          description: URL PUT prefirmada para subir la foto directamente a R2
+        object_key:
+          type: string
+          description: >
+            Clave del objeto en R2 con formato {tenant_id}/{route_id}/{stop_id}/{uuid}.jpg.
+            Usar en el PATCH /proof/photo tras la subida.
+        expires_in:
+          type: integer
+          description: Segundos de validez de la URL prefirmada (300)
+
+    ProofPhotoConfirmRequest:
+      type: object
+      required: [object_key]
+      properties:
+        object_key:
+          type: string
+          description: >
+            Clave del objeto devuelta por POST /proof-upload-url.
+            Debe pertenecer al tenant de la parada.
 
     DriverLocationUpdateRequest:
       type: object
