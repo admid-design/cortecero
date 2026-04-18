@@ -624,6 +624,12 @@ class StopProof(Base):
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
+    __table_args__ = (
+        # FK + CASCADE declarados en migration 027 — aquí para consistencia con RouteMessage/RouteEvent.
+        ForeignKeyConstraint(["route_stop_id", "tenant_id"], ["route_stops.id", "route_stops.tenant_id"], ondelete="CASCADE"),
+        ForeignKeyConstraint(["route_id", "tenant_id"], ["routes.id", "routes.tenant_id"], ondelete="CASCADE"),
+    )
+
 
 class DriverPosition(Base):
     """Posición GPS del conductor enviada periódicamente.  Bloque A3 (GPS-001)."""
