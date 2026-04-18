@@ -49,3 +49,9 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: ${{ steps.build_cmd.outputs.cmd }}
+
+      - name: Verify migration 027
+        if: ${{ inputs.dry_run == false || inputs.dry_run == 'false' }}
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: python3 backend/scripts/verify_migration_027.py
