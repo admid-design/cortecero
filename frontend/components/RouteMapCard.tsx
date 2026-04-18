@@ -24,8 +24,9 @@ type GoogleMapsWindow = Window & {
 };
 
 // Depósito: POLIGON INDUSTRIAL SON LLAUT, Santa Maria del Camí, Mallorca
-const FALLBACK_DEPOT_LAT = 39.648;
-const FALLBACK_DEPOT_LNG = 2.787;
+// Coincide con depot en backend/app/seed.py — actualizar ambos si cambia el almacén
+const FALLBACK_DEPOT_LAT = 39.65779;
+const FALLBACK_DEPOT_LNG = 2.79008;
 
 function parseCoordinate(value: number | null | undefined): number | null {
   if (typeof value !== "number") return null;
