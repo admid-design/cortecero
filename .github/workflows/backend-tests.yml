@@ -27,7 +27,7 @@ jobs:
           --health-retries 20
 
     env:
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/cortecero
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/cortecero
       JWT_SECRET_KEY: ci-secret
       JWT_ALGORITHM: HS256
       JWT_ACCESS_TOKEN_MINUTES: "720"
@@ -49,14 +49,15 @@ jobs:
         run: |
           python - <<'PY'
           import time
-          import psycopg
+          import psycopg2
 
           dsn = "postgresql://postgres:postgres@localhost:5432/cortecero"
           for attempt in range(60):
               try:
-                  with psycopg.connect(dsn):
-                      print("Postgres ready")
-                      break
+                  conn = psycopg2.connect(dsn)
+                  conn.close()
+                  print("Postgres ready")
+                  break
               except Exception:
                   time.sleep(1)
           else:

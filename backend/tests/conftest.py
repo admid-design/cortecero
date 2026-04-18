@@ -2,10 +2,9 @@ import os
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
-import psycopg
+import psycopg2
 import pytest
-from fastapi.testclient import TestClient
-from psycopg import sql
+from psycopg2 import sql
 from sqlalchemy.orm import Session
 
 
@@ -19,10 +18,14 @@ def _with_db_name(url: str, db_name: str) -> str:
 
 
 def _to_psycopg_url(url: str) -> str:
-    return url.replace("postgresql+psycopg://", "postgresql://", 1)
+    """Strip SQLAlchemy driver prefix so psycopg2.connect() accepts the URL."""
+    return (
+        url.replace("postgresql+psycopg2://", "postgresql://", 1)
+           .replace("postgresql+psycopg://", "postgresql://", 1)
+    )
 
 
-BASE_DB_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/cortecero")
+BASE_DB_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://postgres:postgres@localhost:5432/cortecero")
 TEST_DB_URL = os.getenv("TEST_DATABASE_URL") or _with_db_name(BASE_DB_URL, f"{_db_name(BASE_DB_URL)}_test")
 os.environ["DATABASE_URL"] = TEST_DB_URL
 
@@ -47,19 +50,30 @@ from app.seed import seed  # noqa: E402
 
 
 def _ensure_test_database() -> None:
-    with psycopg.connect(_to_psycopg_url(ADMIN_DB_URL), autocommit=True) as conn:
-        exists = conn.execute("SELECT 1 FROM pg_database WHERE datname = %s", (TEST_DB_NAME,)).fetchone()
+    conn = psycopg2.connect(_to_psycopg_url(ADMIN_DB_URL))
+    conn.autocommit = True
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM pg_database WHERE datname = %s", (TEST_DB_NAME,))
+        exists = cursor.fetchone()
         if not exists:
-            conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(TEST_DB_NAME)))
+            cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(TEST_DB_NAME)))
+    finally:
+        conn.close()
 
 
 def _reset_schema() -> None:
-    with psycopg.connect(_to_psycopg_url(TEST_DB_URL), autocommit=True) as conn:
-        conn.execute("DROP SCHEMA IF EXISTS public CASCADE;")
-        conn.execute("CREATE SCHEMA public;")
-        conn.execute("GRANT ALL ON SCHEMA public TO CURRENT_USER;")
+    conn = psycopg2.connect(_to_psycopg_url(TEST_DB_URL))
+    conn.autocommit = True
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DROP SCHEMA IF EXISTS public CASCADE;")
+        cursor.execute("CREATE SCHEMA public;")
+        cursor.execute("GRANT ALL ON SCHEMA public TO CURRENT_USER;")
         for migration_file in MIGRATION_FILES:
-            conn.execute(migration_file.read_text(encoding="utf-8"))
+            cursor.execute(migration_file.read_text(encoding="utf-8"))
+    finally:
+        conn.close()
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -78,6 +92,7 @@ def _reset_db_per_test() -> None:
 
 @pytest.fixture
 def client() -> TestClient:
+    from fastapi.testclient import TestClient
     with TestClient(app) as test_client:
         yield test_client
 
