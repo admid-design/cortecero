@@ -1723,6 +1723,19 @@ body.map-first-mode {
   line-height: 1.4;
 }
 
+/* ── UX R8: order row seleccionable ─────────────────────────── */
+.mf-orders-table-row.clickable {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.mf-orders-table-row.clickable:hover {
+  background: #f0f9ff;
+}
+.mf-orders-table-row.mf-order-selected {
+  background: #eff6ff;
+  border-left: 3px solid #2563eb;
+}
+
 /* ── UX R8: gestión section toggle ──────────────────────────── */
 .mf-gestion-section-toggle {
   display: flex;

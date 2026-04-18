@@ -85,6 +85,23 @@ function shortId(id: string) {
   return id.slice(0, 8);
 }
 
+/** Añade o quita un orderId del string CSV de planOrderIds */
+function toggleOrderId(currentIds: string, orderId: string): string {
+  const ids = currentIds
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (ids.includes(orderId)) {
+    return ids.filter((id) => id !== orderId).join(", ");
+  }
+  return [...ids, orderId].join(", ");
+}
+
+/** Devuelve true si orderId está en el string CSV de planOrderIds */
+function isOrderSelected(currentIds: string, orderId: string): boolean {
+  return currentIds.split(",").map((s) => s.trim()).includes(orderId);
+}
+
 function routeStatusLabel(status: RoutingRouteStatus): string {
   const map: Record<RoutingRouteStatus, string> = {
     draft: "Borrador",
@@ -394,13 +411,26 @@ export function OpsMapDashboard({
                     <span>Zona</span>
                     <span>Estado</span>
                   </div>
-                  {readyOrders.map((order) => (
-                    <div key={order.id} className="mf-orders-table-row">
-                      <span className="mf-orders-id">{shortId(order.id)}</span>
-                      <span className="mf-orders-zone">{order.zone_id || "—"}</span>
-                      <span className="badge warn">Pendiente</span>
-                    </div>
-                  ))}
+                  {readyOrders.map((order) => {
+                    const selected = isOrderSelected(planOrderIds, order.id);
+                    return (
+                      <div
+                        key={order.id}
+                        className={`mf-orders-table-row clickable${selected ? " mf-order-selected" : ""}`}
+                        onClick={() => onPlanOrderIdsChange(toggleOrderId(planOrderIds, order.id))}
+                        title={selected ? "Clic para deseleccionar" : "Clic para añadir a la ruta"}
+                      >
+                        <span className="mf-orders-id">
+                          {selected && <span style={{ color: "#2563eb", marginRight: 4 }}>✓</span>}
+                          {shortId(order.id)}
+                        </span>
+                        <span className="mf-orders-zone">{order.zone_id || "—"}</span>
+                        <span className={selected ? "badge ok" : "badge warn"}>
+                          {selected ? "Seleccionado" : "Pendiente"}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </>
               )
             )}
@@ -431,8 +461,21 @@ export function OpsMapDashboard({
                   <input className="mf-input" placeholder="Nombre o ID del conductor" value={planDriverId} onChange={(e) => onPlanDriverIdChange(e.target.value)} />
                 </div>
                 <div className="mf-form-row">
-                  <span className="mf-form-label">Pedidos a incluir</span>
-                  <textarea className="mf-input" placeholder="Pega aquí los IDs de pedido separados por coma" rows={3} value={planOrderIds} onChange={(e) => onPlanOrderIdsChange(e.target.value)} />
+                  <span className="mf-form-label">
+                    Pedidos a incluir
+                    {planOrderIds.trim() && (
+                      <span style={{ marginLeft: 8, fontWeight: 400, color: "#2563eb", fontSize: 11 }}>
+                        {planOrderIds.split(",").filter(s => s.trim()).length} seleccionado{planOrderIds.split(",").filter(s => s.trim()).length !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </span>
+                  <textarea
+                    className="mf-input"
+                    placeholder="Selecciona pedidos de la lista de arriba o pega IDs separados por coma"
+                    rows={3}
+                    value={planOrderIds}
+                    onChange={(e) => onPlanOrderIdsChange(e.target.value)}
+                  />
                 </div>
                 <button className="mf-btn primary" disabled={creatingPlan || !planId || !planVehicleId} onClick={onCreatePlan} style={{ width: "100%", marginTop: 4 }}>
                   {creatingPlan ? "Creando..." : "Crear ruta"}
@@ -441,8 +484,8 @@ export function OpsMapDashboard({
             </div>
           )}
 
-          {/* Mover parada */}
-          {canManage && selectedRoute && (
+          {/* Mover parada — solo si la ruta tiene paradas */}
+          {canManage && selectedRoute && selectedRoute.stops.length > 0 && (
             <div className="mf-gestion-section">
               <div className="mf-section-head" style={{ padding: "0 0 14px" }}>
                 <h3>Mover parada</h3>
@@ -995,11 +1038,14 @@ export function OpsMapDashboard({
                   onClick={() => {
                     const toggling = isSelected || selectedFleetVehicleId === v.id;
                     if (sidebarView === "gestion") {
-                      // En modo Gestión: rellenar selector de vehículo del formulario
+                      // En modo Gestión: rellenar selector del formulario
+                      // Y también seleccionar la ruta vinculada para que el mapa la refleje
                       if (planVehicleId === v.id) {
                         onPlanVehicleIdChange("");
+                        if (linkedRouteId) onSelectedRouteIdChange("");
                       } else {
                         onPlanVehicleIdChange(v.id);
+                        if (linkedRouteId) onSelectedRouteIdChange(linkedRouteId);
                       }
                     } else {
                       // En modo Rutas: mostrar ruta/vehículo en el mapa
