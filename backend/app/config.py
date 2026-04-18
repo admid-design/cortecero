@@ -19,9 +19,9 @@ class Settings(BaseSettings):
 
     # Coordenadas del depósito de salida (WGS-84).
     # Usadas por el proveedor de optimización como punto de inicio/fin de la ruta.
-    # Default: Palma de Mallorca centro (POC).
-    route_optimization_depot_lat: float = 39.5696
-    route_optimization_depot_lng: float = 2.6502
+    # Default: Poligon Industrial Son Llaut 36, 07320 Santa Maria del Camí, Mallorca.
+    route_optimization_depot_lat: float = 39.6447
+    route_optimization_depot_lng: float = 2.7847
 
     # Cloudflare R2 — Proof of delivery photos (R8-POD-FOTO)
     # Dejar vacíos en dev/tests; se usará mock en los tests del bloque.

@@ -117,8 +117,8 @@ def seed() -> None:
         # No contiene ubicaciones ni direcciones reales de clientes.
         _customer_geo = [
             # Centro (zone_a) — Palma de Mallorca
-            # Todos los clientes de zone_a están en Palma para ser alcanzables
-            # desde el depot demo (39.5696, 2.6502) por carretera en la isla.
+            # Clientes de zone_a en Palma, alcanzables desde el depot
+            # Poligon Industrial Son Llaut 36, 07320 Santa Maria del Camí (39.6447, 2.7847).
             ("Cliente 01", 39.5711, 2.6512, "Avenida Jaume III 1, Palma"),
             ("Cliente 02", 39.5752, 2.6478, "Carrer de Sant Miquel 2, Palma"),
             ("Cliente 03", 39.5688, 2.6551, "Passeig del Born 3, Palma"),
@@ -179,7 +179,7 @@ def seed() -> None:
                     customer.updated_at = now_utc()
             customers.append(customer)
 
-        service_date = (datetime.now(ZoneInfo("Europe/Madrid")) + timedelta(days=1)).date()
+        service_date = datetime.now(ZoneInfo("Europe/Madrid")).date()
 
         existing_orders = list(db.scalars(select(Order).where(Order.tenant_id == tenant.id, Order.service_date == service_date)))
         if len(existing_orders) < 20:
@@ -235,6 +235,36 @@ def seed() -> None:
                         created_at=now_utc(),
                     )
                 )
+
+        # ── Reset demo: asegura pedidos visibles en la cola ──────────────────────
+        # Si el backend reinicia con datos manipulados de una sesión anterior,
+        # órdenes que quedaron en 'planned' se reintegran a la cola visible.
+        # Solo afecta a pedidos sin RouteStop asociado (no despachados).
+        all_today_orders = list(
+            db.scalars(select(Order).where(Order.tenant_id == tenant.id, Order.service_date == service_date))
+        )
+        queueable_today = [o for o in all_today_orders if o.status == OrderStatus.ready_for_planning]
+        if len(queueable_today) < 5:
+            for o in all_today_orders:
+                if o.status == OrderStatus.planned:
+                    has_stop = db.scalar(
+                        select(RouteStop).where(
+                            RouteStop.tenant_id == tenant.id,
+                            RouteStop.order_id == o.id,
+                        )
+                    )
+                    if not has_stop:
+                        plan_order_rec = db.scalar(
+                            select(PlanOrder).where(
+                                PlanOrder.tenant_id == tenant.id,
+                                PlanOrder.order_id == o.id,
+                            )
+                        )
+                        if plan_order_rec:
+                            db.delete(plan_order_rec)
+                        o.status = OrderStatus.ready_for_planning
+                        o.updated_at = now_utc()
+            db.flush()
 
         open_plan = db.scalar(
             select(Plan).where(
@@ -396,18 +426,20 @@ def seed() -> None:
         # ========================================================================
 
         # ------------------------------------------------------------------
-        # Vehículos demo
-        # code = identificador interno sintético
-        # capacity_kg = capacidad de carga en kg (dataset de ejemplo)
+        # Vehículos demo — estructura basada en flota real (datos sintéticos).
+        # Capacidades representativas; códigos y nombres no identificables.
         # ------------------------------------------------------------------
         vehicles = {}
         for code, name, capacity in [
-            ("VH-001", "Camion Demo A 14T", 7600.0),
-            ("VH-002", "Camion Demo B 10T", 5000.0),
-            ("VH-003", "Camion Demo C 12T", 6100.0),
-            ("VH-004", "Furgon Demo D 2T", 1500.0),
-            ("VH-005", "Furgon Demo E 2T", 1400.0),
-            ("VH-006", "Vehiculo Reserva Demo", 3500.0),
+            ("VH-001", "Camión Demo 14T",   7850.0),
+            ("VH-002", "Camión Demo 12T",   6145.0),
+            ("VH-003", "Camión Demo 10T",   4900.0),
+            ("VH-004", "Camión Demo 9T-A",  4150.0),
+            ("VH-005", "Camión Demo 9T-B",  3460.0),
+            ("VH-006", "Furgón Demo 7.5T",  2645.0),
+            ("VH-007", "Furgón Demo 4.5T",  1850.0),
+            ("VH-008", "Furgón Demo 3.5T",  1342.0),
+            ("VH-009", "Vehículo Reserva Demo", 860.0),
         ]:
             vehicle = db.scalar(select(Vehicle).where(Vehicle.tenant_id == tenant.id, Vehicle.code == code))
             if not vehicle:
@@ -417,25 +449,32 @@ def seed() -> None:
                     code=code,
                     name=name,
                     capacity_kg=capacity,
-                    active=(code != "VH-006"),  # reserva fuera de rotación activa
+                    active=(code != "VH-009"),  # reserva fuera de rotación activa
                     created_at=now_utc(),
                 )
                 db.add(vehicle)
                 db.flush()
+            else:
+                # Backfill: actualiza nombre y capacidad a los valores canónicos.
+                if vehicle.name != name:
+                    vehicle.name = name
+                if vehicle.capacity_kg != capacity:
+                    vehicle.capacity_kg = capacity
             vehicles[code] = vehicle
 
         # ------------------------------------------------------------------
-        # Conductores demo
-        # phone = identificador telefónico sintético de ejemplo
+        # Conductores demo — identificadores sintéticos, sin datos reales.
         # ------------------------------------------------------------------
         drivers = {}
         for drv_key, name, phone, vehicle_code in [
-            ("driver_a", "Driver A", "700000101", "VH-001"),
-            ("driver_b", "Driver B", "700000102", "VH-002"),
-            ("driver_c", "Driver C", "700000103", "VH-003"),
-            ("driver_d", "Driver D", "700000104", None),
-            ("driver_e", "Driver E", "700000105", "VH-004"),
-            ("driver_f", "Driver F", "700000106", "VH-005"),
+            ("driver_a", "Conductor Demo A", "700000101", "VH-001"),
+            ("driver_b", "Conductor Demo B", "700000102", "VH-002"),
+            ("driver_c", "Conductor Demo C", "700000103", "VH-003"),
+            ("driver_d", "Conductor Demo D", "700000104", "VH-004"),
+            ("driver_e", "Conductor Demo E", "700000105", "VH-005"),
+            ("driver_f", "Conductor Demo F", "700000106", "VH-006"),
+            ("driver_g", "Conductor Demo G", "700000107", "VH-007"),
+            ("driver_h", "Conductor Demo H", "700000108", "VH-008"),
         ]:
             driver = db.scalar(select(Driver).where(Driver.tenant_id == tenant.id, Driver.phone == phone))
             if not driver:
@@ -476,7 +515,7 @@ def seed() -> None:
         # Se crean solo si existe un plan locked para esa zona
         # ------------------------------------------------------------------
         routes = {}
-        route_service_date = datetime.now(UTC).date()
+        route_service_date = service_date  # mismo día que los pedidos
         active_zone_driver_vehicle = [
             ("Centro", "driver_a", "VH-001"),
             ("Costa", "driver_b", "VH-002"),
@@ -526,14 +565,16 @@ def seed() -> None:
 
         db.commit()
         print("Seed OK")
+        print(f"Fecha de servicio: {service_date}")
         print("Users:")
         print(" - office@demo.cortecero.app / office123")
         print(" - logistics@demo.cortecero.app / logistics123")
         print(" - admin@demo.cortecero.app / admin123")
-        print("Routing POC — Flota demo:")
+        print(f"Pedidos en cola (ready_for_planning): {len([o for o in all_today_orders if o.status == OrderStatus.ready_for_planning])}")
+        print("Flota demo:")
         print(f" - {len(vehicles)} vehículos ({sum(1 for v in vehicles.values() if v.active)} activos)")
-        print(f" - {len(drivers)} choferes")
-        print(f" - {len(routing_demo_zones)} zonas de referencia")
+        print(f" - {len(drivers)} conductores")
+        print(f" - {len(routing_demo_zones)} zonas de ruteo")
         print(f" - {len(routes)} rutas draft creadas")
     finally:
         db.close()
