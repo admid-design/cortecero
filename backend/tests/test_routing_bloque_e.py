@@ -118,18 +118,28 @@ def _build_draft_route_with_geo(
         f"Se necesitan {n_stops} clientes con geo en seed, solo hay {len(customers_with_geo)}"
     )
 
-    plan = Plan(
-        id=uuid.uuid4(),
-        tenant_id=tenant_id,
-        service_date=svc_date,
-        zone_id=zone.id,
-        status=PlanStatus.locked,
-        version=1,
-        created_at=now,
-        updated_at=now,
+    # check-first: el seed crea un plan para today en la primera zona;
+    # crear incondicionalmente viola la unique constraint (tenant, date, zone).
+    plan = db_session.scalar(
+        select(Plan).where(
+            Plan.tenant_id == tenant_id,
+            Plan.service_date == svc_date,
+            Plan.zone_id == zone.id,
+        )
     )
-    db_session.add(plan)
-    db_session.flush()
+    if plan is None:
+        plan = Plan(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            service_date=svc_date,
+            zone_id=zone.id,
+            status=PlanStatus.locked,
+            version=1,
+            created_at=now,
+            updated_at=now,
+        )
+        db_session.add(plan)
+        db_session.flush()
 
     route = Route(
         id=uuid.uuid4(),
@@ -504,18 +514,28 @@ def test_optimize_422_missing_geo(client, db_session):
     db_session.add(customer_no_geo)
     db_session.flush()
 
-    plan = Plan(
-        id=uuid.uuid4(),
-        tenant_id=tenant.id,
-        service_date=svc_date,
-        zone_id=zone.id,
-        status=PlanStatus.locked,
-        version=1,
-        created_at=now,
-        updated_at=now,
+    # check-first: el seed crea un plan para today en la primera zona;
+    # crear incondicionalmente viola la unique constraint (tenant, date, zone).
+    plan = db_session.scalar(
+        select(Plan).where(
+            Plan.tenant_id == tenant.id,
+            Plan.service_date == svc_date,
+            Plan.zone_id == zone.id,
+        )
     )
-    db_session.add(plan)
-    db_session.flush()
+    if plan is None:
+        plan = Plan(
+            id=uuid.uuid4(),
+            tenant_id=tenant.id,
+            service_date=svc_date,
+            zone_id=zone.id,
+            status=PlanStatus.locked,
+            version=1,
+            created_at=now,
+            updated_at=now,
+        )
+        db_session.add(plan)
+        db_session.flush()
 
     route = Route(
         id=uuid.uuid4(),
