@@ -177,9 +177,9 @@ function operationalSeverityBadgeClass(severity: OrderOperationalSeverity | stri
 }
 
 export default function HomePage() {
-  const [tenantSlug, setTenantSlug] = useState("demo-cortecero");
-  const [email, setEmail] = useState("logistics@demo.cortecero.app");
-  const [password, setPassword] = useState("logistics123");
+  const [tenantSlug, setTenantSlug] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [token, setToken] = useState("");
   const [role, setRole] = useState<UserRole | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("ops");
