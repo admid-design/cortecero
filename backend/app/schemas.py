@@ -781,6 +781,18 @@ class StopProofOut(APIModel):
     created_at: datetime
 
 
+# ── Stop Proof Photo (R8-POD-FOTO) ───────────────────────────────────────────
+
+class ProofUploadUrlResponse(BaseModel):
+    upload_url: str        # presigned PUT URL para subir directo a R2
+    object_key: str        # key a usar en PATCH /proof/photo tras el upload
+    expires_in: int        # segundos hasta que expira el presigned URL
+
+
+class ProofPhotoConfirmRequest(BaseModel):
+    object_key: str        # key devuelto por proof-upload-url
+
+
 # ── Driver Position (A3 — GPS-001) ────────────────────────────────────────────
 
 class DriverLocationUpdateRequest(BaseModel):

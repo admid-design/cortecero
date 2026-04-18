@@ -95,6 +95,8 @@ from app.schemas import (
     RoutesListResponse,
     StopProofCreateRequest,
     StopProofOut,
+    ProofUploadUrlResponse,
+    ProofPhotoConfirmRequest,
 )
 
 router = APIRouter(tags=["Routing"])
@@ -2156,6 +2158,119 @@ def get_stop_proof(
     proof = _get_stop_proof(db, current.tenant_id, stop_id)
     if not proof:
         raise not_found("PROOF_NOT_FOUND", "No se encontró prueba de entrega para esta parada")
+    return proof
+
+
+# ── R8-POD-FOTO: upload URL + photo confirm ───────────────────────────────────
+
+_R2_PRESIGNED_TTL = 300  # 5 minutos
+
+
+def _get_r2_client():
+    """Devuelve un cliente boto3 S3-compatible apuntando a Cloudflare R2.
+
+    Lanza HTTPException 503 si las credenciales R2 no están configuradas.
+    En tests, parchear con unittest.mock.patch('app.routers.routing._get_r2_client').
+    """
+    import boto3  # importación local para no romper arranque si boto3 no está instalado en dev
+    from botocore.config import Config
+
+    s = settings
+    if not s.r2_account_id or not s.r2_access_key_id or not s.r2_secret_access_key:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "R2_NOT_CONFIGURED", "message": "Almacenamiento de fotos no configurado"},
+        )
+    return boto3.client(
+        "s3",
+        endpoint_url=f"https://{s.r2_account_id}.r2.cloudflarestorage.com",
+        aws_access_key_id=s.r2_access_key_id,
+        aws_secret_access_key=s.r2_secret_access_key,
+        config=Config(signature_version="s3v4"),
+        region_name="auto",
+    )
+
+
+@router.post("/stops/{stop_id}/proof-upload-url", response_model=ProofUploadUrlResponse)
+def get_proof_upload_url(
+    stop_id: uuid.UUID,
+    current: CurrentUser = Depends(require_roles("driver", "logistics", "admin")),
+    db: Session = Depends(get_db),
+) -> ProofUploadUrlResponse:
+    """Generar presigned PUT URL para subir foto de entrega directamente a R2.
+
+    El cliente sube la foto a R2 con el upload_url devuelto y luego confirma
+    el upload llamando a PATCH /stops/{stop_id}/proof/photo con el object_key.
+
+    La parada debe estar en estado 'arrived' o 'completed'.
+    """
+    stop = _get_stop_guarded(db, current.tenant_id, stop_id)
+
+    if stop.status not in (RouteStopStatus.arrived, RouteStopStatus.completed):
+        raise conflict(
+            "STOP_NOT_ARRIVED",
+            f"La parada debe estar en 'arrived' o 'completed' para subir foto (estado: {stop.status})",
+        )
+
+    object_key = f"{current.tenant_id}/{stop.route_id}/{stop_id}/{uuid.uuid4()}.jpg"
+
+    r2 = _get_r2_client()
+    upload_url = r2.generate_presigned_url(
+        "put_object",
+        Params={
+            "Bucket": settings.r2_bucket_name,
+            "Key": object_key,
+            "ContentType": "image/jpeg",
+        },
+        ExpiresIn=_R2_PRESIGNED_TTL,
+    )
+
+    return ProofUploadUrlResponse(
+        upload_url=upload_url,
+        object_key=object_key,
+        expires_in=_R2_PRESIGNED_TTL,
+    )
+
+
+@router.patch("/stops/{stop_id}/proof/photo", response_model=StopProofOut)
+def confirm_proof_photo(
+    stop_id: uuid.UUID,
+    payload: ProofPhotoConfirmRequest,
+    current: CurrentUser = Depends(require_roles("driver", "logistics", "admin")),
+    db: Session = Depends(get_db),
+) -> StopProof:
+    """Confirmar upload de foto de entrega escribiendo photo_url en el StopProof.
+
+    El backend construye la URL pública a partir del object_key para evitar
+    que el cliente pueda enlazar URLs arbitrarias como evidencia.
+
+    Semántica de overwrite: si ya existe photo_url, se sobreescribe (gana el último).
+
+    Requiere que el StopProof exista previamente (POST /stops/{id}/proof ya llamado).
+    """
+    _get_stop_guarded(db, current.tenant_id, stop_id)
+
+    proof = _get_stop_proof(db, current.tenant_id, stop_id)
+    if not proof:
+        raise not_found("PROOF_NOT_FOUND", "Debe crear el proof antes de confirmar la foto")
+
+    # Validar que el object_key pertenece a este tenant
+    expected_prefix = f"{current.tenant_id}/"
+    if not payload.object_key.startswith(expected_prefix):
+        raise unprocessable(
+            "INVALID_OBJECT_KEY",
+            "El object_key no pertenece a este tenant",
+        )
+
+    if not settings.r2_public_url:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "R2_NOT_CONFIGURED", "message": "URL pública de R2 no configurada"},
+        )
+
+    proof.photo_url = f"{settings.r2_public_url.rstrip('/')}/{payload.object_key}"
+    db.commit()
+    db.refresh(proof)
     return proof
 
 

@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     route_optimization_depot_lat: float = 39.5696
     route_optimization_depot_lng: float = 2.6502
 
+    # Cloudflare R2 — Proof of delivery photos (R8-POD-FOTO)
+    # Dejar vacíos en dev/tests; se usará mock en los tests del bloque.
+    r2_account_id: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket_name: str = "cortecero-pod-photos"
+    r2_public_url: str = ""  # e.g. https://pub-xxx.r2.dev
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
