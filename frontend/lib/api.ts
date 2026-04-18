@@ -657,6 +657,24 @@ export async function planRoutes(token: string, payload: PlanRoutesRequest): Pro
   return request<PlanRoutesResponse>("/routes/plan", { token, method: "POST", body: payload });
 }
 
+// ── Drivers ────────────────────────────────────────────────────────────────────
+export type DriverOut = {
+  id: string;
+  vehicle_id: string | null;
+  name: string;
+  phone: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function listDrivers(
+  token: string,
+  params: { active?: boolean; vehicle_id?: string } = {},
+): Promise<{ items: DriverOut[]; total: number }> {
+  return request<{ items: DriverOut[]; total: number }>(`/drivers${buildQuery(params)}`, { token });
+}
+
 export async function listRoutes(
   token: string,
   params: {

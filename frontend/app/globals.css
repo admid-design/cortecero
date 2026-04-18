@@ -1810,3 +1810,105 @@ body.map-first-mode {
   max-width: 260px;
   line-height: 1.5;
 }
+
+/* ── UX R8: Gestión create-route steps ────────────────────── */
+.mf-create-step {
+  padding: 10px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.mf-create-step:last-of-type {
+  border-bottom: none;
+}
+.mf-create-step-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mf-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.mf-step-count {
+  margin-left: auto;
+  font-weight: 400;
+  color: #2563eb;
+  font-size: 11px;
+}
+.mf-create-hint {
+  font-size: 11px;
+  color: #9ca3af;
+  padding: 4px 0;
+}
+.mf-clear-btn {
+  border: none;
+  background: #f1f5f9;
+  color: #6b7280;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
+}
+.mf-clear-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+.mf-selected-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1;
+}
+.mf-order-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-family: monospace;
+}
+.mf-chip-x {
+  border: none;
+  background: none;
+  color: #93c5fd;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  line-height: 1;
+}
+.mf-chip-x:hover {
+  color: #dc2626;
+}
+.mf-selected-chip-row {
+  flex: 1;
+  font-size: 13px;
+  color: #1d4ed8;
+  font-weight: 500;
+  background: #eff6ff;
+  border-radius: 8px;
+  padding: 5px 10px;
+}

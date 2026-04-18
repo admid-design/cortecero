@@ -44,6 +44,7 @@ import {
   listAdminZones,
   listExceptions,
   listOrders,
+  listDrivers,
   listPlans,
   lockPlan,
   login,
@@ -72,6 +73,7 @@ import {
   type OrderOperationalSnapshotItem,
   type PendingQueueItem,
   type PendingQueueReason,
+  type DriverOut,
   type Plan,
   type PlanCapacityAlert,
   type PlanCustomerConsolidationResponse,
@@ -219,6 +221,7 @@ export default function HomePage() {
   const [dispatcherPlanVehicleId, setDispatcherPlanVehicleId] = useState("");
   const [dispatcherPlanDriverId, setDispatcherPlanDriverId] = useState("");
   const [dispatcherPlanOrderIds, setDispatcherPlanOrderIds] = useState("");
+  const [opsDrivers, setOpsDrivers] = useState<DriverOut[]>([]);
   const [dispatcherPlanCreating, setDispatcherPlanCreating] = useState(false);
   const [dispatcherOptimizingRouteId, setDispatcherOptimizingRouteId] = useState<string | null>(null);
   const [dispatcherDispatchingRouteId, setDispatcherDispatchingRouteId] = useState<string | null>(null);
@@ -506,12 +509,14 @@ export default function HomePage() {
         setDispatcherRoutes(routes);
 
         if (canManage) {
-          const [readyRes, vehiclesRes] = await Promise.all([
+          const [readyRes, vehiclesRes, driversRes] = await Promise.all([
             listReadyToDispatchOrders(activeToken, { service_date: serviceDate }),
             listAvailableVehicles(activeToken, { service_date: serviceDate }),
+            listDrivers(activeToken, { active: true }),
           ]);
           setDispatcherReadyOrders(readyRes.items ?? []);
           setDispatcherVehicles(vehiclesRes.items ?? []);
+          setOpsDrivers(driversRes.items ?? []);
         } else {
           setDispatcherReadyOrders([]);
           setDispatcherVehicles([]);
@@ -1374,6 +1379,8 @@ export default function HomePage() {
         onRefresh={() => void refreshDispatcher()}
         readyOrders={dispatcherReadyOrders}
         availableVehicles={dispatcherVehicles}
+        availableDrivers={opsDrivers}
+        availablePlans={plans.filter((p) => p.service_date === serviceDate)}
         planId={dispatcherPlanId}
         onPlanIdChange={setDispatcherPlanId}
         planVehicleId={dispatcherPlanVehicleId}

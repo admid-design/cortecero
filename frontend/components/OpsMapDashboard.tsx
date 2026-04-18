@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import type {
   AvailableVehicleItem,
   DashboardSummary,
+  DriverOut,
   DriverPositionOut,
+  Plan,
   ReadyToDispatchItem,
   RouteEventItem,
   RoutingRoute,
@@ -57,6 +59,8 @@ type OpsMapDashboardProps = {
   // Plan creation (advanced)
   readyOrders: ReadyToDispatchItem[];
   availableVehicles: AvailableVehicleItem[];
+  availableDrivers: DriverOut[];
+  availablePlans: Plan[];
   planId: string;
   onPlanIdChange: (v: string) => void;
   planVehicleId: string;
@@ -246,6 +250,8 @@ export function OpsMapDashboard({
   onRefresh,
   readyOrders,
   availableVehicles,
+  availableDrivers,
+  availablePlans,
   planId,
   onPlanIdChange,
   planVehicleId,
@@ -270,8 +276,16 @@ export function OpsMapDashboard({
   const [routesSectionOpen, setRoutesSectionOpen] = useState(true);
   const [fleetSectionOpen, setFleetSectionOpen] = useState(true);
   const [unassignedGestionOpen, setUnassignedGestionOpen] = useState(true);
+  const [driverSectionOpen, setDriverSectionOpen] = useState(true);
   const [selectedFleetVehicleId, setSelectedFleetVehicleId] = useState<string | null>(null);
   const [selectedFleetVehicleName, setSelectedFleetVehicleName] = useState<string | null>(null);
+
+  // Auto-select plan when only one is available
+  useEffect(() => {
+    if (availablePlans.length === 1 && !planId) {
+      onPlanIdChange(availablePlans[0].id);
+    }
+  }, [availablePlans, planId, onPlanIdChange]);
 
   // Derived KPIs
   const totalRoutes = routes.length;
@@ -436,51 +450,141 @@ export function OpsMapDashboard({
             )}
           </div>
 
-          {/* Crear ruta */}
+          {/* Crear ruta — formulario simplificado */}
           {canManage && (
             <div className="mf-gestion-section">
               <div className="mf-section-head" style={{ padding: "0 0 14px" }}>
                 <h3>Crear ruta</h3>
               </div>
-              <div className="mf-gestion-form">
-                <div className="mf-form-row">
-                  <span className="mf-form-label">Nombre del plan</span>
-                  <input className="mf-input" placeholder="Ej: Ruta mañana Palma" value={planId} onChange={(e) => onPlanIdChange(e.target.value)} />
+
+              {/* Paso 1: Plan */}
+              <div className="mf-create-step">
+                <div className="mf-create-step-label">
+                  <span className="mf-step-num">1</span> Plan de servicio
                 </div>
-                <div className="mf-form-row">
-                  <span className="mf-form-label">Vehículo</span>
-                  <select className="mf-input" value={planVehicleId} onChange={(e) => onPlanVehicleIdChange(e.target.value)}>
-                    <option value="">— Selecciona vehículo —</option>
-                    {availableVehicles.map((v) => (
-                      <option key={v.id} value={v.id}>{v.name} · {v.code}</option>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <select
+                    className="mf-input"
+                    style={{ flex: 1 }}
+                    value={planId}
+                    onChange={(e) => onPlanIdChange(e.target.value)}
+                  >
+                    <option value="">— Selecciona plan —</option>
+                    {availablePlans.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.service_date} · Zona {p.zone_id.slice(0, 8)} · {p.status === "open" ? "Abierto" : p.status === "locked" ? "Bloqueado" : "Despachado"}
+                      </option>
                     ))}
                   </select>
+                  {planId && (
+                    <button
+                      className="mf-clear-btn"
+                      onClick={() => onPlanIdChange("")}
+                      title="Quitar plan"
+                    >×</button>
+                  )}
                 </div>
-                <div className="mf-form-row">
-                  <span className="mf-form-label">Conductor (opcional)</span>
-                  <input className="mf-input" placeholder="Nombre o ID del conductor" value={planDriverId} onChange={(e) => onPlanDriverIdChange(e.target.value)} />
-                </div>
-                <div className="mf-form-row">
-                  <span className="mf-form-label">
-                    Pedidos a incluir
-                    {planOrderIds.trim() && (
-                      <span style={{ marginLeft: 8, fontWeight: 400, color: "#2563eb", fontSize: 11 }}>
-                        {planOrderIds.split(",").filter(s => s.trim()).length} seleccionado{planOrderIds.split(",").filter(s => s.trim()).length !== 1 ? "s" : ""}
-                      </span>
-                    )}
-                  </span>
-                  <textarea
-                    className="mf-input"
-                    placeholder="Selecciona pedidos de la lista de arriba o pega IDs separados por coma"
-                    rows={3}
-                    value={planOrderIds}
-                    onChange={(e) => onPlanOrderIdsChange(e.target.value)}
-                  />
-                </div>
-                <button className="mf-btn primary" disabled={creatingPlan || !planId || !planVehicleId} onClick={onCreatePlan} style={{ width: "100%", marginTop: 4 }}>
-                  {creatingPlan ? "Creando..." : "Crear ruta"}
-                </button>
+                {availablePlans.length === 0 && (
+                  <div className="mf-create-hint">No hay planes para {serviceDate}</div>
+                )}
               </div>
+
+              {/* Paso 2: Pedidos — ya seleccionados arriba */}
+              <div className="mf-create-step">
+                <div className="mf-create-step-label">
+                  <span className="mf-step-num">2</span> Pedidos a incluir
+                  {planOrderIds.trim() && (
+                    <span className="mf-step-count">
+                      {planOrderIds.split(",").filter(s => s.trim()).length} seleccionado{planOrderIds.split(",").filter(s => s.trim()).length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+                {planOrderIds.trim() ? (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <div className="mf-selected-summary">
+                      {planOrderIds.split(",").filter(s => s.trim()).map(id => (
+                        <span key={id} className="mf-order-chip">
+                          {id.trim().slice(0, 8)}
+                          <button
+                            className="mf-chip-x"
+                            onClick={() => onPlanOrderIdsChange(
+                              planOrderIds.split(",").filter(s => s.trim() && s.trim() !== id.trim()).join(", ")
+                            )}
+                          >×</button>
+                        </span>
+                      ))}
+                    </div>
+                    <button
+                      className="mf-clear-btn"
+                      onClick={() => onPlanOrderIdsChange("")}
+                      title="Quitar todos"
+                    >×</button>
+                  </div>
+                ) : (
+                  <div className="mf-create-hint">
+                    ↑ Selecciona pedidos de la lista de arriba
+                  </div>
+                )}
+              </div>
+
+              {/* Paso 3: Vehículo */}
+              <div className="mf-create-step">
+                <div className="mf-create-step-label">
+                  <span className="mf-step-num">3</span> Vehículo
+                </div>
+                {planVehicleId ? (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <div className="mf-selected-chip-row">
+                      🚚 {availableVehicles.find(v => v.id === planVehicleId)?.name ?? shortId(planVehicleId)}
+                    </div>
+                    <button
+                      className="mf-clear-btn"
+                      onClick={() => onPlanVehicleIdChange("")}
+                      title="Quitar vehículo"
+                    >×</button>
+                  </div>
+                ) : (
+                  <div className="mf-create-hint">↙ Selecciona un vehículo del panel Flota</div>
+                )}
+              </div>
+
+              {/* Paso 4: Conductor */}
+              <div className="mf-create-step">
+                <div className="mf-create-step-label">
+                  <span className="mf-step-num">4</span> Conductor <span style={{ fontWeight: 400, color: "#9ca3af" }}>(opcional)</span>
+                </div>
+                {planDriverId ? (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <div className="mf-selected-chip-row">
+                      👤 {availableDrivers.find(d => d.id === planDriverId)?.name ?? shortId(planDriverId)}
+                    </div>
+                    <button
+                      className="mf-clear-btn"
+                      onClick={() => onPlanDriverIdChange("")}
+                      title="Quitar conductor"
+                    >×</button>
+                  </div>
+                ) : (
+                  <div className="mf-create-hint">↙ Selecciona un conductor del panel Conductores</div>
+                )}
+              </div>
+
+              <button
+                className="mf-btn primary"
+                disabled={creatingPlan || !planId || !planVehicleId || planOrderIds.trim().split(",").filter(s => s.trim()).length === 0}
+                onClick={onCreatePlan}
+                style={{ width: "100%", marginTop: 8 }}
+              >
+                {creatingPlan ? "Creando..." : "✓ Crear ruta"}
+              </button>
+
+              {(!planId || !planVehicleId || planOrderIds.trim().split(",").filter(s => s.trim()).length === 0) && (
+                <div className="mf-create-hint" style={{ marginTop: 6, textAlign: "center" }}>
+                  {!planId ? "Falta: plan · " : ""}
+                  {planOrderIds.trim().split(",").filter(s => s.trim()).length === 0 ? "Falta: pedidos · " : ""}
+                  {!planVehicleId ? "Falta: vehículo" : ""}
+                </div>
+              )}
             </div>
           )}
 
@@ -1003,6 +1107,53 @@ export function OpsMapDashboard({
               </div>
             )}
           </>
+        )}
+
+        {/* ── CONDUCTORES — solo en modo Gestión ── */}
+        {sidebarView === "gestion" && availableDrivers.length > 0 && (
+          <div className="mf-section">
+            <div
+              className="mf-section-head mf-section-head-toggle"
+              onClick={() => setDriverSectionOpen((v) => !v)}
+            >
+              <div>
+                <h3 style={{ margin: 0 }}>Conductores</h3>
+                {driverSectionOpen && (
+                  <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 1 }}>
+                    Clic para asignar a la ruta
+                  </div>
+                )}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span className="mf-section-head-count">{availableDrivers.length}</span>
+                <span className="mf-collapse-icon">{driverSectionOpen ? "▲" : "▼"}</span>
+              </div>
+            </div>
+            {driverSectionOpen && (
+              <div className="mf-fleet-list">
+                {availableDrivers.map((d) => {
+                  const isSelected = planDriverId === d.id;
+                  return (
+                    <div
+                      key={d.id}
+                      className={`mf-fleet-row clickable${isSelected ? " selected" : ""}`}
+                      onClick={() => onPlanDriverIdChange(isSelected ? "" : d.id)}
+                      title={isSelected ? "Clic para deseleccionar" : "Asignar a la ruta"}
+                    >
+                      <span className="mf-fleet-icon">👤</span>
+                      <div className="mf-fleet-info">
+                        <span className="mf-fleet-name">{d.name}</span>
+                        <span className="mf-fleet-meta">{d.phone || "Sin teléfono"}</span>
+                      </div>
+                      {isSelected && (
+                        <span className="badge ok" style={{ fontSize: 10 }}>Seleccionado</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
 
         {/* ── FLOTA: camiones y conductores ── */}
