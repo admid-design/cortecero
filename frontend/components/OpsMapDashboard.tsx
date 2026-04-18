@@ -252,6 +252,7 @@ export function OpsMapDashboard({
   const [sidebarView, setSidebarView] = useState<"rutas" | "gestion">("rutas");
   const [routesSectionOpen, setRoutesSectionOpen] = useState(true);
   const [fleetSectionOpen, setFleetSectionOpen] = useState(true);
+  const [unassignedGestionOpen, setUnassignedGestionOpen] = useState(true);
   const [selectedFleetVehicleId, setSelectedFleetVehicleId] = useState<string | null>(null);
   const [selectedFleetVehicleName, setSelectedFleetVehicleName] = useState<string | null>(null);
 
@@ -369,31 +370,39 @@ export function OpsMapDashboard({
             <span style={{ fontSize: 13, color: "#6b7280" }}>{serviceDate}</span>
           </div>
 
-          {/* Pedidos sin asignar */}
+          {/* Pedidos sin asignar — colapsable */}
           <div className="mf-gestion-section">
-            <div className="mf-section-head" style={{ padding: "0 0 10px" }}>
-              <h3>Pedidos sin asignar</h3>
-              {readyOrders.length > 0 && (
-                <span className="mf-section-head-count mf-count-warn">{readyOrders.length}</span>
-              )}
+            <div
+              className="mf-gestion-section-toggle"
+              onClick={() => setUnassignedGestionOpen((v) => !v)}
+            >
+              <h3>
+                Pedidos sin asignar
+                {readyOrders.length > 0 && (
+                  <span className="mf-gestion-count-badge">{readyOrders.length}</span>
+                )}
+              </h3>
+              <span className="mf-collapse-icon">{unassignedGestionOpen ? "▲" : "▼"}</span>
             </div>
-            {readyOrders.length === 0 ? (
-              <div className="mf-gestion-empty">Sin pedidos pendientes de asignación</div>
-            ) : (
-              <>
-                <div className="mf-orders-table-head">
-                  <span>Pedido</span>
-                  <span>Zona</span>
-                  <span>Estado</span>
-                </div>
-                {readyOrders.map((order) => (
-                  <div key={order.id} className="mf-orders-table-row">
-                    <span className="mf-orders-id">{shortId(order.id)}</span>
-                    <span className="mf-orders-zone">{order.zone_id || "—"}</span>
-                    <span className="badge warn">Pendiente</span>
+            {unassignedGestionOpen && (
+              readyOrders.length === 0 ? (
+                <div className="mf-gestion-empty">Sin pedidos pendientes de asignación</div>
+              ) : (
+                <>
+                  <div className="mf-orders-table-head">
+                    <span>Pedido</span>
+                    <span>Zona</span>
+                    <span>Estado</span>
                   </div>
-                ))}
-              </>
+                  {readyOrders.map((order) => (
+                    <div key={order.id} className="mf-orders-table-row">
+                      <span className="mf-orders-id">{shortId(order.id)}</span>
+                      <span className="mf-orders-zone">{order.zone_id || "—"}</span>
+                      <span className="badge warn">Pendiente</span>
+                    </div>
+                  ))}
+                </>
+              )
             )}
           </div>
 
@@ -521,13 +530,23 @@ export function OpsMapDashboard({
             selectedVehicleName={selectedFleetVehicleName}
             activePositions={activePositions}
           />
-          {/* Empty state overlay when no route selected */}
+          {/* Empty state overlay */}
           {!selectedRoute && (
             <div className="mf-map-empty-state">
               <div className="mf-map-empty-icon">📍</div>
               <div className="mf-map-empty-title">Ninguna ruta seleccionada</div>
               <div className="mf-map-empty-sub">
                 Selecciona una ruta del panel derecho para ver su recorrido aquí
+              </div>
+            </div>
+          )}
+          {selectedRoute && selectedRoute.stops.length === 0 && !selectedRoute.route_geometry && (
+            <div className="mf-map-empty-state">
+              <div className="mf-map-empty-icon">🗺️</div>
+              <div className="mf-map-empty-title">Ruta sin paradas aún</div>
+              <div className="mf-map-empty-sub">
+                Esta ruta está en borrador. Ve a <strong>Gestión</strong> para asignar pedidos,
+                luego optimiza para ver el recorrido.
               </div>
             </div>
           )}
@@ -950,7 +969,14 @@ export function OpsMapDashboard({
               className="mf-section-head mf-section-head-toggle"
               onClick={() => setFleetSectionOpen((v) => !v)}
             >
-              <h3>Flota disponible</h3>
+              <div>
+                <h3 style={{ margin: 0 }}>Flota disponible</h3>
+                {fleetSectionOpen && (
+                  <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 1 }}>
+                    {sidebarView === "gestion" ? "Clic para asignar a la ruta" : "Clic para ver en mapa"}
+                  </div>
+                )}
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span className="mf-section-head-count">{availableVehicles.length}</span>
                 <span className="mf-collapse-icon">{fleetSectionOpen ? "▲" : "▼"}</span>
@@ -959,27 +985,36 @@ export function OpsMapDashboard({
             {fleetSectionOpen && <div className="mf-fleet-list">
               {availableVehicles.map((v) => {
                 const linkedRouteId = vehicleRouteMap[v.id];
-                const isSelected = !!linkedRouteId && linkedRouteId === selectedRouteId;
+                const isSelected = sidebarView === "gestion"
+                  ? planVehicleId === v.id
+                  : !!linkedRouteId && linkedRouteId === selectedRouteId;
                 return (
                 <div
                   key={v.id}
                   className={`mf-fleet-row clickable${isSelected ? " selected" : ""}`}
                   onClick={() => {
                     const toggling = isSelected || selectedFleetVehicleId === v.id;
-                    if (toggling) {
-                      // deseleccionar
-                      setSelectedFleetVehicleId(null);
-                      setSelectedFleetVehicleName(null);
-                      if (linkedRouteId) onSelectedRouteIdChange("");
+                    if (sidebarView === "gestion") {
+                      // En modo Gestión: rellenar selector de vehículo del formulario
+                      if (planVehicleId === v.id) {
+                        onPlanVehicleIdChange("");
+                      } else {
+                        onPlanVehicleIdChange(v.id);
+                      }
                     } else {
-                      // seleccionar vehículo → mostrar en mapa
-                      setSelectedFleetVehicleId(v.id);
-                      setSelectedFleetVehicleName(v.name);
-                      if (linkedRouteId) onSelectedRouteIdChange(linkedRouteId);
-                      setSidebarView("rutas");
+                      // En modo Rutas: mostrar ruta/vehículo en el mapa
+                      if (toggling) {
+                        setSelectedFleetVehicleId(null);
+                        setSelectedFleetVehicleName(null);
+                        if (linkedRouteId) onSelectedRouteIdChange("");
+                      } else {
+                        setSelectedFleetVehicleId(v.id);
+                        setSelectedFleetVehicleName(v.name);
+                        if (linkedRouteId) onSelectedRouteIdChange(linkedRouteId);
+                      }
                     }
                   }}
-                  title={linkedRouteId ? "Ver ruta en mapa" : "Ver vehículo en mapa"}
+                  title={sidebarView === "gestion" ? "Seleccionar para crear ruta" : linkedRouteId ? "Ver ruta en mapa" : "Ver vehículo en mapa"}
                 >
                   <span className="mf-fleet-icon">🚚</span>
                   <div className="mf-fleet-info">
