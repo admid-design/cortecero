@@ -120,6 +120,86 @@ function stopSeqClass(status: string): string {
   return "mf-stop-seq";
 }
 
+// ─── NextActionCard ───────────────────────────────────────────────────────────
+
+function NextActionCard({
+  unassigned,
+  activeRoutes,
+  routes,
+  onGoToGestion,
+}: {
+  unassigned: number;
+  activeRoutes: number;
+  routes: RoutingRoute[];
+  onGoToGestion: () => void;
+}) {
+  const plannedOrDraft = routes.filter(
+    (r) => r.status === "planned" || r.status === "draft",
+  ).length;
+
+  if (unassigned > 0 && routes.length === 0) {
+    return (
+      <div className="mf-next-action mf-next-action-warn" onClick={onGoToGestion}>
+        <div className="mf-next-action-icon">📦</div>
+        <div className="mf-next-action-body">
+          <div className="mf-next-action-title">
+            {unassigned} pedido{unassigned !== 1 ? "s" : ""} sin ruta
+          </div>
+          <div className="mf-next-action-sub">
+            Ve a <strong>Gestión</strong> para crear rutas y asignar pedidos →
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (plannedOrDraft > 0) {
+    return (
+      <div className="mf-next-action mf-next-action-blue">
+        <div className="mf-next-action-icon">⚡</div>
+        <div className="mf-next-action-body">
+          <div className="mf-next-action-title">
+            {plannedOrDraft} ruta{plannedOrDraft !== 1 ? "s" : ""} lista{plannedOrDraft !== 1 ? "s" : ""} para operar
+          </div>
+          <div className="mf-next-action-sub">
+            Selecciona una ruta · optimiza · despacha al conductor
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (activeRoutes > 0) {
+    return (
+      <div className="mf-next-action mf-next-action-ok">
+        <div className="mf-next-action-icon">🚚</div>
+        <div className="mf-next-action-body">
+          <div className="mf-next-action-title">
+            {activeRoutes} ruta{activeRoutes !== 1 ? "s" : ""} en curso
+          </div>
+          <div className="mf-next-action-sub">
+            Selecciona una ruta para ver su recorrido en el mapa
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (routes.length > 0) {
+    return (
+      <div className="mf-next-action mf-next-action-ok">
+        <div className="mf-next-action-icon">✅</div>
+        <div className="mf-next-action-body">
+          <div className="mf-next-action-title">Operación completada</div>
+          <div className="mf-next-action-sub">Todas las rutas del día están finalizadas</div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 // ─── component ────────────────────────────────────────────────────────────────
 
 export function OpsMapDashboard({
@@ -235,7 +315,10 @@ export function OpsMapDashboard({
             onClick={() => setSidebarView("rutas")}
           >
             <span className="mf-nav-icon">🗺</span>
-            Rutas
+            <span className="mf-nav-item-text">
+              <span className="mf-nav-item-label">Rutas</span>
+              <span className="mf-nav-item-sub">Ver mapa · optimizar · despachar</span>
+            </span>
             {activeRoutes > 0 && (
               <span className="mf-badge-dot">{activeRoutes}</span>
             )}
@@ -245,7 +328,10 @@ export function OpsMapDashboard({
             onClick={() => setSidebarView("gestion")}
           >
             <span className="mf-nav-icon">📋</span>
-            Gestión
+            <span className="mf-nav-item-text">
+              <span className="mf-nav-item-label">Gestión</span>
+              <span className="mf-nav-item-sub">Crear rutas · asignar pedidos</span>
+            </span>
             {unassigned > 0 && (
               <span className="mf-badge-dot">{unassigned}</span>
             )}
@@ -435,6 +521,16 @@ export function OpsMapDashboard({
             selectedVehicleName={selectedFleetVehicleName}
             activePositions={activePositions}
           />
+          {/* Empty state overlay when no route selected */}
+          {!selectedRoute && (
+            <div className="mf-map-empty-state">
+              <div className="mf-map-empty-icon">📍</div>
+              <div className="mf-map-empty-title">Ninguna ruta seleccionada</div>
+              <div className="mf-map-empty-sub">
+                Selecciona una ruta del panel derecho para ver su recorrido aquí
+              </div>
+            </div>
+          )}
 
           {/* Floating overlay stats */}
           <div className="mf-map-overlay-stats">
@@ -496,14 +592,26 @@ export function OpsMapDashboard({
               <span className="mf-kpi-label">Completadas</span>
             </div>
           </div>
-          <div className="mf-kpi-card mf-kpi-amber">
+          <div
+            className={`mf-kpi-card mf-kpi-amber${unassigned > 0 ? " clickable" : ""}`}
+            onClick={unassigned > 0 ? () => setSidebarView("gestion") : undefined}
+            title={unassigned > 0 ? "Ir a Gestión para asignar pedidos" : undefined}
+          >
             <span className="mf-kpi-icon">📦</span>
             <div className="mf-kpi-data">
               <span className="mf-kpi-value">{unassigned}</span>
-              <span className="mf-kpi-label">Sin asignar</span>
+              <span className="mf-kpi-label">Sin asignar{unassigned > 0 ? " →" : ""}</span>
             </div>
           </div>
         </div>
+
+        {/* Próxima acción contextual */}
+        <NextActionCard
+          unassigned={unassigned}
+          activeRoutes={activeRoutes}
+          routes={filteredRoutes}
+          onGoToGestion={() => setSidebarView("gestion")}
+        />
 
         {/* Routes list */}
         <div className="mf-section">
