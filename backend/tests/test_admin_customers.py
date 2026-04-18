@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 
+from sqlalchemy import select
+
 from app.models import Customer, Tenant, User, UserRole, Zone
 from app.security import hash_password
 from tests.helpers import auth_headers, login_as
@@ -48,7 +50,11 @@ def test_list_customers_is_tenant_scoped_and_readable_by_logistics(client, db_se
     res = client.get("/admin/customers", headers=auth_headers(token))
     assert res.status_code == 200, res.text
     names = {item["name"] for item in res.json()["items"]}
-    assert "Cliente 01" in names
+    # Verificar que el seed pobló clientes para el tenant demo (nombre independiente de seed)
+    demo_tenant = db_session.scalar(select(Tenant).where(Tenant.slug == "demo-cortecero"))
+    seed_customer = db_session.scalar(select(Customer).where(Customer.tenant_id == demo_tenant.id))
+    assert seed_customer is not None, "Seed debe incluir al menos un cliente"
+    assert seed_customer.name in names
     assert "Cliente Externo" not in names
 
 
@@ -120,9 +126,14 @@ def test_create_update_customer_and_name_conflict(client):
     assert body["zone_id"] == zone_ids[1]
     assert body["cutoff_override_time"] is None
 
+    # Obtener nombre existente en seed para provocar conflicto (independiente del seed)
+    seed_list = client.get("/admin/customers", headers=auth_headers(token))
+    existing_name = next(
+        item["name"] for item in seed_list.json()["items"] if item["id"] != customer_id
+    )
     conflict_res = client.patch(
         f"/admin/customers/{customer_id}",
-        json={"name": "Cliente 01"},
+        json={"name": existing_name},
         headers=auth_headers(token),
     )
     assert conflict_res.status_code == 409

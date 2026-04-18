@@ -388,6 +388,32 @@ def seed() -> None:
             db.add(locked_plan)
             db.flush()
 
+        # Plan para mañana (zone_a, open) — requerido por test_plans_auto_lock.
+        # La función de auto-lock bloquea planes del día siguiente al ejecutarse;
+        # sin este plan el seed no provee datos suficientes para ese contrato.
+        tomorrow = service_date + timedelta(days=1)
+        tomorrow_plan = db.scalar(
+            select(Plan).where(
+                Plan.tenant_id == tenant.id,
+                Plan.service_date == tomorrow,
+                Plan.zone_id == zone_a.id,
+            )
+        )
+        if not tomorrow_plan:
+            db.add(Plan(
+                id=uuid.uuid4(),
+                tenant_id=tenant.id,
+                service_date=tomorrow,
+                zone_id=zone_a.id,
+                status=PlanStatus.open,
+                version=1,
+                locked_at=None,
+                locked_by=None,
+                created_at=now_utc(),
+                updated_at=now_utc(),
+            ))
+            db.flush()
+
         all_orders = list(db.scalars(select(Order).where(Order.tenant_id == tenant.id, Order.service_date == service_date)))
         by_external = {o.external_ref: o for o in all_orders}
 
