@@ -4,7 +4,7 @@
 > Todo lo que aquí se afirma debe tener evidencia: código existente, test verde o smoke ejecutado.
 > Si una capacidad no aparece aquí, no asumas que existe.
 
-Última actualización: R8 activo — Fase A completa + B1–B4 + C1 + F1 + F2 + F4–F6 + FLEET-VIEW-001 VERIFICADO LOCAL (283 tests backend en verde, build frontend limpio, 2026-04-17). Abril 2026.
+Última actualización: R8 activo — Fase A completa + B1–B4 + C1 + F1 + F2 + F4–F6 + FLEET-VIEW-001 + R8-SSE-FE PROMULGADO (283 tests backend en verde, CI verde en main, CI/CD GitHub→Vercel operativo, 2026-04-18). Abril 2026.
 
 ---
 
@@ -29,7 +29,7 @@
 - **Next.js** + TypeScript
 - Cliente tipado en `frontend/lib/api.ts`
 - Componentes operativos: `DispatcherRoutingCard`, `DriverRoutingCard`, `OperationalQueueCard`, `PendingQueueCard`, `OperationalResolutionQueueCard`, `OrderOperationalSnapshotsCard`, `AdminProductsCard`
-- Panel dispatcher: asignación de rutas, despacho, visualización de paradas, mapa de ruta con marcadores por estado y marcador conductor en tiempo real (polling 30 s)
+- Panel dispatcher: asignación de rutas, despacho, visualización de paradas, mapa de ruta con marcadores por estado y marcador conductor en tiempo real (SSE via `useRouteStream`, fallback a polling)
 - PWA del conductor: arrive / complete / fail / skip / incidencias / firma de entrega (modal canvas) / GPS tracking activo durante ruta in_progress
 - Frontend build en verde (CI `frontend-smoke`)
 - Tests de componentes: 26 tests en verde
@@ -90,7 +90,7 @@
 | Capacidad | Estado real |
 |---|---|
 | SSE transport layer backend (REALTIME-001 B1) | VERIFICADO LOCAL — 7 tests en verde (2026-04-17). `RouteEventBus` + `GET /routes/{id}/stream` + hooks en arrive/complete/fail/skip/driver-location. Limitación documentada: asyncio.Queue in-process, no compartido entre workers gunicorn. Auth por query param JWT provisional para B1. |
-| Seguimiento GPS en tiempo real en frontend (SSE/push) | NO EXISTE — frontend sigue usando polling 30 s; backend SSE existe pero frontend no lo consume aún |
+| Seguimiento GPS en tiempo real en frontend (SSE/push) | PROMULGADO — hook `useRouteStream` consume `GET /routes/{id}/stream`, reemplaza polling 30s por push SSE en `RouteMapCard`. MAX_RETRIES=3, fallback automático a polling. CI verde en `main` (commit `8e28ede`). Limitación conocida: SSE backend in-process (no multi-worker gunicorn). |
 | ETA dinámico (recálculo manual) | VERIFICADO LOCAL — `POST /routes/{id}/recalculate-eta` + `GET /routes/{id}/delay-alerts`. Haversine + velocidad media 40 km/h. Alerta automática si retraso ≥ 15 min. 15 tests en verde (2026-04-17). Migration 022. |
 | Reoptimización automática ante incidencias | NO EXISTE — trigger manual existe, flujo automático no |
 | Prueba de entrega: firma | VERIFICADO LOCAL — backend + frontend + tests en verde; e2e con device real pendiente |
@@ -157,6 +157,14 @@ Service account montado en Docker: `~/.config/kelko/google/route-optimization-sa
 - Backend: `uvicorn` en puerto 8000
 - Frontend: Next.js en puerto 3000
 - DB: PostgreSQL 16 en puerto 5432
+
+### CI/CD GitHub → Vercel (operativo desde 2026-04-18)
+
+- Repo: `admid-design/cortecero` (branch `main`)
+- Proyecto `cortecero` (frontend) → Root Dir: `frontend/` → `cortecero.vercel.app`
+- Proyecto `cortecero-api` (backend) → Root Dir: `backend/` → `cortecero-api.vercel.app`
+- Auto-deploy en cada push a `main`
+- Variables de entorno configuradas en Vercel (DATABASE_URL, JWT_SECRET_KEY, GOOGLE_*, CORS_ORIGINS, NEXT_PUBLIC_*)
 
 ---
 

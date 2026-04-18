@@ -1,7 +1,7 @@
 # R8 Backlog — CorteCero
 
 > Fase activa: R8 — Mapas, Realtime y Operaciones avanzadas  
-> Última actualización: 2026-04-17
+> Última actualización: 2026-04-18
 
 ---
 
@@ -22,6 +22,7 @@
 | R8-B3 | CHAT-001 — `POST/GET /routes/{id}/messages`, tabla route_messages, SSE event chat_message, migration 026 | VERIFICADO LOCAL | test_chat_b3.py (9/9 ✓) | `3e5980d` |
 | R8-B4 | LIVE-EDIT-001 — `add-stop`, `remove-stop`, `move-stop` extendido a in_progress, SSE events | VERIFICADO LOCAL | test_live_edit_b4.py (11/11 ✓) | `3e5980d` |
 | R8-C1 | RETURN-001 — `POST /orders/{id}/return-to-planning`, failed_delivery → ready_for_planning | VERIFICADO LOCAL | test_return_c1.py (7/7 ✓) | `3e5980d` |
+| R8-SSE-FE | SSE frontend — hook `useRouteStream`, reemplaza polling 30s en `RouteMapCard`; MAX_RETRIES=3, fallback a polling | **PROMULGADO** | CI verde: backend-tests ✅ openapi-check ✅ frontend-smoke ✅ (`8e28ede`) | `8e28ede` |
 | R8-F1 | TW-001 — Time windows por cliente en optimizer (`window_start/end` → `timeWindows` Google) | VERIFICADO LOCAL | test_tw_f1.py (14/14 ✓) | `3e5980d` |
 | R8-F2 | CAPACITY-001 — Capacidad de vehículo en optimizer (`capacity_kg` → `loadLimits` Google) | VERIFICADO LOCAL | test_capacity_f2.py (13/13 ✓) | `3e5980d` |
 | R8-F4 | DOUBLE-TRIP-001 — `Route.trip_number` + `startTimeWindows` para viaje 2, migration 023 | VERIFICADO LOCAL | test_double_trip_f4.py (8/8 ✓) | `3e5980d` |
@@ -38,14 +39,14 @@
 - Smoke reproducible con `CORTECERO_ROUTE_ID` + `GOOGLE_APPLICATION_CREDENTIALS` + `GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID=samurai-system`
 - Commits: `59bd16d` (fix timestamps/skippedShipments) + `3e39b16` (cierre documentado) + `641c73a` (seed geo Mallorca)
 
-### R8-SSE-FE — SSE frontend
-- **Objetivo**: Conectar `GET /routes/{id}/stream` en frontend para reemplazar polling 30s en `RouteMapCard` y `DriverRoutingCard`
-- **Alcance**:
-  - Hook `useRouteStream` en frontend que consume SSE
-  - Reemplaza `setInterval` de 30s por actualizaciones push
-  - Manejo de reconexión y fallback a polling si SSE cae
-- **Limitación conocida**: SSE backend usa asyncio.Queue in-process (no multi-worker). Fix futuro: Redis pub/sub.
-- **Cierre**: evidence en browser con ruta in_progress actualizándose sin polling
+### ~~R8-SSE-FE — SSE frontend~~ — PROMULGADO (`8e28ede`)
+- Hook `useRouteStream` en `frontend/lib/useRouteStream.ts` — EventSource SSE a `GET /routes/{id}/stream?token=<jwt>`
+- MAX_RETRIES=3, RETRY_DELAY_MS=2000, DEGRADED_RECONNECT_MS=60000
+- Fallback a polling (`onFallbackPoll`) tras MAX_RETRIES fallos
+- `page.tsx`: reemplaza `setInterval` 30s de driver_position por SSE (`driver_position_updated`)
+- CI verde en `main` (commit `8e28ede`): backend-tests ✅ openapi-check ✅ frontend-smoke ✅
+- **Limitación conocida**: SSE backend usa asyncio.Queue in-process (no multi-worker). Fix R9: Redis pub/sub.
+- **Estado final**: PROMULGADO
 
 ### R8-POD-FOTO — Proof of delivery: foto
 - **Objetivo**: Input de cámara en `DriverRoutingCard` para adjuntar foto a entrega
@@ -85,8 +86,8 @@
 
 ## Orden recomendado
 
-1. CI verde `3e5980d` (bloqueante)
-2. R8-SMOKE — Google smoke dataset
-3. R8-SSE-FE — SSE frontend
-4. R8-POD-FOTO — POD foto (si storage decidido)
+~~1. CI verde `3e5980d` (bloqueante)~~  ✅  
+~~2. R8-SMOKE — Google smoke dataset~~  ✅  
+~~3. R8-SSE-FE — SSE frontend~~  ✅ PROMULGADO  
+4. R8-POD-FOTO — POD foto (si storage decidido)  
 5. D1 — Notificaciones (si proveedor decidido)

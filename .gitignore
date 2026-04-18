@@ -16,5 +16,23 @@ backend/private/
 backend/private_data/
 backend/app/seed_private.py
 
+# Credentials — never commit
+*.json.key
+*-sa.json
+*service-account*.json
+*.pem
+*.key
+*.p12
+
+# Test coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# Logs
+*.log
+logs/
+
 # OS
 .DS_Store
+Thumbs.db

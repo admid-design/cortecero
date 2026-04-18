@@ -783,10 +783,12 @@ body.map-first-mode {
    evitamos que queden debajo del panel derecho. */
 .mf-map-area .gm-bundled-control {
   top: 50% !important;
-  left: 14px !important;
+  left: 0 !important;
   right: auto !important;
   bottom: auto !important;
+  margin-left: 46px !important;
   transform: translateY(-50%);
+  z-index: 11;
 }
 
 /* ── Right panel ── */

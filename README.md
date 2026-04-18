@@ -34,39 +34,88 @@ CorteCero reduce fricción operativa en tres frentes:
 ## Current status
 
 **Estado de fases (resumen)**
-- R1–R6: cerradas
-- R7: abierta
+- R1–R7: cerradas
+- R8: activa — Mapas, Realtime y Operaciones avanzadas (casi completa)
 
 **Estado técnico actual**
-- backend operativo con FastAPI + SQLAlchemy + JWT
-- frontend en Next.js con vistas operativas y administrativas
-- OpenAPI versionado
-- smoke Google Route Optimization integrado al flujo de validación
-- gobernanza de agentes y contratos ya versionada en repo
+- backend: FastAPI + SQLAlchemy + JWT — 283 tests en verde
+- frontend: Next.js — 26 tests en verde, CI build en verde
+- OpenAPI versionado y validado en CI
+- CI/CD GitHub Actions → Vercel operativo en `main` (frontend + backend)
+- smoke Google Route Optimization: HTTP 200 verificado con ETAs reales
+- SSE (Server-Sent Events) en producción — hook `useRouteStream` PROMULGADO
+- gobernanza de agentes y contratos versionada en repo
 
 ---
 
 ## Quick start
 
+### Prerequisites
+
+- Docker + Docker Compose
+- Node.js 18+
+- Python 3.13
+
+### Variables de entorno
+
+Crea `backend/.env` antes de arrancar:
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@postgres:5432/cortecero
+JWT_SECRET_KEY=<secret>
+CORS_ORIGINS=http://localhost:3000
+```
+
+Para Google Maps en frontend, crea `frontend/.env.local`:
+
+```env
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=<tu api key>
+```
+
+Para Google Route Optimization (opcional — sin esto usa mock provider):
+
+```env
+GOOGLE_APPLICATION_CREDENTIALS=~/.config/gcp/route-optimization-sa.json
+GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID=<tu proyecto>
+```
+
 ### Fast boot (local)
 
-Prerequisites: Docker/Compose, Node.js y Python.
-
 ```bash
-# 1) levantar stack
+# 1) levantar stack completo (postgres + backend + migraciones + seed)
 docker compose up -d --build
 
 # 2) frontend local
 cd frontend && npm install && npm run dev
+# → http://localhost:3000
 
-# 3) chequeo mínimo rápido
+# 3) verificación rápida
 docker compose run --rm backend pytest -q
 cd frontend && npm test && npm run build
 ```
 
+### Scripts de un comando
+
+```bash
+./scripts/backend-check.sh    # tests + linting backend
+./scripts/frontend-check.sh   # build + tests frontend
+./scripts/test.sh              # suite completa
+```
+
 ### Google optimization smoke
 
-El repositorio incluye smoke de validación real para Route Optimization y soporte para preparar dataset demo geo-ready dentro del propio flujo de smoke. La validación real sigue dependiendo de credenciales privadas fuera del repo.
+```bash
+# Preparar dataset geo-ready
+python3 backend/scripts/prepare_google_smoke_dataset.py
+
+# Ejecutar smoke contra Google real
+CORTECERO_ROUTE_ID=<uuid> \
+GOOGLE_APPLICATION_CREDENTIALS=~/.config/gcp/route-optimization-sa.json \
+GOOGLE_ROUTE_OPTIMIZATION_PROJECT_ID=<proyecto> \
+python3 backend/scripts/smoke_google_optimization.py
+```
+
+La validación real requiere credenciales fuera del repo. Sin ellas, el stack usa mock provider automáticamente.
 
 ---
 
@@ -110,25 +159,41 @@ El repositorio incluye smoke de validación real para Route Optimization y sopor
 
 A nivel funcional, el repo cubre actualmente:
 
-- autenticación
+**Core operativo**
+- autenticación JWT multi-tenant (roles: admin, logistics, office, driver)
 - ingestión de pedidos
-- colas operativas
-- colas de resolución
-- snapshots operativos
-- planificación
-- excepciones
-- dashboard
-- export operativo
-- auditoría
-- administración de zonas
-- administración de clientes
-- administración de usuarios
-- administración de tenant settings
-- administración de productos
-- routing dispatcher
-- ejecución de conductor
-- incidencias en ruta
-- optimización de rutas con proveedor Google / mock según entorno
+- colas operativas, de resolución y snapshots
+- planificación por zona/fecha con auto-lock
+- excepciones operativas
+- dashboard operativo
+- export y auditoría append-only
+- administración: zonas, clientes, usuarios, productos, tenant settings
+
+**Routing y ejecución (R7–R8)**
+- flujo dispatcher completo: plan → dispatch → optimize → paradas
+- ejecución conductor PWA: arrive / complete / fail / skip / incidencias
+- optimización de rutas con Google Route Optimization API (mock sin credenciales)
+- GPS tracking del conductor durante ruta in_progress
+- mapa de ruta con marcadores por estado + marcador conductor (Google Maps JS API)
+- SSE en tiempo real: eventos de ruta push al dispatcher (reemplaza polling)
+- ETA dinámico con recálculo haversine + alertas de retraso (≥15 min)
+- chat interno dispatcher ↔ conductor en ruta
+- edición en vivo de ruta in_progress (add / remove / move stop)
+- devolución a planificación de pedidos fallidos
+- proof of delivery con firma canvas
+- fleet view: panel OpsMapDashboard con posición de flota
+
+**Constraints de optimización (R8-F)**
+- time windows por cliente
+- capacidad de vehículo (kg)
+- doble viaje por día
+- mercancías peligrosas ADR
+- zonas de bajas emisiones ZBE
+
+**Lo que NO existe aún**
+- proof of delivery: foto (storage pendiente)
+- notificaciones push/email a cliente (proveedor pendiente)
+- asistente IA en ninguna capa
 
 ---
 
@@ -137,16 +202,37 @@ A nivel funcional, el repo cubre actualmente:
 ```text
 cortecero/
 ├── backend/
+│   ├── app/
+│   │   ├── routers/          # endpoints por dominio
+│   │   ├── optimization/     # google_provider.py, mock_provider.py
+│   │   ├── models.py
+│   │   ├── schemas.py
+│   │   ├── realtime.py       # RouteEventBus (SSE)
+│   │   └── seed.py
+│   ├── scripts/              # smoke, prepare_dataset
+│   └── tests/                # pytest — un archivo por bloque
 ├── frontend/
+│   ├── app/
+│   ├── components/
+│   └── lib/
+│       ├── api.ts            # cliente tipado — fuente de verdad de paths
+│       └── useRouteStream.ts # hook SSE
 ├── db/
+│   └── migrations/           # SQL 001–026, idempotentes
 ├── openapi/
+│   └── openapi-v1.yaml       # contrato API vivo
 ├── docs/
-│   ├── as-is.md
+│   ├── as-is.md              # estado real verificado del repo
+│   ├── R8_BACKLOG.md         # backlog activo
 │   ├── contracts/
-│   └── domain/
+│   ├── domain/
+│   └── evidence/             # outputs de smoke verificados
+├── scripts/                  # backend-check.sh, frontend-check.sh, test.sh
 ├── .claude/
-├── AGENTS.md
-├── CLAUDE.md
+│   ├── rules/                # reglas escopadas por contexto
+│   └── commands/
+├── AGENTS.md                 # contrato operativo de agentes
+├── CLAUDE.md                 # memoria de Claude — stack, invariantes, comandos
 └── README.md
 ```
 
