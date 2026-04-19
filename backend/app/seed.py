@@ -621,7 +621,6 @@ def seed() -> None:
                     role=UserRole.driver,
                     is_active=True,
                     created_at=now_utc(),
-                    updated_at=now_utc(),
                 )
                 db.add(u)
                 db.flush()
