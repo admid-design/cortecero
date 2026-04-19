@@ -1,3 +1,4 @@
+# cortecero-api — fuerza redeploy con seed fix (f4cdd8f)
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
