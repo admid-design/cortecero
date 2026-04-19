@@ -41,6 +41,7 @@ type DispatcherRoutingCardProps = {
   creatingPlan: boolean;
   optimizingRouteId: string | null;
   dispatchingRouteId: string | null;
+  recalculatingEtaRouteId?: string | null;
   moveSourceRouteId: string;
   onMoveSourceRouteIdChange: (value: string) => void;
   moveStopId: string;
@@ -52,6 +53,7 @@ type DispatcherRoutingCardProps = {
   onCreatePlan: () => void;
   onOptimizeRoute: (routeId: string) => void;
   onDispatchRoute: (routeId: string) => void;
+  onRecalculateEta?: (routeId: string) => void;
   onMoveStop: () => void;
   /** Posición actual del conductor — actualizada por polling en page.tsx. */
   driverPosition?: LocalDriverPosition | null;
@@ -91,6 +93,7 @@ export function DispatcherRoutingCard({
   creatingPlan,
   optimizingRouteId,
   dispatchingRouteId,
+  // recalculatingEtaRouteId — accepted but not rendered in legacy card
   moveSourceRouteId,
   onMoveSourceRouteIdChange,
   moveStopId,
@@ -102,6 +105,7 @@ export function DispatcherRoutingCard({
   onCreatePlan,
   onOptimizeRoute,
   onDispatchRoute,
+  // onRecalculateEta — accepted but not rendered in legacy card
   onMoveStop,
   driverPosition,
 }: DispatcherRoutingCardProps) {
