@@ -227,4 +227,4 @@ Service account montado en Docker: `~/.config/kelko/google/route-optimization-sa
 - R8: MONITOR-MODE-001 — PROMULGADO (commit `c5980aa`, 2026-04-19). Monitor mode en OpsMapDashboard: mapa full-width, chips flotantes, drawer slide-in con stops/stats/acciones. tsc clean. CI verde.
 - R8: Visual UX — PROMULGADO (commit `c50b8fe`, 2026-04-19). Stops clickables con expand/collapse (service time, timestamps, motivo fallo, coords); avatares conductor con inicial coloreada; SVG truck en flota.
 - R8: R8-POD-FOTO-R2-REAL — PARCIAL / deferred por decisión operativa (2026-04-19). Backend y UI listos. Smoke con R2 bucket real no ejecutado. Sin bloqueante técnico; credenciales R2 no suministradas.
-- R8: CERRADO — DoD cumplido excepto R8-POD-FOTO-R2-REAL (deferred). 292 tests en verde. CI verde en `main`.
+- R8: CERRADO — DoD cumplido. R8-POD-FOTO-R2-REAL excluido por decisión consciente de prioridad (no falta de evidencia técnica): backend y UI listos, smoke con bucket R2 real pospuesto hasta que se decida proveedor de storage. 292 tests en verde. CI verde en `main`.
