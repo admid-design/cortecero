@@ -216,6 +216,8 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
         position: maps.ControlPosition.LEFT_CENTER,
       },
     });
+    // Guardar instancia para efectos secundarios (driverMarker, fleetMarkers)
+    mapInstanceRef.current = map;
 
     const bounds = new maps.LatLngBounds();
     const markers: Array<{ setMap: (map: any) => void }> = [];
@@ -352,10 +354,7 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
     const maps = mapsWindow.google?.maps;
     if (!maps) return;
     // Guardamos referencia al mapa cuando se crea
-    if (!mapInstanceRef.current) {
-      // El mapa ya existe en el DOM — lo recuperamos del ref
-      mapInstanceRef.current = (mapRef.current as any).__gm_map ?? null;
-    }
+    // mapInstanceRef.current se asigna al crear el mapa en el effect principal
   }, [mapsLoaded]);
 
   useEffect(() => {
@@ -376,8 +375,7 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
     const driverLng = parseCoordinate(driverPosition?.lng ?? null);
 
     // Recuperar instancia del mapa desde el div (Google Maps la adjunta internamente)
-    const mapEl = mapRef.current;
-    const mapObj = (mapEl as any).__gm_map ?? mapInstanceRef.current;
+    const mapObj = mapInstanceRef.current;
     if (!mapObj) return;
 
     if (driverLat == null || driverLng == null) {
@@ -434,8 +432,7 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
 
     if (!activePositions || activePositions.length === 0) return;
 
-    const mapEl = mapRef.current;
-    const mapObj = (mapEl as any).__gm_map ?? mapInstanceRef.current;
+    const mapObj = mapInstanceRef.current;
     if (!mapObj) return;
 
     for (const pos of activePositions) {

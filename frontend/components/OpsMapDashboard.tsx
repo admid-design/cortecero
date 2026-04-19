@@ -148,19 +148,22 @@ function NextActionCard({
   activeRoutes,
   routes,
   onGoToGestion,
+  onSelectFirstPlanned,
 }: {
   unassigned: number;
   activeRoutes: number;
   routes: RoutingRoute[];
   onGoToGestion: () => void;
+  onSelectFirstPlanned: (id: string) => void;
 }) {
-  const plannedOrDraft = routes.filter(
+  const plannedOrDraftRoutes = routes.filter(
     (r) => r.status === "planned" || r.status === "draft",
-  ).length;
+  );
+  const plannedOrDraft = plannedOrDraftRoutes.length;
 
   if (unassigned > 0 && routes.length === 0) {
     return (
-      <div className="mf-next-action mf-next-action-warn" onClick={onGoToGestion}>
+      <div className="mf-next-action mf-next-action-warn" onClick={onGoToGestion} style={{ cursor: "pointer" }}>
         <div className="mf-next-action-icon">📦</div>
         <div className="mf-next-action-body">
           <div className="mf-next-action-title">
@@ -176,14 +179,18 @@ function NextActionCard({
 
   if (plannedOrDraft > 0) {
     return (
-      <div className="mf-next-action mf-next-action-blue">
+      <div
+        className="mf-next-action mf-next-action-blue"
+        style={{ cursor: "pointer" }}
+        onClick={() => plannedOrDraftRoutes[0] && onSelectFirstPlanned(plannedOrDraftRoutes[0].id)}
+      >
         <div className="mf-next-action-icon">⚡</div>
         <div className="mf-next-action-body">
           <div className="mf-next-action-title">
             {plannedOrDraft} ruta{plannedOrDraft !== 1 ? "s" : ""} lista{plannedOrDraft !== 1 ? "s" : ""} para operar
           </div>
           <div className="mf-next-action-sub">
-            Selecciona una ruta · optimiza · despacha al conductor
+            Toca para seleccionar · optimiza · despacha al conductor
           </div>
         </div>
       </div>
@@ -933,21 +940,33 @@ export function OpsMapDashboard({
 
         {/* KPIs */}
         <div className="mf-kpi-grid">
-          <div className="mf-kpi-card mf-kpi-blue">
+          <div
+            className="mf-kpi-card mf-kpi-blue clickable"
+            title="Ver todas las rutas de hoy"
+            onClick={() => { onRouteStatusChange("all"); setSidebarView("rutas"); }}
+          >
             <span className="mf-kpi-icon">📋</span>
             <div className="mf-kpi-data">
               <span className="mf-kpi-value">{totalRoutes}</span>
               <span className="mf-kpi-label">Rutas hoy</span>
             </div>
           </div>
-          <div className="mf-kpi-card mf-kpi-orange">
+          <div
+            className="mf-kpi-card mf-kpi-orange clickable"
+            title="Ver rutas en curso"
+            onClick={() => { onRouteStatusChange("in_progress"); setSidebarView("rutas"); }}
+          >
             <span className="mf-kpi-icon">🚚</span>
             <div className="mf-kpi-data">
               <span className="mf-kpi-value">{activeRoutes}</span>
               <span className="mf-kpi-label">En curso</span>
             </div>
           </div>
-          <div className="mf-kpi-card mf-kpi-green">
+          <div
+            className="mf-kpi-card mf-kpi-green clickable"
+            title="Ver rutas completadas"
+            onClick={() => { onRouteStatusChange("completed"); setSidebarView("rutas"); }}
+          >
             <span className="mf-kpi-icon">✅</span>
             <div className="mf-kpi-data">
               <span className="mf-kpi-value">{completedRoutes}</span>
@@ -973,6 +992,10 @@ export function OpsMapDashboard({
           activeRoutes={activeRoutes}
           routes={filteredRoutes}
           onGoToGestion={() => setSidebarView("gestion")}
+          onSelectFirstPlanned={(id) => {
+            setSidebarView("rutas");
+            onSelectedRouteIdChange(id);
+          }}
         />
 
         {/* Routes list */}
@@ -1185,63 +1208,7 @@ export function OpsMapDashboard({
 
             {advancedOpen && (
               <div className="mf-advanced-body">
-                {/* Plan creation */}
-                <div style={{ fontWeight: 600, fontSize: 12, color: "#374151" }}>
-                  Crear ruta
-                </div>
-                <div className="mf-form-row">
-                  <span className="mf-form-label">Nombre del plan</span>
-                  <input
-                    className="mf-input"
-                    placeholder="Ej: Ruta mañana Palma"
-                    value={planId}
-                    onChange={(e) => onPlanIdChange(e.target.value)}
-                  />
-                </div>
-                <div className="mf-form-row">
-                  <span className="mf-form-label">Vehículo</span>
-                  <select
-                    className="mf-input"
-                    value={planVehicleId}
-                    onChange={(e) => onPlanVehicleIdChange(e.target.value)}
-                  >
-                    <option value="">— Selecciona vehículo —</option>
-                    {availableVehicles.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.name} · {v.code}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="mf-form-row">
-                  <span className="mf-form-label">Conductor (opcional)</span>
-                  <input
-                    className="mf-input"
-                    placeholder="Nombre o ID del conductor"
-                    value={planDriverId}
-                    onChange={(e) => onPlanDriverIdChange(e.target.value)}
-                  />
-                </div>
-                <div className="mf-form-row">
-                  <span className="mf-form-label">Pedidos a incluir</span>
-                  <textarea
-                    className="mf-input"
-                    placeholder="Pega aquí los IDs de pedido separados por coma"
-                    rows={3}
-                    value={planOrderIds}
-                    onChange={(e) => onPlanOrderIdsChange(e.target.value)}
-                  />
-                </div>
-                <button
-                  className="mf-btn primary"
-                  disabled={creatingPlan || !planId || !planVehicleId}
-                  onClick={onCreatePlan}
-                  style={{ width: "100%" }}
-                >
-                  {creatingPlan ? "Creando..." : "Crear ruta"}
-                </button>
-
-                {/* Move stop */}
+                {/* Move stop — única acción avanzada en vista Rutas */}
                 {selectedRoute && (
                   <>
                     <div
