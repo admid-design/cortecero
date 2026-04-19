@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.config import settings
 from app.db import SessionLocal
@@ -314,10 +314,16 @@ def seed() -> None:
                     )
 
         # ── Reset demo: asegura pedidos visibles en la cola ──────────────────────
-        # SOLO corre si CORTECERO_STARTUP_SEED=true en variables de entorno.
-        # Por defecto está desactivado para no mutar datos durante sesiones activas.
-        # Activar explícitamente antes de una demo en frío, desactivar durante la sesión.
-        if settings.startup_seed_reset:
+        # Corre automáticamente si no hay rutas activas (dispatched/in_progress).
+        # Si hay sesión de demo en curso → no toca nada.
+        # Si el sistema arranca en frío sin rutas activas → repone la cola.
+        active_routes_count = db.scalar(
+            select(func.count()).select_from(Route).where(
+                Route.tenant_id == tenant.id,
+                Route.status.in_([RouteStatus.dispatched, RouteStatus.in_progress]),
+            )
+        ) or 0
+        if active_routes_count == 0:
             all_today_orders = list(
                 db.scalars(select(Order).where(Order.tenant_id == tenant.id, Order.service_date == service_date))
             )
