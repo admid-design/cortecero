@@ -375,23 +375,38 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
     const driverLat = parseCoordinate(driverPosition?.lat ?? null);
     const driverLng = parseCoordinate(driverPosition?.lng ?? null);
 
-    if (driverLat == null || driverLng == null) {
-      // Limpiar marcador si ya no hay posición
-      driverMarkerRef.current?.setMap(null);
-      driverMarkerRef.current = null;
-      return;
-    }
-
     // Recuperar instancia del mapa desde el div (Google Maps la adjunta internamente)
     const mapEl = mapRef.current;
     const mapObj = (mapEl as any).__gm_map ?? mapInstanceRef.current;
     if (!mapObj) return;
 
+    if (driverLat == null || driverLng == null) {
+      driverMarkerRef.current?.setMap(null);
+      driverMarkerRef.current = null;
+
+      // Ruta despachada sin GPS aún: mostrar camión en depósito como "listo para salir"
+      if (route?.status === "dispatched") {
+        driverMarkerRef.current = new maps.Marker({
+          map: mapObj,
+          position: { lat: depotLat, lng: depotLng },
+          title: "Vehículo despachado — esperando inicio de ruta",
+          icon: {
+            url: emojiIconUrl("🚚", 36),
+            scaledSize: new maps.Size(36, 36),
+            anchor: new maps.Point(18, 30),
+          },
+          opacity: 0.65,
+          zIndex: 500,
+        });
+      }
+      return;
+    }
+
     if (driverMarkerRef.current) {
       // Actualizar posición del marcador existente
       driverMarkerRef.current.setPosition({ lat: driverLat, lng: driverLng });
     } else {
-      // Crear marcador nuevo
+      // Crear marcador nuevo con GPS real
       driverMarkerRef.current = new maps.Marker({
         map: mapObj,
         position: { lat: driverLat, lng: driverLng },
@@ -404,7 +419,7 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
         zIndex: 999,
       });
     }
-  }, [mapsLoaded, driverPosition, activePositions]);
+  }, [mapsLoaded, driverPosition, activePositions, route?.status, depotLat, depotLng]);
 
   // Marcadores de flota — actualizados de forma independiente cuando llegan posiciones activas
   useEffect(() => {
@@ -449,7 +464,10 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
       <div className="row route-map-meta" style={{ gap: 6 }}>
         <span className="pill">paradas geo-ready: {stopPoints.length}</span>
         {depotLat != null && depotLng != null && <span className="pill">depot: disponible</span>}
-        {hasTransitionGeometry ? <span className="pill">geometría vial: disponible</span> : <span className="pill">fallback: recto</span>}
+        {hasTransitionGeometry
+          ? <span className="pill" style={{ color: "#16a34a" }}>✓ trayectoria vial real</span>
+          : <span className="pill" style={{ color: "#92400e" }}>⚠ trayectoria aproximada — pulse Optimizar para ver ruta real</span>
+        }
       </div>
       {route && (
         <div className="row route-map-legend" style={{ gap: 8 }}>

@@ -1383,10 +1383,8 @@ export function OpsMapDashboard({
                   key={v.id}
                   className={`mf-fleet-row clickable${isSelected ? " selected" : ""}`}
                   onClick={() => {
-                    const toggling = isSelected || selectedFleetVehicleId === v.id;
                     if (sidebarView === "gestion") {
-                      // En modo Gestión: rellenar selector del formulario
-                      // Y también seleccionar la ruta vinculada para que el mapa la refleje
+                      // Gestión: toggle selección para el formulario
                       if (planVehicleId === v.id) {
                         onPlanVehicleIdChange("");
                         if (linkedRouteId) onSelectedRouteIdChange("");
@@ -1395,16 +1393,10 @@ export function OpsMapDashboard({
                         if (linkedRouteId) onSelectedRouteIdChange(linkedRouteId);
                       }
                     } else {
-                      // En modo Rutas: mostrar ruta/vehículo en el mapa
-                      if (toggling) {
-                        setSelectedFleetVehicleId(null);
-                        setSelectedFleetVehicleName(null);
-                        if (linkedRouteId) onSelectedRouteIdChange("");
-                      } else {
-                        setSelectedFleetVehicleId(v.id);
-                        setSelectedFleetVehicleName(v.name);
-                        if (linkedRouteId) onSelectedRouteIdChange(linkedRouteId);
-                      }
+                      // Rutas: siempre navegar a la ruta vinculada (sin toggle confuso)
+                      setSelectedFleetVehicleId(v.id);
+                      setSelectedFleetVehicleName(v.name);
+                      if (linkedRouteId) onSelectedRouteIdChange(linkedRouteId);
                     }
                   }}
                   title={sidebarView === "gestion" ? "Seleccionar para crear ruta" : linkedRouteId ? "Ver ruta en mapa" : "Ver vehículo en mapa"}
