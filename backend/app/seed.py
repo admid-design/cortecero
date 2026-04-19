@@ -314,41 +314,34 @@ def seed() -> None:
                     )
 
         # ── Reset demo: asegura pedidos visibles en la cola ──────────────────────
-        # Corre automáticamente si no hay rutas activas (dispatched/in_progress).
-        # Si hay sesión de demo en curso → no toca nada.
-        # Si el sistema arranca en frío sin rutas activas → repone la cola.
-        active_routes_count = db.scalar(
-            select(func.count()).select_from(Route).where(
-                Route.tenant_id == tenant.id,
-                Route.status.in_([RouteStatus.dispatched, RouteStatus.in_progress]),
-            )
-        ) or 0
-        if active_routes_count == 0:
-            all_today_orders = list(
-                db.scalars(select(Order).where(Order.tenant_id == tenant.id, Order.service_date == service_date))
-            )
-            queueable_today = [o for o in all_today_orders if o.status == OrderStatus.ready_for_planning]
-            if len(queueable_today) < 5:
-                for o in all_today_orders:
-                    if o.status == OrderStatus.planned:
-                        has_stop = db.scalar(
-                            select(RouteStop).where(
-                                RouteStop.tenant_id == tenant.id,
-                                RouteStop.order_id == o.id,
+        # Corre siempre en cold start. La protección real está en el loop:
+        # solo se resetean pedidos en estado 'planned' que NO tienen RouteStop
+        # asignado — los pedidos de rutas activas están protegidos por has_stop.
+        all_today_orders = list(
+            db.scalars(select(Order).where(Order.tenant_id == tenant.id, Order.service_date == service_date))
+        )
+        queueable_today = [o for o in all_today_orders if o.status == OrderStatus.ready_for_planning]
+        if len(queueable_today) < 5:
+            for o in all_today_orders:
+                if o.status == OrderStatus.planned:
+                    has_stop = db.scalar(
+                        select(RouteStop).where(
+                            RouteStop.tenant_id == tenant.id,
+                            RouteStop.order_id == o.id,
+                        )
+                    )
+                    if not has_stop:
+                        plan_order_rec = db.scalar(
+                            select(PlanOrder).where(
+                                PlanOrder.tenant_id == tenant.id,
+                                PlanOrder.order_id == o.id,
                             )
                         )
-                        if not has_stop:
-                            plan_order_rec = db.scalar(
-                                select(PlanOrder).where(
-                                    PlanOrder.tenant_id == tenant.id,
-                                    PlanOrder.order_id == o.id,
-                                )
-                            )
-                            if plan_order_rec:
-                                db.delete(plan_order_rec)
-                            o.status = OrderStatus.ready_for_planning
-                            o.updated_at = now_utc()
-                db.flush()
+                        if plan_order_rec:
+                            db.delete(plan_order_rec)
+                        o.status = OrderStatus.ready_for_planning
+                        o.updated_at = now_utc()
+            db.flush()
 
         open_plan = db.scalar(
             select(Plan).where(
