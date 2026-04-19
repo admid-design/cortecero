@@ -759,6 +759,7 @@ export function OpsMapDashboard({
             selectedVehicleId={selectedFleetVehicleId}
             selectedVehicleName={selectedFleetVehicleName}
             activePositions={activePositions}
+            driverNameMap={driverNameMap}
           />
           {/* Monitor mode — chips de rutas activas flotando en la parte inferior */}
           {monitorMode && (

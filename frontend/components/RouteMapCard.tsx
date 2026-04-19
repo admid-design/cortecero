@@ -123,9 +123,11 @@ type RouteMapCardProps = {
   selectedVehicleName?: string | null;
   /** Posiciones de toda la flota activa — cuando se provee, reemplaza el marcador único de conductor. */
   activePositions?: DriverPositionOut[] | null;
+  /** Mapa driver_id → nombre completo del conductor — para etiquetar marcadores de flota. */
+  driverNameMap?: Record<string, string>;
 };
 
-export function RouteMapCard({ route, driverPosition, selectedVehicleId, selectedVehicleName, activePositions }: RouteMapCardProps) {
+export function RouteMapCard({ route, driverPosition, selectedVehicleId, selectedVehicleName, activePositions, driverNameMap }: RouteMapCardProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
   const [mapsLoaded, setMapsLoaded] = useState(false);
@@ -441,20 +443,33 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
       const lng = parseCoordinate(pos.lng);
       if (lat == null || lng == null) continue;
 
+      const fullName = driverNameMap?.[pos.driver_id];
+      const firstName = fullName ? fullName.split(" ")[0] : pos.driver_id.slice(0, 6);
+      const markerTitle = fullName
+        ? `${fullName} — GPS actualizado ${pos.recorded_at.slice(11, 16)}`
+        : `Conductor ${pos.driver_id.slice(0, 8)}`;
+
       const marker = new maps.Marker({
         map: mapObj,
         position: { lat, lng },
-        title: `Conductor ${pos.driver_id.slice(0, 8)}`,
+        title: markerTitle,
         icon: {
           url: emojiIconUrl("🚚", 40),
           scaledSize: new maps.Size(40, 40),
-          anchor: new maps.Point(20, 34),
+          anchor: new maps.Point(20, 20),
+        },
+        label: {
+          text: firstName,
+          color: "#1d4ed8",
+          fontSize: "10px",
+          fontWeight: "700",
+          className: "map-fleet-label",
         },
         zIndex: 998,
       });
       activeDriverMarkersRef.current.push(marker);
     }
-  }, [mapsLoaded, activePositions]);
+  }, [mapsLoaded, activePositions, driverNameMap]);
 
   return (
     <div className="card grid route-map-card">
