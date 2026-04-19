@@ -131,9 +131,10 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
   const [mapsLoaded, setMapsLoaded] = useState(false);
 
   const mapApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
-  // Usar coordenadas de env var o fallback a Santa Maria del Camí
-  const depotLat = parseCoordinate(process.env.NEXT_PUBLIC_DEPOT_LAT ? Number(process.env.NEXT_PUBLIC_DEPOT_LAT) : null) ?? FALLBACK_DEPOT_LAT;
-  const depotLng = parseCoordinate(process.env.NEXT_PUBLIC_DEPOT_LNG ? Number(process.env.NEXT_PUBLIC_DEPOT_LNG) : null) ?? FALLBACK_DEPOT_LNG;
+  // Depósito fijo: Poligon Industrial Son Llaut, Santa Maria del Camí.
+  // NEXT_PUBLIC_DEPOT_LAT/LNG eliminados — coordenadas gestionadas aquí y en seed.py.
+  const depotLat = FALLBACK_DEPOT_LAT;
+  const depotLng = FALLBACK_DEPOT_LNG;
 
   const stopPoints = useMemo<RouteMapPoint[]>(
     () =>
