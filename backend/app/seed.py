@@ -595,6 +595,38 @@ def seed() -> None:
         #   Carnet B + ADR (3): furgones VH-006, VH-007, VH-009
         #   Carnet B sin ADR (1): furgones solo rutas no-ADR (VH-008)
         # ------------------------------------------------------------------
+        # ------------------------------------------------------------------
+        # Usuarios conductor — necesarios para login web (role=driver).
+        # Email: <drv_key>@demo.cortecero.app  Password: driver123
+        # ------------------------------------------------------------------
+        driver_user_map: dict[str, "User"] = {}
+        for drv_key, full_name, drv_email in [
+            ("driver_a", "Conductor Demo A (C·ADR)", "driver_a@demo.cortecero.app"),
+            ("driver_b", "Conductor Demo B (C·ADR)", "driver_b@demo.cortecero.app"),
+            ("driver_c", "Conductor Demo C (C·ADR)", "driver_c@demo.cortecero.app"),
+            ("driver_d", "Conductor Demo D (C·ADR)", "driver_d@demo.cortecero.app"),
+            ("driver_e", "Conductor Demo E (B·ADR)", "driver_e@demo.cortecero.app"),
+            ("driver_f", "Conductor Demo F (B·ADR)", "driver_f@demo.cortecero.app"),
+            ("driver_g", "Conductor Demo G (B)",     "driver_g@demo.cortecero.app"),
+            ("driver_h", "Conductor Demo H (B·ADR)", "driver_h@demo.cortecero.app"),
+        ]:
+            u = db.scalar(select(User).where(User.tenant_id == tenant.id, User.email == drv_email))
+            if not u:
+                u = User(
+                    id=uuid.uuid4(),
+                    tenant_id=tenant.id,
+                    email=drv_email,
+                    full_name=full_name,
+                    password_hash=hash_password("driver123"),
+                    role=UserRole.driver,
+                    is_active=True,
+                    created_at=now_utc(),
+                    updated_at=now_utc(),
+                )
+                db.add(u)
+                db.flush()
+            driver_user_map[drv_key] = u
+
         drivers = {}
         for drv_key, name, phone, vehicle_code in [
             # Camioneros — carnet C + ADR
@@ -610,12 +642,14 @@ def seed() -> None:
             ("driver_g", "Conductor Demo G (B)",     "700000107", "VH-008"),
         ]:
             driver = db.scalar(select(Driver).where(Driver.tenant_id == tenant.id, Driver.phone == phone))
+            drv_user = driver_user_map[drv_key]
             if not driver:
                 v_id = vehicles[vehicle_code].id if vehicle_code else None
                 driver = Driver(
                     id=uuid.uuid4(),
                     tenant_id=tenant.id,
                     vehicle_id=v_id,
+                    user_id=drv_user.id,
                     name=name,
                     phone=phone,
                     is_active=True,
@@ -625,9 +659,11 @@ def seed() -> None:
                 db.add(driver)
                 db.flush()
             else:
-                # Backfill: actualiza nombre si cambia formato canónico.
+                # Backfill: actualiza nombre y user_id si faltaban.
                 if driver.name != name:
                     driver.name = name
+                if driver.user_id is None:
+                    driver.user_id = drv_user.id
             drivers[drv_key] = driver
 
         # ------------------------------------------------------------------
@@ -707,6 +743,9 @@ def seed() -> None:
         print(" - office@demo.cortecero.app / office123")
         print(" - logistics@demo.cortecero.app / logistics123")
         print(" - admin@demo.cortecero.app / admin123")
+        print(" - driver_a@demo.cortecero.app / driver123  (Conductor A — ruta Centro)")
+        print(" - driver_b@demo.cortecero.app / driver123  (Conductor B — ruta Costa)")
+        print(" - driver_c@demo.cortecero.app / driver123  (Conductor C — ruta Periferia)")
         final_orders = list(db.scalars(select(Order).where(Order.tenant_id == tenant.id, Order.service_date == service_date)))
         print(f"Pedidos en cola (ready_for_planning): {len([o for o in final_orders if o.status == OrderStatus.ready_for_planning])}")
         print(f"Pedidos totales hoy: {len(final_orders)}")
