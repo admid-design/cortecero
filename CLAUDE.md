@@ -386,7 +386,7 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
 1. **R9-CONTRACT-001** — OpenAPI ↔ runtime alineados + catálogo de errores cerrado
 2. **R9-MONITOR-UX-001** — Delay alerts visibles en panel/drawer + fixes monitor mode
 3. **MONITOR-MODE-002 — Chat flotante** dispatcher↔conductor: conectar a CHAT-001 (`GET/POST /routes/{id}/messages`), flotante bottom-right, tabs por conductor activo
-4. **R9-REALTIME-001** — SSE Redis pub-sub multi-worker (condicional a decisión de infra)
+4. **R9-REALTIME-001** — CONGELADO. No es "Redis solo" sino decisión de arquitectura: serverless (Vercel Functions, límite de duración) vs. servicio persistente/gestionado para realtime robusto. Redis resuelve fanout entre procesos pero no la naturaleza efímera de las funciones. Solo se activa cuando se decida la arquitectura realtime definitiva.
 
 ### Huecos conocidos
 - SSE backend usa asyncio.Queue in-process → no escala con gunicorn multi-worker (fix R9: Redis)
