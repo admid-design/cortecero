@@ -31,6 +31,7 @@ export function ChatFloating({
 }: ChatFloatingProps) {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Record<string, RouteMessageOut[]>>({});
   const [tabLoading, setTabLoading] = useState<Record<string, boolean>>({});
@@ -134,11 +135,18 @@ export function ChatFloating({
 
       {/* Chat panel */}
       {open && (
-        <div className="mf-chat-panel">
+        <div className={`mf-chat-panel${expanded ? " expanded" : ""}`}>
           {/* Header */}
           <div className="mf-chat-header">
             <span className="mf-chat-header-title">💬 Chat operativo</span>
             <div className="mf-chat-header-actions">
+              <button
+                className="mf-chat-icon-btn"
+                onClick={() => setExpanded((v) => !v)}
+                title={expanded ? "Reducir" : "Ampliar"}
+              >
+                {expanded ? "⊡" : "⊞"}
+              </button>
               <button
                 className="mf-chat-icon-btn"
                 onClick={() => setMinimized((v) => !v)}

@@ -2191,11 +2191,11 @@ body.map-first-mode {
 .mf-chat-float {
   position: fixed;
   bottom: 24px;
-  right: 24px;
+  left: 24px;
   z-index: 1200;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 /* Toggle button (chat closed) */
@@ -2237,6 +2237,10 @@ body.map-first-mode {
   flex-direction: column;
   overflow: hidden;
   border: 1px solid #e5e7eb;
+  transition: width 0.18s ease;
+}
+.mf-chat-panel.expanded {
+  width: 480px;
 }
 
 /* Header */
@@ -2315,6 +2319,10 @@ body.map-first-mode {
   flex-direction: column;
   gap: 6px;
   background: #f9fafb;
+  transition: max-height 0.18s ease;
+}
+.mf-chat-panel.expanded .mf-chat-messages {
+  max-height: 440px;
 }
 
 /* Empty state */

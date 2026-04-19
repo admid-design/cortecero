@@ -806,7 +806,7 @@ export function OpsMapDashboard({
           )}
 
           {/* Empty state overlay — solo en modo normal sin rutas activas */}
-          {!selectedRoute && !monitorMode && (
+          {!selectedRoute && !monitorMode && !showFullPanel && (
             <div className="mf-map-empty-state">
               <div className="mf-map-empty-icon">📍</div>
               <div className="mf-map-empty-title">Ninguna ruta seleccionada</div>
@@ -1527,8 +1527,8 @@ export function OpsMapDashboard({
         )}
       </div>}
 
-      {/* Floating chat — visible only in monitor mode */}
-      {monitorMode && token && (
+      {/* Floating chat — visible whenever there are active routes */}
+      {activeRoutesList.length > 0 && token && (
         <ChatFloating
           token={token}
           activeRoutes={activeRoutesList}
