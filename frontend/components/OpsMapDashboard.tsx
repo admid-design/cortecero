@@ -279,6 +279,9 @@ export function OpsMapDashboard({
   const [driverSectionOpen, setDriverSectionOpen] = useState(true);
   const [selectedFleetVehicleId, setSelectedFleetVehicleId] = useState<string | null>(null);
   const [selectedFleetVehicleName, setSelectedFleetVehicleName] = useState<string | null>(null);
+  // Monitor mode
+  const [drawerRouteId, setDrawerRouteId] = useState<string | null>(null);
+  const [showFullPanel, setShowFullPanel] = useState(false);
 
   // Auto-select plan when only one is available
   useEffect(() => {
@@ -294,6 +297,16 @@ export function OpsMapDashboard({
   ).length;
   const completedRoutes = routes.filter((r) => r.status === "completed").length;
   const unassigned = readyOrders.length;
+
+  // Monitor mode — auto-entra cuando hay rutas activas en vista Rutas
+  const activeRoutesList = React.useMemo(
+    () => routes.filter((r) => r.status === "in_progress" || r.status === "dispatched"),
+    [routes],
+  );
+  const monitorMode = sidebarView === "rutas" && activeRoutesList.length > 0 && !showFullPanel;
+  const drawerOpen = drawerRouteId !== null;
+  // drawerRoute usa selectedRoute (ya cargado por el padre) cuando coincide
+  const drawerRoute = drawerRouteId === selectedRouteId ? selectedRoute : null;
 
   // Filtered routes
   const filteredRoutes =
@@ -329,7 +342,7 @@ export function OpsMapDashboard({
 
   // ── render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="map-first-shell">
+    <div className={`map-first-shell${monitorMode ? " monitor-mode" : ""}`}>
       {/* ── SIDEBAR ── */}
       <aside className="mf-sidebar">
         <div className="mf-sidebar-logo">
@@ -651,6 +664,15 @@ export function OpsMapDashboard({
           </div>
 
           <div className="mf-filter-right">
+            {activeRoutesList.length > 0 && (
+              <button
+                className={`mf-filter-pill${!showFullPanel ? " mf-monitor-toggle-active" : ""}`}
+                onClick={() => setShowFullPanel((v) => !v)}
+                title={showFullPanel ? "Cambiar a modo monitoreo (mapa completo)" : "Mostrar panel lateral completo"}
+              >
+                {showFullPanel ? "🗺 Monitoreo" : "📊 Panel"}
+              </button>
+            )}
             <input
               type="date"
               className="mf-filter-pill"
@@ -677,8 +699,48 @@ export function OpsMapDashboard({
             selectedVehicleName={selectedFleetVehicleName}
             activePositions={activePositions}
           />
-          {/* Empty state overlay */}
-          {!selectedRoute && (
+          {/* Monitor mode — chips de rutas activas flotando en la parte inferior */}
+          {monitorMode && (
+            <div className="mf-monitor-chips">
+              {activeRoutesList.map((r) => {
+                const vName = r.vehicle_id
+                  ? (vehicleNameMap[r.vehicle_id] ?? shortId(r.vehicle_id))
+                  : shortId(r.id);
+                const dName = r.driver_id
+                  ? (driverNameMap[r.driver_id] ?? null)
+                  : null;
+                const isChipActive = drawerRouteId === r.id;
+                const hasGps = !!r.driver_id && activeDriverIdSet.has(r.driver_id);
+                return (
+                  <button
+                    key={r.id}
+                    className={`mf-monitor-chip${isChipActive ? " active" : ""}`}
+                    onClick={() => {
+                      if (isChipActive) {
+                        setDrawerRouteId(null);
+                      } else {
+                        setDrawerRouteId(r.id);
+                        onSelectedRouteIdChange(r.id);
+                      }
+                    }}
+                  >
+                    <span className={`mf-chip-status-dot ${r.status}`} />
+                    <span>🚚 {vName}</span>
+                    {dName && (
+                      <span className="mf-chip-driver">
+                        · {dName.split(" ")[0]}
+                      </span>
+                    )}
+                    <span className="mf-chip-stops">{r.stops.length} par.</span>
+                    {hasGps && <span title="GPS activo">📍</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Empty state overlay — solo en modo normal sin rutas activas */}
+          {!selectedRoute && !monitorMode && (
             <div className="mf-map-empty-state">
               <div className="mf-map-empty-icon">📍</div>
               <div className="mf-map-empty-title">Ninguna ruta seleccionada</div>
@@ -730,8 +792,142 @@ export function OpsMapDashboard({
       </div>}
       </div>{/* end mf-center-col */}
 
-      {/* ── RIGHT PANEL ── */}
-      <div className="mf-right-panel">
+      {/* ── DRAWER — modo monitoreo, desliza sobre el mapa desde la derecha ── */}
+      {monitorMode && (
+        <div className={`mf-route-drawer${drawerOpen ? " open" : ""}`}>
+          <div className="mf-drawer-header">
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="mf-drawer-title">
+                {drawerRoute?.vehicle_id
+                  ? (vehicleNameMap[drawerRoute.vehicle_id] ?? shortId(drawerRoute.vehicle_id))
+                  : drawerRouteId
+                  ? shortId(drawerRouteId)
+                  : "Ruta"}
+              </div>
+              {drawerRoute && (
+                <span className={routeStatusBadgeClass(drawerRoute.status)} style={{ fontSize: 11 }}>
+                  {routeStatusLabel(drawerRoute.status)}
+                </span>
+              )}
+            </div>
+            <button
+              className="mf-drawer-close"
+              onClick={() => setDrawerRouteId(null)}
+              title="Cerrar"
+            >×</button>
+          </div>
+
+          <div className="mf-drawer-body">
+            {routeDetailLoading && (
+              <div style={{ color: "#9ca3af", fontSize: 13, padding: "20px 0" }}>
+                Cargando ruta...
+              </div>
+            )}
+            {!routeDetailLoading && drawerRoute && (
+              <>
+                {/* Conductor */}
+                {drawerRoute.driver_id && (
+                  <div className="mf-driver-card" style={{ marginBottom: 14 }}>
+                    <div className="mf-driver-avatar-lg">
+                      {(driverNameMap[drawerRoute.driver_id] ?? shortId(drawerRoute.driver_id))[0].toUpperCase()}
+                    </div>
+                    <div className="mf-driver-card-info">
+                      <div className="mf-driver-card-name">
+                        {driverNameMap[drawerRoute.driver_id] ?? shortId(drawerRoute.driver_id)}
+                      </div>
+                      <div className="mf-driver-card-role">Conductor</div>
+                    </div>
+                    {activeDriverIdSet.has(drawerRoute.driver_id) && (
+                      <span title="GPS activo" style={{ fontSize: 16 }}>📍</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Stats */}
+                <div className="mf-drawer-stats">
+                  <div className="mf-drawer-stat">
+                    <span className="mf-drawer-stat-value">{drawerRoute.stops.length}</span>
+                    <span className="mf-drawer-stat-label">Paradas</span>
+                  </div>
+                  <div className="mf-drawer-stat">
+                    <span className="mf-drawer-stat-value" style={{ color: "#16a34a" }}>
+                      {drawerRoute.stops.filter((s) => s.status === "completed").length}
+                    </span>
+                    <span className="mf-drawer-stat-label">Entregadas</span>
+                  </div>
+                  <div className="mf-drawer-stat">
+                    <span className="mf-drawer-stat-value" style={{ color: "#dc2626" }}>
+                      {drawerRoute.stops.filter((s) => s.status === "failed").length}
+                    </span>
+                    <span className="mf-drawer-stat-label">Fallidas</span>
+                  </div>
+                  <div className="mf-drawer-stat">
+                    <span className="mf-drawer-stat-value" style={{ color: "#f59e0b" }}>
+                      {drawerRoute.stops.filter((s) => s.status === "pending" || s.status === "en_route").length}
+                    </span>
+                    <span className="mf-drawer-stat-label">Pendientes</span>
+                  </div>
+                </div>
+
+                {/* Acciones */}
+                {canManage && (drawerRoute.status === "planned" || drawerRoute.status === "draft") && (
+                  <div className="mf-action-row" style={{ marginBottom: 14 }}>
+                    <button
+                      className="mf-btn primary"
+                      disabled={optimizingRouteId === drawerRoute.id}
+                      onClick={() => onOptimizeRoute(drawerRoute.id)}
+                    >
+                      {optimizingRouteId === drawerRoute.id ? "Optimizando..." : "⚡ Optimizar"}
+                    </button>
+                    {drawerRoute.status === "planned" && (
+                      <button
+                        className="mf-btn secondary"
+                        disabled={dispatchingRouteId === drawerRoute.id}
+                        onClick={() => onDispatchRoute(drawerRoute.id)}
+                      >
+                        {dispatchingRouteId === drawerRoute.id ? "Despachando..." : "📤 Despachar"}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Lista de paradas */}
+                <div className="mf-drawer-section-label">Paradas</div>
+                {drawerRoute.stops
+                  .slice()
+                  .sort((a, b) => a.sequence_number - b.sequence_number)
+                  .map((stop) => (
+                    <div key={stop.id} className="mf-stop-row">
+                      <div className={stopSeqClass(stop.status)}>{stop.sequence_number}</div>
+                      <div className="mf-stop-body">
+                        <div className="mf-stop-name">Pedido {shortId(stop.order_id)}</div>
+                        <div className="mf-stop-meta">
+                          {stop.status === "completed" && "✓ Entregado"}
+                          {stop.status === "failed" && "✗ Fallo"}
+                          {stop.status === "skipped" && "— Omitida"}
+                          {stop.status === "arrived" && "📍 En destino"}
+                          {stop.status === "en_route" && "🚚 En camino"}
+                          {stop.status === "pending" && "⏳ Pendiente"}
+                          {stop.estimated_arrival_at
+                            ? ` · ETA ${stop.estimated_arrival_at.slice(11, 16)}`
+                            : ""}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </>
+            )}
+            {!routeDetailLoading && !drawerRoute && drawerRouteId && (
+              <div style={{ color: "#9ca3af", fontSize: 13 }}>
+                Cargando detalle de ruta...
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── RIGHT PANEL — oculto en monitor mode ── */}
+      {!monitorMode && <div className="mf-right-panel">
         {/* Error banner */}
         {error && <div className="mf-error-banner">⚠️ {error}</div>}
 
@@ -1238,7 +1434,7 @@ export function OpsMapDashboard({
             </div>}
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }
