@@ -1146,11 +1146,11 @@ export function OpsMapDashboard({
             {selectedRoute.driver_id && (
               <div className="mf-driver-card">
                 <div className="mf-driver-avatar-lg">
-                  {shortId(selectedRoute.driver_id)[0].toUpperCase()}
+                  {(driverNameMap[selectedRoute.driver_id] ?? shortId(selectedRoute.driver_id))[0].toUpperCase()}
                 </div>
                 <div className="mf-driver-card-info">
                   <div className="mf-driver-card-name">
-                    Cond. {shortId(selectedRoute.driver_id)}
+                    {driverNameMap[selectedRoute.driver_id] ?? shortId(selectedRoute.driver_id)}
                   </div>
                   <div className="mf-driver-card-role">Conductor</div>
                 </div>
