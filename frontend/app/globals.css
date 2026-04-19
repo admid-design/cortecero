@@ -2191,7 +2191,7 @@ body.map-first-mode {
 .mf-chat-float {
   position: fixed;
   bottom: 24px;
-  left: 24px;
+  left: 272px; /* sidebar 260px + 12px gap */
   z-index: 1200;
   display: flex;
   flex-direction: column;
@@ -2239,8 +2239,9 @@ body.map-first-mode {
   border: 1px solid #e5e7eb;
   transition: width 0.18s ease;
 }
+/* expanded: solo crece en altura (hacia arriba desde bottom anchor), ancho invariable */
 .mf-chat-panel.expanded {
-  width: 480px;
+  width: 320px;
 }
 
 /* Header */
@@ -2322,7 +2323,7 @@ body.map-first-mode {
   transition: max-height 0.18s ease;
 }
 .mf-chat-panel.expanded .mf-chat-messages {
-  max-height: 440px;
+  max-height: 520px;
 }
 
 /* Empty state */
