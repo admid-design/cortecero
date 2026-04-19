@@ -1167,3 +1167,78 @@ export async function getDriverPosition(
 export async function getActivePositions(token: string): Promise<DriverPositionOut[]> {
   return request<DriverPositionOut[]>("/driver/active-positions", { token });
 }
+
+// ── ETA / Delay Alerts — B2 (ETA-001) ────────────────────────────────────────
+
+export type EtaStopResult = {
+  stop_id: string;
+  sequence_number: number;
+  original_eta: string | null;
+  recalculated_eta: string;
+  delay_minutes: number;
+  delay_alert: boolean;
+};
+
+export type RecalculateEtaResponse = {
+  route_id: string;
+  stops_updated: number;
+  delay_alerts_created: number;
+  results: EtaStopResult[];
+};
+
+export async function recalculateEta(
+  token: string,
+  routeId: string,
+): Promise<RecalculateEtaResponse> {
+  return request<RecalculateEtaResponse>(`/routes/${routeId}/recalculate-eta`, {
+    token,
+    method: "POST",
+  });
+}
+
+export type DelayAlertOut = {
+  event_id: string;
+  route_id: string;
+  stop_id: string | null;
+  original_eta: string | null;
+  recalculated_eta: string | null;
+  delay_minutes: number | null;
+  ts: string;
+};
+
+export async function getDelayAlerts(
+  token: string,
+  routeId: string,
+): Promise<DelayAlertOut[]> {
+  return request<DelayAlertOut[]>(`/routes/${routeId}/delay-alerts`, { token });
+}
+
+// ── Chat interno — B3 (CHAT-001) ──────────────────────────────────────────────
+
+export type RouteMessageOut = {
+  id: string;
+  route_id: string;
+  author_user_id: string;
+  author_role: string;
+  body: string;
+  created_at: string;
+};
+
+export async function getRouteMessages(
+  token: string,
+  routeId: string,
+): Promise<RouteMessageOut[]> {
+  return request<RouteMessageOut[]>(`/routes/${routeId}/messages`, { token });
+}
+
+export async function sendRouteMessage(
+  token: string,
+  routeId: string,
+  body: string,
+): Promise<RouteMessageOut> {
+  return request<RouteMessageOut>(`/routes/${routeId}/messages`, {
+    token,
+    method: "POST",
+    body: { body },
+  });
+}

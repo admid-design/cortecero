@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import type {
   AvailableVehicleItem,
   DashboardSummary,
+  DelayAlertOut,
   DriverOut,
   DriverPositionOut,
   Plan,
@@ -43,6 +44,7 @@ type OpsMapDashboardProps = {
   onSelectedRouteIdChange: (id: string) => void;
   selectedRoute: RoutingRoute | null;
   routeEvents: RouteEventItem[];
+  delayAlerts?: DelayAlertOut[];
   routeDetailLoading: boolean;
   canManage: boolean;
   driverPosition?: LocalDriverPosition | null;
@@ -290,6 +292,7 @@ export function OpsMapDashboard({
   selectedRouteId,
   onSelectedRouteIdChange,
   selectedRoute,
+  delayAlerts = [],
   routeDetailLoading,
   canManage,
   driverPosition,
@@ -389,6 +392,9 @@ export function OpsMapDashboard({
     for (const p of activePositions ?? []) s.add(p.driver_id);
     return s;
   }, [activePositions]);
+
+  // Delay alerts del selectedRouteId — para mostrar en chip y drawer
+  const delayAlertCount = delayAlerts.length;
 
   const emailDisplay = role ? `Rol: ${role}` : "—";
 
@@ -785,6 +791,11 @@ export function OpsMapDashboard({
                     )}
                     <span className="mf-chip-stops">{r.stops.length} par.</span>
                     {hasGps && <span title="GPS activo">📍</span>}
+                    {isChipActive && delayAlertCount > 0 && (
+                      <span className="mf-chip-delay-badge" title={`${delayAlertCount} alerta(s) de retraso`}>
+                        ⚠️ {delayAlertCount}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -920,6 +931,35 @@ export function OpsMapDashboard({
                     <span className="mf-drawer-stat-label">Pendientes</span>
                   </div>
                 </div>
+
+                {/* Delay alerts — B2 (ETA-001) */}
+                {delayAlertCount > 0 && (
+                  <div className="mf-delay-alerts-section">
+                    <div className="mf-drawer-section-label" style={{ color: "#b45309" }}>
+                      ⚠️ Alertas de retraso ({delayAlertCount})
+                    </div>
+                    {delayAlerts.slice(0, 5).map((a) => (
+                      <div key={a.event_id} className="mf-delay-alert-row">
+                        <span className="mf-delay-alert-min">
+                          +{a.delay_minutes != null ? Math.round(a.delay_minutes) : "?"} min
+                        </span>
+                        <span className="mf-delay-alert-ts">
+                          {a.ts.slice(11, 16)}
+                        </span>
+                        {a.recalculated_eta && (
+                          <span className="mf-delay-alert-eta">
+                            ETA {a.recalculated_eta.slice(11, 16)}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                    {delayAlertCount > 5 && (
+                      <div style={{ fontSize: 11, color: "#9ca3af", padding: "2px 0 6px" }}>
+                        +{delayAlertCount - 5} más
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Acciones */}
                 {canManage && (drawerRoute.status === "planned" || drawerRoute.status === "draft") && (
@@ -1155,6 +1195,26 @@ export function OpsMapDashboard({
                   <div className="mf-driver-card-role">Conductor</div>
                 </div>
                 <span className="badge ok">Activo</span>
+              </div>
+            )}
+
+            {/* Delay alerts — panel derecho */}
+            {delayAlertCount > 0 && (
+              <div className="mf-delay-alerts-section" style={{ marginBottom: 10 }}>
+                <div style={{ fontWeight: 600, fontSize: 12, color: "#b45309", marginBottom: 4 }}>
+                  ⚠️ {delayAlertCount} alerta{delayAlertCount !== 1 ? "s" : ""} de retraso
+                </div>
+                {delayAlerts.slice(0, 3).map((a) => (
+                  <div key={a.event_id} className="mf-delay-alert-row">
+                    <span className="mf-delay-alert-min">
+                      +{a.delay_minutes != null ? Math.round(a.delay_minutes) : "?"} min
+                    </span>
+                    <span className="mf-delay-alert-ts">{a.ts.slice(11, 16)}</span>
+                    {a.recalculated_eta && (
+                      <span className="mf-delay-alert-eta">ETA {a.recalculated_eta.slice(11, 16)}</span>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
 

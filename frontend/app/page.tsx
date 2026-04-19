@@ -15,6 +15,7 @@ import {
   createStopProof,
   failStop,
   getActivePositions,
+  getDelayAlerts,
   getDriverPosition,
   skipStop,
   createIncident,
@@ -77,6 +78,7 @@ import {
   type Plan,
   type PlanCapacityAlert,
   type PlanCustomerConsolidationResponse,
+  type DelayAlertOut,
   type ReadyToDispatchItem,
   type RouteEventItem,
   type RoutingRoute,
@@ -217,6 +219,7 @@ export default function HomePage() {
   const [selectedDispatcherRouteId, setSelectedDispatcherRouteId] = useState("");
   const [selectedDispatcherRoute, setSelectedDispatcherRoute] = useState<RoutingRoute | null>(null);
   const [selectedDispatcherRouteEvents, setSelectedDispatcherRouteEvents] = useState<RouteEventItem[]>([]);
+  const [selectedDispatcherRouteDelayAlerts, setSelectedDispatcherRouteDelayAlerts] = useState<DelayAlertOut[]>([]);
   const [dispatcherPlanId, setDispatcherPlanId] = useState("");
   const [dispatcherPlanVehicleId, setDispatcherPlanVehicleId] = useState("");
   const [dispatcherPlanDriverId, setDispatcherPlanDriverId] = useState("");
@@ -472,17 +475,20 @@ export default function HomePage() {
       if (!activeToken || !routeId) return;
       setDispatcherRouteDetailLoading(true);
       try {
-        const [routeRes, eventsRes] = await Promise.all([
+        const [routeRes, eventsRes, alertsRes] = await Promise.all([
           getRoute(activeToken, routeId),
           listRouteEvents(activeToken, routeId),
+          getDelayAlerts(activeToken, routeId).catch(() => [] as DelayAlertOut[]),
         ]);
         setSelectedDispatcherRoute(routeRes);
         setSelectedDispatcherRouteEvents(eventsRes.items ?? []);
+        setSelectedDispatcherRouteDelayAlerts(alertsRes);
         setDispatcherMoveSourceRouteId(routeRes.id);
       } catch (e) {
         setError(formatError(e));
         setSelectedDispatcherRoute(null);
         setSelectedDispatcherRouteEvents([]);
+        setSelectedDispatcherRouteDelayAlerts([]);
       } finally {
         setDispatcherRouteDetailLoading(false);
       }
@@ -1368,6 +1374,7 @@ export default function HomePage() {
         onSelectedRouteIdChange={onSelectDispatcherRoute}
         selectedRoute={selectedDispatcherRoute}
         routeEvents={selectedDispatcherRouteEvents}
+        delayAlerts={selectedDispatcherRouteDelayAlerts}
         routeDetailLoading={dispatcherRouteDetailLoading}
         canManage={canManageRouting}
         driverPosition={dispatcherDriverPosition}
