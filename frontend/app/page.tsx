@@ -51,6 +51,7 @@ import {
   login,
   moveRouteStop,
   optimizeRoute,
+  recalculateEta,
   planRoutes,
   rejectException,
   runAutoLock,
@@ -228,6 +229,7 @@ export default function HomePage() {
   const [dispatcherPlanCreating, setDispatcherPlanCreating] = useState(false);
   const [dispatcherOptimizingRouteId, setDispatcherOptimizingRouteId] = useState<string | null>(null);
   const [dispatcherDispatchingRouteId, setDispatcherDispatchingRouteId] = useState<string | null>(null);
+  const [dispatcherRecalculatingEtaRouteId, setDispatcherRecalculatingEtaRouteId] = useState<string | null>(null);
   const [dispatcherMoveSourceRouteId, setDispatcherMoveSourceRouteId] = useState("");
   const [dispatcherMoveStopId, setDispatcherMoveStopId] = useState("");
   const [dispatcherMoveTargetRouteId, setDispatcherMoveTargetRouteId] = useState("");
@@ -1166,6 +1168,20 @@ export default function HomePage() {
     }
   }
 
+  async function onRecalculateDispatcherEta(routeId: string) {
+    if (!token || !canManageRouting) return;
+    setDispatcherRecalculatingEtaRouteId(routeId);
+    setError("");
+    try {
+      await recalculateEta(token, routeId);
+      await onSelectDispatcherRoute(routeId);
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setDispatcherRecalculatingEtaRouteId(null);
+    }
+  }
+
   async function onMoveDispatcherStop() {
     if (!token || !canManageRouting) return;
     const sourceRouteId = dispatcherMoveSourceRouteId.trim();
@@ -1382,8 +1398,10 @@ export default function HomePage() {
         activePositions={activePositions}
         optimizingRouteId={dispatcherOptimizingRouteId}
         dispatchingRouteId={dispatcherDispatchingRouteId}
+        recalculatingEtaRouteId={dispatcherRecalculatingEtaRouteId}
         onOptimizeRoute={(id) => void onOptimizeDispatcherRoute(id)}
         onDispatchRoute={(id) => void onDispatchDispatcherRoute(id)}
+        onRecalculateEta={(id) => void onRecalculateDispatcherEta(id)}
         onRefresh={() => void refreshDispatcher()}
         readyOrders={dispatcherReadyOrders}
         availableVehicles={dispatcherVehicles}
@@ -1671,6 +1689,7 @@ export default function HomePage() {
                 creatingPlan={dispatcherPlanCreating}
                 optimizingRouteId={dispatcherOptimizingRouteId}
                 dispatchingRouteId={dispatcherDispatchingRouteId}
+                recalculatingEtaRouteId={dispatcherRecalculatingEtaRouteId}
                 moveSourceRouteId={dispatcherMoveSourceRouteId}
                 onMoveSourceRouteIdChange={setDispatcherMoveSourceRouteId}
                 moveStopId={dispatcherMoveStopId}
@@ -1682,6 +1701,7 @@ export default function HomePage() {
                 onCreatePlan={() => void onCreateDispatcherRoutePlan()}
                 onOptimizeRoute={(routeId) => void onOptimizeDispatcherRoute(routeId)}
                 onDispatchRoute={(routeId) => void onDispatchDispatcherRoute(routeId)}
+                onRecalculateEta={(routeId) => void onRecalculateDispatcherEta(routeId)}
                 onMoveStop={() => void onMoveDispatcherStop()}
                 driverPosition={dispatcherDriverPosition}
               />

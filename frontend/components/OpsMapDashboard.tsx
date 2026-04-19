@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import type {
   AvailableVehicleItem,
   DashboardSummary,
@@ -56,8 +56,10 @@ type OpsMapDashboardProps = {
   // Route actions
   optimizingRouteId: string | null;
   dispatchingRouteId: string | null;
+  recalculatingEtaRouteId?: string | null;
   onOptimizeRoute: (id: string) => void;
   onDispatchRoute: (id: string) => void;
+  onRecalculateEta?: (routeId: string) => void;
   onRefresh: () => void;
 
   // Plan creation (advanced)
@@ -302,8 +304,10 @@ export function OpsMapDashboard({
   activePositions,
   optimizingRouteId,
   dispatchingRouteId,
+  recalculatingEtaRouteId,
   onOptimizeRoute,
   onDispatchRoute,
+  onRecalculateEta,
   onRefresh,
   readyOrders,
   availableVehicles,
@@ -398,6 +402,18 @@ export function OpsMapDashboard({
 
   // Delay alerts del selectedRouteId — para mostrar en chip y drawer
   const delayAlertCount = delayAlerts.length;
+
+  // Mapa stop_id → delay_minutes más reciente (para badge por parada)
+  const delayByStopId = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of delayAlerts) {
+      if (a.stop_id != null && a.delay_minutes != null) {
+        const prev = m.get(a.stop_id);
+        if (prev == null || a.delay_minutes > prev) m.set(a.stop_id, a.delay_minutes);
+      }
+    }
+    return m;
+  }, [delayAlerts]);
 
   const emailDisplay = role ? `Rol: ${role}` : "—";
 
@@ -936,6 +952,11 @@ export function OpsMapDashboard({
                   </div>
                 </div>
 
+                {/* Traffic indicator */}
+                {drawerRoute.route_geometry?.provider === "google" && (
+                  <div className="mf-traffic-badge">🚦 ETAs con tráfico real</div>
+                )}
+
                 {/* Delay alerts — B2 (ETA-001) */}
                 {delayAlertCount > 0 && (
                   <div className="mf-delay-alerts-section">
@@ -986,6 +1007,17 @@ export function OpsMapDashboard({
                     )}
                   </div>
                 )}
+                {canManage && drawerRoute.status === "in_progress" && onRecalculateEta && (
+                  <div className="mf-action-row" style={{ marginBottom: 14 }}>
+                    <button
+                      className="mf-btn secondary"
+                      disabled={recalculatingEtaRouteId === drawerRoute.id}
+                      onClick={() => onRecalculateEta(drawerRoute.id)}
+                    >
+                      {recalculatingEtaRouteId === drawerRoute.id ? "Recalculando..." : "🔄 Recalcular ETA"}
+                    </button>
+                  </div>
+                )}
 
                 {/* Lista de paradas */}
                 <div className="mf-drawer-section-label">Paradas</div>
@@ -994,6 +1026,7 @@ export function OpsMapDashboard({
                   .sort((a, b) => a.sequence_number - b.sequence_number)
                   .map((stop) => {
                     const isExp = expandedStopId === stop.id;
+                    const stopDelay = delayByStopId.get(stop.id);
                     return (
                       <div
                         key={stop.id}
@@ -1015,6 +1048,9 @@ export function OpsMapDashboard({
                               {stop.estimated_arrival_at
                                 ? ` · ETA ${stop.estimated_arrival_at.slice(11, 16)}`
                                 : ""}
+                              {stopDelay != null && (
+                                <span className="mf-stop-delay-badge">⚠️ +{Math.round(stopDelay)}min</span>
+                              )}
                             </div>
                           </div>
                           <span className="mf-stop-chevron">{isExp ? "▲" : "▾"}</span>
@@ -1181,8 +1217,8 @@ export function OpsMapDashboard({
               <span className="badge intake-unknown">
                 {selectedRoute.stops.length} paradas
               </span>
-              {selectedRoute.route_geometry && (
-                <span className="badge ok">geometría real</span>
+              {selectedRoute.route_geometry?.provider === "google" && (
+                <span className="mf-traffic-badge">🚦 ETAs con tráfico real</span>
               )}
             </div>
 
@@ -1248,6 +1284,17 @@ export function OpsMapDashboard({
                       : "📤 Despachar"}
                   </button>
                 )}
+                {selectedRoute.status === "in_progress" && onRecalculateEta && (
+                  <button
+                    className="mf-btn secondary"
+                    disabled={recalculatingEtaRouteId === selectedRoute.id}
+                    onClick={() => onRecalculateEta(selectedRoute.id)}
+                  >
+                    {recalculatingEtaRouteId === selectedRoute.id
+                      ? "Recalculando..."
+                      : "🔄 Recalcular ETA"}
+                  </button>
+                )}
               </div>
             )}
 
@@ -1261,6 +1308,7 @@ export function OpsMapDashboard({
                   .sort((a, b) => a.sequence_number - b.sequence_number)
                   .map((stop) => {
                     const isExp = expandedStopId === stop.id;
+                    const stopDelay = delayByStopId.get(stop.id);
                     return (
                       <div
                         key={stop.id}
@@ -1286,6 +1334,9 @@ export function OpsMapDashboard({
                               {stop.estimated_arrival_at
                                 ? ` · ETA ${stop.estimated_arrival_at.slice(11, 16)}`
                                 : ""}
+                              {stopDelay != null && (
+                                <span className="mf-stop-delay-badge">⚠️ +{Math.round(stopDelay)}min</span>
+                              )}
                             </div>
                           </div>
                           <span className="mf-stop-chevron">{isExp ? "▲" : "▾"}</span>
