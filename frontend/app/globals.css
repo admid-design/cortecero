@@ -1014,6 +1014,57 @@ body.map-first-mode {
   gap: 10px;
   padding: 8px 0;
   border-bottom: 1px solid #f9fafb;
+  border-radius: 6px;
+  transition: background 0.12s;
+}
+.mf-stop-row:hover {
+  background: #f8faff;
+}
+.mf-stop-row.expanded {
+  background: #eff6ff;
+  border-bottom-color: #dbeafe;
+}
+.mf-stop-chevron {
+  font-size: 10px;
+  color: #9ca3af;
+  flex-shrink: 0;
+  margin-top: 4px;
+  margin-left: auto;
+  padding-right: 2px;
+}
+.mf-stop-expand {
+  padding: 8px 10px 4px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mf-stop-expand-row {
+  font-size: 11px;
+  color: #374151;
+  line-height: 1.5;
+}
+/* Driver avatar small — conductor list */
+.mf-driver-avatar-sm {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: 0;
+}
+/* Vehicle icon container */
+.mf-vehicle-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
 }
 
 .mf-stop-seq {

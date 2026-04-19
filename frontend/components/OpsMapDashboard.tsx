@@ -141,6 +141,50 @@ function stopSeqClass(status: string): string {
   return "mf-stop-seq";
 }
 
+function StopExpandContent({ stop }: { stop: { estimated_service_minutes: number; failure_reason: string | null; arrived_at: string | null; completed_at: string | null; customer_lat: number | null; customer_lng: number | null } }) {
+  const items: React.ReactNode[] = [];
+  if (stop.estimated_service_minutes > 0)
+    items.push(<span key="svc">⏱ {stop.estimated_service_minutes} min de servicio estimado</span>);
+  if (stop.arrived_at)
+    items.push(<span key="arr">📍 Llegada registrada {stop.arrived_at.slice(11, 16)}</span>);
+  if (stop.completed_at)
+    items.push(<span key="cmp" style={{ color: "#16a34a" }}>✓ Entregado a las {stop.completed_at.slice(11, 16)}</span>);
+  if (stop.failure_reason)
+    items.push(<span key="fail" style={{ color: "#dc2626" }}>✗ {stop.failure_reason}</span>);
+  if (stop.customer_lat && stop.customer_lng)
+    items.push(<span key="geo" style={{ color: "#6b7280" }}>🗺 {stop.customer_lat.toFixed(4)}, {stop.customer_lng.toFixed(4)}</span>);
+  if (items.length === 0)
+    items.push(<span key="none" style={{ color: "#9ca3af" }}>Sin actividad registrada aún</span>);
+  return (
+    <div className="mf-stop-expand">
+      {items.map((item, i) => <div key={i} className="mf-stop-expand-row">{item}</div>)}
+    </div>
+  );
+}
+
+const TruckSvg = () => (
+  <svg width="20" height="16" viewBox="0 0 32 22" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "block" }}>
+    <rect x="0" y="3" width="20" height="14" rx="2" fill="#2563eb"/>
+    <rect x="1.5" y="4.5" width="7" height="5" rx="1" fill="#bfdbfe"/>
+    <path d="M20 7h6.5L30 12.5V18H20V7z" fill="#1d4ed8"/>
+    <rect x="20.5" y="8" width="5" height="4" rx="0.5" fill="#bfdbfe"/>
+    <circle cx="6.5" cy="19" r="3" fill="#0f172a"/>
+    <circle cx="6.5" cy="19" r="1.2" fill="#cbd5e1"/>
+    <circle cx="24" cy="19" r="3" fill="#0f172a"/>
+    <circle cx="24" cy="19" r="1.2" fill="#cbd5e1"/>
+  </svg>
+);
+
+const DriverAvatarSm = ({ name, selected }: { name: string; selected?: boolean }) => {
+  const colors = ["#2563eb","#7c3aed","#059669","#d97706","#dc2626","#0891b2"];
+  const idx = (name.charCodeAt(0) || 0) % colors.length;
+  return (
+    <span className="mf-driver-avatar-sm" style={{ background: selected ? "#1d4ed8" : colors[idx] }}>
+      {name[0]?.toUpperCase() ?? "?"}
+    </span>
+  );
+};
+
 // ─── NextActionCard ───────────────────────────────────────────────────────────
 
 function NextActionCard({
@@ -289,6 +333,7 @@ export function OpsMapDashboard({
   // Monitor mode
   const [drawerRouteId, setDrawerRouteId] = useState<string | null>(null);
   const [showFullPanel, setShowFullPanel] = useState(false);
+  const [expandedStopId, setExpandedStopId] = useState<string | null>(null);
 
   // Auto-select plan when only one is available
   useEffect(() => {
@@ -903,25 +948,37 @@ export function OpsMapDashboard({
                 {drawerRoute.stops
                   .slice()
                   .sort((a, b) => a.sequence_number - b.sequence_number)
-                  .map((stop) => (
-                    <div key={stop.id} className="mf-stop-row">
-                      <div className={stopSeqClass(stop.status)}>{stop.sequence_number}</div>
-                      <div className="mf-stop-body">
-                        <div className="mf-stop-name">Pedido {shortId(stop.order_id)}</div>
-                        <div className="mf-stop-meta">
-                          {stop.status === "completed" && "✓ Entregado"}
-                          {stop.status === "failed" && "✗ Fallo"}
-                          {stop.status === "skipped" && "— Omitida"}
-                          {stop.status === "arrived" && "📍 En destino"}
-                          {stop.status === "en_route" && "🚚 En camino"}
-                          {stop.status === "pending" && "⏳ Pendiente"}
-                          {stop.estimated_arrival_at
-                            ? ` · ETA ${stop.estimated_arrival_at.slice(11, 16)}`
-                            : ""}
+                  .map((stop) => {
+                    const isExp = expandedStopId === stop.id;
+                    return (
+                      <div
+                        key={stop.id}
+                        className={`mf-stop-row${isExp ? " expanded" : ""}`}
+                        style={{ display: "block", cursor: "pointer" }}
+                        onClick={() => setExpandedStopId(isExp ? null : stop.id)}
+                      >
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                          <div className={stopSeqClass(stop.status)}>{stop.sequence_number}</div>
+                          <div className="mf-stop-body">
+                            <div className="mf-stop-name">Pedido {shortId(stop.order_id)}</div>
+                            <div className="mf-stop-meta">
+                              {stop.status === "completed" && "✓ Entregado"}
+                              {stop.status === "failed" && "✗ Fallo"}
+                              {stop.status === "skipped" && "— Omitida"}
+                              {stop.status === "arrived" && "📍 En destino"}
+                              {stop.status === "en_route" && "🚛 En camino"}
+                              {stop.status === "pending" && "⏳ Pendiente"}
+                              {stop.estimated_arrival_at
+                                ? ` · ETA ${stop.estimated_arrival_at.slice(11, 16)}`
+                                : ""}
+                            </div>
+                          </div>
+                          <span className="mf-stop-chevron">{isExp ? "▲" : "▾"}</span>
                         </div>
+                        {isExp && <StopExpandContent stop={stop} />}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </>
             )}
             {!routeDetailLoading && !drawerRoute && drawerRouteId && (
@@ -1138,29 +1195,41 @@ export function OpsMapDashboard({
                 {selectedRoute.stops
                   .slice()
                   .sort((a, b) => a.sequence_number - b.sequence_number)
-                  .map((stop) => (
-                    <div key={stop.id} className="mf-stop-row">
-                      <div className={stopSeqClass(stop.status)}>
-                        {stop.sequence_number}
-                      </div>
-                      <div className="mf-stop-body">
-                        <div className="mf-stop-name">
-                          Pedido {shortId(stop.order_id)}
+                  .map((stop) => {
+                    const isExp = expandedStopId === stop.id;
+                    return (
+                      <div
+                        key={stop.id}
+                        className={`mf-stop-row${isExp ? " expanded" : ""}`}
+                        style={{ display: "block", cursor: "pointer" }}
+                        onClick={() => setExpandedStopId(isExp ? null : stop.id)}
+                      >
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                          <div className={stopSeqClass(stop.status)}>
+                            {stop.sequence_number}
+                          </div>
+                          <div className="mf-stop-body">
+                            <div className="mf-stop-name">
+                              Pedido {shortId(stop.order_id)}
+                            </div>
+                            <div className="mf-stop-meta">
+                              {stop.status === "completed" && "✓ Entregado"}
+                              {stop.status === "failed" && "✗ Fallo"}
+                              {stop.status === "skipped" && "— Omitida"}
+                              {stop.status === "arrived" && "📍 En destino"}
+                              {stop.status === "en_route" && "🚛 En camino"}
+                              {stop.status === "pending" && "⏳ Pendiente"}
+                              {stop.estimated_arrival_at
+                                ? ` · ETA ${stop.estimated_arrival_at.slice(11, 16)}`
+                                : ""}
+                            </div>
+                          </div>
+                          <span className="mf-stop-chevron">{isExp ? "▲" : "▾"}</span>
                         </div>
-                        <div className="mf-stop-meta">
-                          {stop.status === "completed" && "✓ Entregado"}
-                          {stop.status === "failed" && "✗ Fallo"}
-                          {stop.status === "skipped" && "— Omitida"}
-                          {stop.status === "arrived" && "📍 En destino"}
-                          {stop.status === "en_route" && "🚚 En camino"}
-                          {stop.status === "pending" && "⏳ Pendiente"}
-                          {stop.estimated_arrival_at
-                            ? ` · ETA ${stop.estimated_arrival_at.slice(11, 16)}`
-                            : ""}
-                        </div>
+                        {isExp && <StopExpandContent stop={stop} />}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
             )}
           </div>
@@ -1303,7 +1372,7 @@ export function OpsMapDashboard({
                       onClick={() => onPlanDriverIdChange(isSelected ? "" : d.id)}
                       title={isSelected ? "Clic para deseleccionar" : "Asignar a la ruta"}
                     >
-                      <span className="mf-fleet-icon">👤</span>
+                      <DriverAvatarSm name={d.name} selected={isSelected} />
                       <div className="mf-fleet-info">
                         <span className="mf-fleet-name">{d.name}</span>
                         <span className="mf-fleet-meta">{d.phone || "Sin teléfono"}</span>
@@ -1368,7 +1437,7 @@ export function OpsMapDashboard({
                   }}
                   title={sidebarView === "gestion" ? "Seleccionar para crear ruta" : linkedRouteId ? "Ver ruta en mapa" : "Ver vehículo en mapa"}
                 >
-                  <span className="mf-fleet-icon">🚚</span>
+                  <span className="mf-fleet-icon mf-vehicle-icon"><TruckSvg /></span>
                   <div className="mf-fleet-info">
                     <span className="mf-fleet-name">{v.name}</span>
                     <span className="mf-fleet-meta">{v.code}{v.capacity_kg ? ` · ${v.capacity_kg} kg` : ""}</span>
