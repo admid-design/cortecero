@@ -183,6 +183,52 @@ def _serialize_route(db: Session, tenant_id: uuid.UUID, route: Route) -> RouteOu
     return data
 
 
+def _serialize_routes_batch(db: Session, tenant_id: uuid.UUID, routes: list[Route]) -> list[RouteOut]:
+    """
+    Serializa N rutas en exactamente 2 queries planas (stops IN + geo JOIN IN).
+    Reemplaza el loop N × _serialize_route (2N queries) en list_routes.
+    """
+    if not routes:
+        return []
+
+    route_ids = [r.id for r in routes]
+
+    # 1 query: todos los stops de todas las rutas de golpe
+    all_stops = list(
+        db.scalars(
+            select(RouteStop)
+            .where(RouteStop.tenant_id == tenant_id, RouteStop.route_id.in_(route_ids))
+            .order_by(RouteStop.route_id, RouteStop.sequence_number)
+        )
+    )
+
+    # Agrupar en Python — sin queries adicionales
+    stops_by_route: dict[uuid.UUID, list[RouteStop]] = {r.id: [] for r in routes}
+    for stop in all_stops:
+        stops_by_route[stop.route_id].append(stop)
+
+    # 1 query: geo de todos los pedidos de todos los stops
+    all_order_ids = [stop.order_id for stop in all_stops]
+    geo_by_order_id = _load_customer_geo_by_order_id(db, tenant_id=tenant_id, order_ids=all_order_ids)
+
+    results: list[RouteOut] = []
+    for route in routes:
+        stops = stops_by_route.get(route.id, [])
+        data = RouteOut.model_validate(route)
+        data.stops = [
+            _serialize_stop_with_customer_geo(
+                stop,
+                customer_lat=geo_by_order_id.get(stop.order_id, (None, None))[0],
+                customer_lng=geo_by_order_id.get(stop.order_id, (None, None))[1],
+            )
+            for stop in stops
+        ]
+        data.route_geometry = _extract_route_geometry(route.optimization_response_json)
+        results.append(data)
+
+    return results
+
+
 def _extract_route_geometry(optimization_response_json: dict | None) -> RouteGeometryOut | None:
     if not isinstance(optimization_response_json, dict):
         return None
@@ -630,10 +676,16 @@ def dispatch_route(
     stops = list(
         db.scalars(select(RouteStop).where(RouteStop.route_id == route_id, RouteStop.tenant_id == current.tenant_id))
     )
-    for stop in stops:
-        order = db.scalar(
-            select(Order).where(Order.id == stop.order_id, Order.tenant_id == current.tenant_id)
+    # R9-PERF-001: batch load orders — evita N queries por parada
+    order_ids = [stop.order_id for stop in stops]
+    orders_by_id = {
+        o.id: o
+        for o in db.scalars(
+            select(Order).where(Order.id.in_(order_ids), Order.tenant_id == current.tenant_id)
         )
+    }
+    for stop in stops:
+        order = orders_by_id.get(stop.order_id)
         if order and order.status == OrderStatus.assigned:
             order.status = OrderStatus.dispatched
             order.updated_at = now
@@ -702,32 +754,49 @@ def optimize_route(
     if not stops:
         raise unprocessable("INVALID_ROUTE", "La ruta no tiene paradas")
 
+    # R9-PERF-001: batch load orders, customers y profiles — evita 3N queries por parada
+    stop_order_ids = [stop.order_id for stop in stops]
+    orders_map = {
+        o.id: o
+        for o in db.scalars(
+            select(Order).where(Order.id.in_(stop_order_ids), Order.tenant_id == current.tenant_id)
+        )
+    }
+    missing_orders = [str(oid) for oid in stop_order_ids if oid not in orders_map]
+    if missing_orders:
+        raise not_found("ENTITY_NOT_FOUND", f"Pedido(s) no encontrado(s): {', '.join(missing_orders)}")
+
+    customer_ids = list({o.customer_id for o in orders_map.values()})
+    customers_map = {
+        c.id: c
+        for c in db.scalars(
+            select(Customer).where(Customer.id.in_(customer_ids), Customer.tenant_id == current.tenant_id)
+        )
+    }
+    profiles_map = {
+        p.customer_id: p
+        for p in db.scalars(
+            select(CustomerOperationalProfile).where(
+                CustomerOperationalProfile.customer_id.in_(customer_ids),
+                CustomerOperationalProfile.tenant_id == current.tenant_id,
+            )
+        )
+    }
+
     missing_geo: list[str] = []
     waypoints: list[OptimizationWaypoint] = []
     for stop in stops:
-        order = db.scalar(
-            select(Order).where(Order.id == stop.order_id, Order.tenant_id == current.tenant_id)
-        )
+        order = orders_map.get(stop.order_id)
         if not order:
             raise not_found("ENTITY_NOT_FOUND", f"Pedido {stop.order_id} no encontrado")
 
-        customer = db.scalar(
-            select(Customer).where(
-                Customer.id == order.customer_id,
-                Customer.tenant_id == current.tenant_id,
-            )
-        )
+        customer = customers_map.get(order.customer_id)
         if not customer or customer.lat is None or customer.lng is None:
             missing_geo.append(str(order.id))
             continue
 
         # F1 — TW-001: leer ventana horaria del perfil operacional del cliente
-        profile = db.scalar(
-            select(CustomerOperationalProfile).where(
-                CustomerOperationalProfile.customer_id == customer.id,
-                CustomerOperationalProfile.tenant_id == current.tenant_id,
-            )
-        )
+        profile = profiles_map.get(customer.id)
 
         waypoints.append(
             OptimizationWaypoint(
@@ -1075,7 +1144,7 @@ def list_routes(
 
     rows = list(db.scalars(query))
     return RoutesListResponse(
-        items=[_serialize_route(db, current.tenant_id, r) for r in rows],
+        items=_serialize_routes_batch(db, current.tenant_id, rows),
         total=len(rows),
     )
 
