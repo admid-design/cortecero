@@ -42,7 +42,7 @@ export function PlanConsolidationCard({
       </div>
 
       {!planConsolidation && !planConsolidationLoading && (
-        <p style={{ margin: 0, color: "#6b7280" }}>Selecciona un plan para ver la consolidación operativa por cliente.</p>
+        <p style={{ margin: 0, color: "var(--muted)" }}>Selecciona un plan para ver la consolidación operativa por cliente.</p>
       )}
 
       {planConsolidation && (
@@ -67,7 +67,7 @@ export function PlanConsolidationCard({
             <tbody>
               {planConsolidation.items.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ color: "#6b7280" }}>
+                  <td colSpan={6} style={{ color: "var(--muted)" }}>
                     Sin pedidos incluidos para este plan.
                   </td>
                 </tr>

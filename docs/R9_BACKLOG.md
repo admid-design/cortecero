@@ -2,7 +2,8 @@
 
 > Fase: R9 — HARDENING / PRE-PROD  
 > Principio rector: estabilizar runtime, contratos y rendimiento antes de seguir montando UI.  
-> Última actualización: 2026-04-19
+> Última actualización: 2026-04-20  
+> **Estado de fase: R9 CERRADO** — `R9-REALTIME-001` diferido por decisión de arquitectura.
 
 ---
 
@@ -10,138 +11,114 @@
 
 | Prioridad | ID | Bloque | Estado |
 |-----------|-----|--------|--------|
-| 1 | R9-HARDENING-001 | Runtime/deploy safety + envs + api.ts + CI frontend | **ABIERTO** |
-| 2 | R9-PERF-001 | Eliminar N+1 en optimize / dispatch / plan_routes | PENDIENTE |
-| 3 | R9-CONTRACT-001 | OpenAPI ↔ runtime alineados + catálogo de errores cerrado | PENDIENTE |
-| 4 | R9-MONITOR-UX-001 | Delay alerts visibles en panel/drawer + fixes monitor mode | PENDIENTE |
-| 5 | MONITOR-MODE-002 | Chat flotante dispatcher↔conductor (CHAT-001 UI) | PENDIENTE |
-| 6 | R9-REALTIME-001 | SSE Redis / pub-sub compartido (multi-worker) | PENDIENTE — condicional a decisión de infra |
-
-**Regla:** no abrir bloque N+1 sin bloque N en CERRADO o PROMULGADO.
+| 1 | R9-HARDENING-001 | Runtime/deploy safety + envs + api.ts + CI frontend | **PROMULGADO** |
+| 2 | R9-PERF-001 | Eliminar N+1 en optimize / dispatch / list_routes | **PROMULGADO** |
+| 3 | FIX-DEPLOY-001 | `functions`+`builds` conflict en `backend/vercel.json` | **PROMULGADO** |
+| 4 | DRIVER-MOBILE-001 | Smoke móvil real: login conductor + GPS + flujo parada | **CERRADO_CON_EVIDENCIA_REAL** |
+| 5 | R9-CONTRACT-001 | OpenAPI ↔ runtime alineados + catálogo de errores cerrado | PENDIENTE — próxima fase |
+| 6 | R9-MONITOR-UX-001 | Delay alerts visibles en panel/drawer + fixes monitor mode | PENDIENTE — próxima fase |
+| 7 | MONITOR-MODE-002 | Chat flotante dispatcher↔conductor (CHAT-001 UI) | PARCIAL — ver nota |
+| 8 | R9-REALTIME-001 | SSE Redis / pub-sub compartido (multi-worker) | **CONGELADO** — decisión de arquitectura |
 
 ---
 
-## R9-HARDENING-001 — Runtime / Deploy / api.ts / CI frontend
+## Bloques cerrados en R9
+
+### FIX-DEPLOY-001 — `backend/vercel.json` functions+builds conflict
 
 **Tipo:** HARDENING  
-**Estado:** ABIERTO  
-**Objetivo:** dejar el stack libre de fragilidades silenciosas antes de seguir construyendo
+**Estado:** PROMULGADO — commit `7a5e159` — 2026-04-20  
+**Objetivo:** desbloquear todos los deploys del backend en Vercel
 
-### Alcance
+**Causa raíz:** `backend/vercel.json` tenía simultáneamente `"functions"` y `"builds"`. Vercel rechaza esta combinación. Todos los commits desde `dc65fd9` hasta `7a5e159` habían fallado silenciosamente — ningún deployment record se creaba en Vercel.
 
-#### 1. Runtime / deploy safety
+**Fix:** eliminar el bloque `"functions"` completo.
 
-- Verificar que el cold start Vercel (lifespan FastAPI → `seed()`) no produce errores silenciosos en Neon
-- Confirmar que `CORTECERO_STARTUP_SEED=false` no bloquea arranque limpio en ningún escenario
-- Revisar que variables de entorno críticas (`DATABASE_URL`, `JWT_SECRET_KEY`, `CORS_ORIGINS`) estén completas en ambos proyectos Vercel (`cortecero` y `cortecero-api`)
-- Validar que el guard JWT-en-lifespan (HARDENING-SEC-001) no produce falsos positivos en Vercel
+**Impacto desbloqueado:**
+- Seed fix `f4cdd8f` (User sin campo `updated_at` inexistente) llegó a Neon
+- Cuentas de conductores demo creadas en cold start
+- Driver login operativo en móvil real
 
-#### 2. Revisión de envs / secrets
-
-- Auditar `frontend/.env.local` y `backend/.env` contra variables declaradas en Vercel
-- Confirmar que ningún secret está en el repo (grep sobre historial si hay duda)
-- Verificar que `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` está correctamente restringida por dominio en Google Cloud Console
-- Confirmar que `GOOGLE_APPLICATION_CREDENTIALS` no referencia path local que no exista en Vercel (backend serverless no tiene filesystem persistente)
-
-#### 3. `frontend/lib/api.ts` — robustez ante red y respuestas no-JSON
-
-- Auditar todos los `request()` calls: ¿qué ocurre si el backend devuelve `204 No Content`?
-- Añadir manejo explícito de `204`/`205` (respuestas sin body) donde aplique
-- Añadir timeout o error boundary ante red caída (hoy: Promise que nunca resuelve)
-- Verificar que errores `{ detail: { code, message } }` se propagan correctamente al UI (no se tragan silenciosamente)
-
-#### 4. CI frontend — tests reales
-
-- `frontend-smoke` en CI hoy solo valida `npm run build`, no ejecuta `npm test`
-- Activar `npm test` (vitest) en el workflow de CI
-- Verificar que los 26 tests de componentes pasan en CI sin API key real
-- Si algún test requiere variables de entorno, añadir secrets en GitHub Actions
-
-### Definition of Done
-
-- [ ] Cold start Vercel sin errores en Neon (smoke post-deploy)
-- [ ] Envs auditados: ningún drift entre local, repo y Vercel
-- [ ] `api.ts`: `204`/`205` manejados; timeout explícito; errores backend propagados
-- [ ] CI: `npm test` ejecuta y pasa en `frontend-smoke` workflow
-- [ ] Sin secrets en repo (git log auditado)
+**Huecos:** `maxDuration` ya no está configurado. Si se necesita timeout extendido en Vercel Pro, usar `functions` key sin `builds`.
 
 ---
 
-## R9-PERF-001 — N+1 en routing
+### DRIVER-MOBILE-001 — Smoke móvil real conductor
+
+**Tipo:** DEMO  
+**Estado:** CERRADO_CON_EVIDENCIA_REAL — 2026-04-20  
+**Objetivo:** verificar flujo completo de conductor en dispositivo real
+
+**Evidencia real (capturas en sesión):**
+- Login `driver_a@demo.cortecero.app` / `driver123` en móvil: ✅
+- Viewport / UX móvil usable: ✅
+- GPS activado tras acción operativa ("Llegar"): ✅
+- Posición real del dispositivo reflejada en mapa (marker conductor): ✅
+- Transición de parada `Pendiente → Llegó`: ✅
+- Acciones correctas post-arrive (`Completar` / `Falla` / `Omitir`): ✅
+- `trayectoria vial real` activa (Google Route Optimization): ✅
+
+**Observación menor:** botón "Omitir" visible en estado `arrived`. No invalida la evidencia. Ajuste cosmético para post-R9.
+
+---
+
+### R9-HARDENING-001 — Runtime / Deploy / api.ts / CI frontend
 
 **Tipo:** HARDENING  
-**Estado:** PENDIENTE  
-**Objetivo:** eliminar queries redundantes en los endpoints de mayor carga operativa
+**Estado:** PROMULGADO — commits `099ec24` + `ed6cfbe` + `a5c3f27` — 2026-04-19
 
-### Alcance conocido
-
-- `POST /routes/{id}/optimize` — carga paradas + clientes en loop
-- `POST /routes/{id}/dispatch` — carga órdenes individualmente al construir stops
-- `POST /routes/plan` — potencial N+1 al asignar pedidos a plan
-
-### Approach esperado
-
-- Eager loading con SQLAlchemy `selectinload` / `joinedload` donde aplique
-- Medir antes/después con `EXPLAIN ANALYZE` en Neon si el volumen lo justifica
+**Cerrado:**
+- ✅ Envs auditados: drift resuelto entre local, repo y Vercel
+- ✅ `api.ts`: `204`/`205` manejados; timeout explícito; errores backend propagados
+- ✅ CI: `npm test` (vitest) activo en `frontend-smoke` workflow
+- ✅ Cold start Vercel + seed() en Neon: sin errores (verificado vía FIX-DEPLOY-001)
+- ✅ `STARTUP_SEED_RESET` env documentado y wired
 
 ---
 
-## R9-CONTRACT-001 — OpenAPI ↔ runtime + catálogo de errores
+### R9-PERF-001 — N+1 en routing
 
-**Tipo:** HARDENING / DOCS  
-**Estado:** PENDIENTE  
-**Objetivo:** cerrar contrato antes de seguir montando UI encima
+**Tipo:** HARDENING  
+**Estado:** PROMULGADO — 2026-04-19
 
-### Alcance
-
-- Auditar `openapi/openapi-v1.yaml` contra todos los routers: paths, métodos, schemas de request/response
-- Verificar que todos los códigos de error del catálogo (`docs/contracts/error-contract.md`) tienen correspondencia en OpenAPI
-- Cerrar divergencias: si el runtime devuelve algo distinto al spec, spec → runtime (no al revés)
-
----
-
-## R9-MONITOR-UX-001 — Delay alerts visibles + fixes monitor mode
-
-**Tipo:** IMPLEMENTATION  
-**Estado:** PENDIENTE  
-**Objetivo:** surfacear en UI lo que el backend ya calcula
-
-### Alcance
-
-- `GET /routes/{id}/delay-alerts` → mostrar alertas de retraso en drawer de OpsMapDashboard
-- Indicador visual en chip flotante si la ruta tiene ≥1 alerta activa
-- Fixes que emerjan del uso real del monitor mode en demo
+**Cerrado:**
+- ✅ `_serialize_routes_batch`: 2 queries planas para `list_routes`
+- ✅ `dispatch`: batch IN query para orders
+- ✅ `optimize`: 3× batch pre-loop (orders + customers + profiles)
 
 ---
 
 ## MONITOR-MODE-002 — Chat flotante dispatcher↔conductor
 
 **Tipo:** IMPLEMENTATION  
-**Estado:** PENDIENTE  
-**Prerequisito:** R9-HARDENING-001 + R9-CONTRACT-001 cerrados  
-**Objetivo:** UI sobre CHAT-001 (endpoints ya operativos)
+**Estado:** PARCIAL  
+**Lado dispatcher (web):** OPERATIVO — `ChatFloating` montado en `OpsMapDashboard`, polling 10s, tabs por ruta activa, `GET/POST /routes/{id}/messages`  
+**Lado conductor (móvil):** PENDIENTE — `DriverRoutingCard` no tiene UI de chat
 
-### Alcance
-
-- Widget flotante bottom-right en OpsMapDashboard
-- Tabs por conductor activo
-- Conectado a `GET/POST /routes/{id}/messages`
-- SSE event `chat_message` para push en tiempo real
+**Criterio para "completo":** conductor puede leer y responder mensajes desde PWA móvil  
+**Presentación correcta hoy:** "chat de monitor para dispatcher — canal conductor en móvil pendiente"  
+**No presentar como:** "chat bidireccional completo dispatcher↔conductor"
 
 ---
 
 ## R9-REALTIME-001 — SSE Redis / pub-sub multi-worker
 
 **Tipo:** HARDENING / INFRA  
-**Estado:** PENDIENTE — condicional  
-**Prerequisito:** decisión de migrar a gunicorn multi-worker o escalar Vercel con múltiples instancias  
-**Objetivo:** hacer SSE compatible con arquitectura multi-worker
+**Estado:** CONGELADO — decisión de arquitectura pendiente
 
-### Contexto
+**Contexto:** `RouteEventBus` usa `asyncio.Queue` in-process. No escala con múltiples instancias serverless. Fix requiere Redis pub/sub. No urgente mientras Vercel sirva una instancia por request. Solo se activa cuando se decida entre Vercel Functions vs. servicio realtime dedicado (Railway, Fly.io, etc.).
 
-Hoy: `RouteEventBus` usa `asyncio.Queue` in-process. Un evento publicado en worker A no llega a cliente conectado a worker B.  
-Fix: Redis pub/sub como bus compartido entre workers.  
-**No es urgente mientras Vercel use una sola instancia serverless por request.**
+**No bloquea R9 ni demo.**
+
+---
+
+## Diferido a próxima fase
+
+| Ítem | Estado |
+|------|--------|
+| R9-CONTRACT-001 | OpenAPI ↔ runtime alineados + catálogo errores |
+| R9-MONITOR-UX-001 | Delay alerts visibles en panel/drawer |
+| MONITOR-MODE-002 conductor | Chat en DriverRoutingCard móvil |
 
 ---
 
@@ -151,7 +128,7 @@ Fix: Redis pub/sub como bus compartido entre workers.
 |------|--------|
 | AI assistant | Sin scope técnico definido |
 | ERP/CRM integration | Decisión comercial pendiente |
-| Fleet view avanzada (clusters, filtros) | R8 cubre el caso demo |
+| Fleet view avanzada | R8 cubre el caso demo |
 | Reoptimización automática | Trigger manual cubre el caso real |
-| POD R2 real | Deuda viva R8 — entra cuando lleguen credenciales, no como bloque R9 |
+| POD R2 real | Entra cuando lleguen credenciales, no como bloque R9 |
 | Notificaciones D1 | Condicional a decisión de proveedor email/SMS |

@@ -167,7 +167,7 @@ export function DispatcherRoutingCard({
           <tbody>
             {routes.length === 0 && (
               <tr>
-                <td colSpan={8} style={{ color: "#6b7280" }}>
+                <td colSpan={8} style={{ color: "var(--muted)" }}>
                   Sin rutas para los filtros actuales.
                 </td>
               </tr>
@@ -220,7 +220,7 @@ export function DispatcherRoutingCard({
 
       <div className="card grid">
         <h3>Move Stop</h3>
-        {!canManage && <p style={{ margin: 0, color: "#6b7280" }}>Solo `logistics/admin` pueden mover paradas.</p>}
+        {!canManage && <p style={{ margin: 0, color: "var(--muted)" }}>Solo `logistics/admin` pueden mover paradas.</p>}
         {canManage && (
           <>
             <div className="row">

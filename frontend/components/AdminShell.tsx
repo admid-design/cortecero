@@ -14,7 +14,7 @@ export function AdminShell({ activeSection, onSectionChange, children }: AdminSh
       <div className="card admin-shell-header">
         <div>
           <h2>Panel de Administración</h2>
-          <p style={{ margin: "4px 0 0", color: "#6b7280" }}>
+          <p style={{ margin: "4px 0 0", color: "var(--muted)" }}>
             Gestión de Zonas, Clientes, Usuarios, Productos y Tenant.
           </p>
         </div>

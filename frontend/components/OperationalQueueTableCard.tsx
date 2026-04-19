@@ -89,7 +89,7 @@ export function OperationalQueueTableCard({
         <tbody>
           {items.length === 0 && (
             <tr>
-              <td colSpan={8} style={{ color: "#6b7280" }}>
+              <td colSpan={8} style={{ color: "var(--muted)" }}>
                 Sin restricciones operativas para los filtros actuales.
               </td>
             </tr>

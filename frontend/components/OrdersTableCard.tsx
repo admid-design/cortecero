@@ -95,7 +95,7 @@ export function OrdersTableCard({
         <tbody>
           {filteredOrders.length === 0 && (
             <tr>
-              <td colSpan={14} style={{ color: "#6b7280" }}>
+              <td colSpan={14} style={{ color: "var(--muted)" }}>
                 Sin pedidos para los filtros actuales.
               </td>
             </tr>
@@ -127,7 +127,7 @@ export function OrdersTableCard({
                 <td>
                   <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                     <span>{reasonTimezone}</span>
-                    <span style={{ color: "#6b7280", fontSize: 12 }}>{reasonTimezoneSource}</span>
+                    <span style={{ color: "var(--muted)", fontSize: 12 }}>{reasonTimezoneSource}</span>
                   </div>
                 </td>
                 <td>{reasonCatalogStatus}</td>
@@ -149,7 +149,7 @@ export function OrdersTableCard({
                       </button>
                     </div>
                   ) : (
-                    <span style={{ color: "#6b7280" }}>solo lectura</span>
+                    <span style={{ color: "var(--muted)" }}>solo lectura</span>
                   )}
                 </td>
                 <td>{new Date(order.effective_cutoff_at).toLocaleString("es-ES")}</td>

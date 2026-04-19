@@ -94,7 +94,7 @@ export function PlansTableCard({
         <tbody>
           {plans.length === 0 && (
             <tr>
-              <td colSpan={8} style={{ color: "#6b7280" }}>
+              <td colSpan={8} style={{ color: "var(--muted)" }}>
                 Sin planes para la fecha actual.
               </td>
             </tr>
@@ -108,7 +108,7 @@ export function PlansTableCard({
                 {plan.vehicle_id ? (
                   <div className="grid" style={{ gap: 2 }}>
                     <span>{plan.vehicle_name ?? "vehículo"}</span>
-                    <small style={{ color: "#6b7280" }}>
+                    <small style={{ color: "var(--muted)" }}>
                       {plan.vehicle_code ?? shortId(plan.vehicle_id)}
                       {plan.vehicle_capacity_kg != null ? ` · cap ${plan.vehicle_capacity_kg} kg` : ""}
                     </small>
@@ -139,7 +139,7 @@ export function PlansTableCard({
                     </button>
                   </div>
                 ) : (
-                  <span style={{ color: "#6b7280" }}>solo lectura</span>
+                  <span style={{ color: "var(--muted)" }}>solo lectura</span>
                 )}
               </td>
               <td className="row">

@@ -72,7 +72,7 @@ export function OrderSnapshotsTimelineCard({
         </button>
       </div>
       {error && (
-        <div style={{ color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", padding: 8 }}>{error}</div>
+        <div style={{ color: "var(--danger-text)", background: "var(--danger-bg)", border: "1px solid var(--danger-border)", padding: 8 }}>{error}</div>
       )}
       <table>
         <thead>
@@ -89,14 +89,14 @@ export function OrderSnapshotsTimelineCard({
         <tbody>
           {!selectedOrderId && (
             <tr>
-              <td colSpan={7} style={{ color: "#6b7280" }}>
+              <td colSpan={7} style={{ color: "var(--muted)" }}>
                 Selecciona un pedido y pulsa Cargar timeline.
               </td>
             </tr>
           )}
           {selectedOrderId && !loading && items.length === 0 && (
             <tr>
-              <td colSpan={7} style={{ color: "#6b7280" }}>
+              <td colSpan={7} style={{ color: "var(--muted)" }}>
                 Sin snapshots para el pedido seleccionado.
               </td>
             </tr>

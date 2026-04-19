@@ -317,6 +317,21 @@ El resultado parece un problema cuando no lo es.
 
 Usar siempre contexto amplio (`-B10`) o un script que evalúe el contexto antes de reportar un conflicto.
 
+### 7. Vercel puede rechazar un deploy silenciosamente por config inválida en `vercel.json`
+
+**Contexto:** `backend/vercel.json` tenía `"functions"` y `"builds"` simultáneamente. Vercel rechazó todos los deploys de `cortecero-api` sin crear ningún deployment record, sin log visible, sin error en GitHub Actions. CI verde, cero deploys reales.
+
+**Fix:** eliminar `"functions"` — commit `7a5e159`. Ver detalle completo en `docs/deploy-notes.md` (DEPLOY-001).
+
+**Señales de alerta:**
+- Push exitoso en GitHub pero sin deployment record reciente en Vercel.
+- `list_deployments` devuelve el último deployment como anterior al commit más reciente.
+- No hay build logs porque Vercel no llegó a iniciar ningún build.
+
+**Primer paso de diagnóstico:** revisar `vercel.json` en busca de claves incompatibles antes de buscar el bug en el código.
+
+**Aprendizaje:** CI verde no implica deployment exitoso. El canal de verificación correcto es `list_deployments` o el dashboard de Vercel — no el status del push en GitHub.
+
 ---
 
 ## Output contract esperado de Claude
@@ -380,19 +395,25 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
 
 ### Bloques R9 completados
 - R9-HARDENING-001: envs auditados (STARTUP_SEED_RESET, ENVIRONMENT), api.ts timeout+204+205, CI npm test glob fix, startup_seed_reset wired — PROMULGADO (commits 099ec24+ed6cfbe+a5c3f27)
-- R9-PERF-001: _serialize_routes_batch (2 queries planas para list_routes), dispatch batch IN query, optimize 3× batch pre-loop (orders+customers+profiles), vercel.json maxDuration=60s — PROMULGADO
+- R9-PERF-001: _serialize_routes_batch (2 queries planas para list_routes), dispatch batch IN query, optimize 3× batch pre-loop (orders+customers+profiles) — PROMULGADO
+- FIX-DEPLOY-001: eliminado bloque `"functions"` de `backend/vercel.json` que conflictuaba con `"builds"` — causa raíz de todos los fallos silenciosos de `cortecero-api` en Vercel (commit `7a5e159`, 2026-04-20) — PROMULGADO
+- DRIVER-MOBILE-001: smoke en device real — login conductor, GPS, parada Pendiente→Llegó, truck marker en posición real, trayectoria vial real — CERRADO_CON_EVIDENCIA_REAL (2026-04-20)
 
-### Pendiente activo R9 (orden de prioridad)
+### R9 — CERRADO (2026-04-20)
+**R9-REALTIME-001** — CONGELADO por decisión de arquitectura. Redis resuelve fanout entre procesos pero no la naturaleza efímera de Vercel Functions. Solo se activa cuando se decida arquitectura realtime definitiva (servicio persistente vs. serverless).
+
+**MONITOR-MODE-002** — PARCIAL. Lado dispatcher (web): operativo — `ChatFloating` en `OpsMapDashboard`, polling 10s, tabs por ruta activa. Lado conductor (móvil): pendiente — `DriverRoutingCard` sin UI de chat. No presentar como "chat bidireccional completo".
+
+### Pendiente próxima fase
 1. **R9-CONTRACT-001** — OpenAPI ↔ runtime alineados + catálogo de errores cerrado
 2. **R9-MONITOR-UX-001** — Delay alerts visibles en panel/drawer + fixes monitor mode
-3. **MONITOR-MODE-002 — Chat flotante** dispatcher↔conductor: conectar a CHAT-001 (`GET/POST /routes/{id}/messages`), flotante bottom-right, tabs por conductor activo
-4. **R9-REALTIME-001** — CONGELADO. No es "Redis solo" sino decisión de arquitectura: serverless (Vercel Functions, límite de duración) vs. servicio persistente/gestionado para realtime robusto. Redis resuelve fanout entre procesos pero no la naturaleza efímera de las funciones. Solo se activa cuando se decida la arquitectura realtime definitiva.
+3. **MONITOR-MODE-002 conductor** — Chat en DriverRoutingCard móvil
 
 ### Huecos conocidos
-- SSE backend usa asyncio.Queue in-process → no escala con gunicorn multi-worker (fix R9: Redis)
+- SSE backend usa asyncio.Queue in-process → no escala con gunicorn multi-worker (fix: Redis + decisión de arquitectura)
 - MAP-001 frontend: evidence en browser local; sin CI automatizado con API key
-- GPS-001 y POD-001 frontend: evidence en device real pendiente
 - POD foto: UI implementada (ProofModal); R2 bucket real no probado
+- "Omitir" visible en estado `arrived` — ajuste cosmético pendiente
 - Migration 027: en repo, no aplicada aún en Neon (HARDENING-DB-001 pendiente)
 - Notificaciones (D1): congeladas, pendiente proveedor email/SMS
 - Asistente IA: no existe en ninguna capa

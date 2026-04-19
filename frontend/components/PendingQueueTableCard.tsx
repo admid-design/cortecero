@@ -73,7 +73,7 @@ export function PendingQueueTableCard({
         <tbody>
           {items.length === 0 && (
             <tr>
-              <td colSpan={6} style={{ color: "#6b7280" }}>
+              <td colSpan={6} style={{ color: "var(--muted)" }}>
                 Sin pendientes para los filtros actuales.
               </td>
             </tr>

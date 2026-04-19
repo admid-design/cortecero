@@ -42,7 +42,7 @@ export function RoutingSidePanels({
         <div className="card grid">
           <h3>Pedidos Ready to Dispatch</h3>
           {!canManage && (
-            <p style={{ margin: 0, color: "#6b7280" }}>Solo `logistics/admin` pueden consultar este bloque.</p>
+            <p style={{ margin: 0, color: "var(--muted)" }}>Solo `logistics/admin` pueden consultar este bloque.</p>
           )}
           {canManage && (
             <table>
@@ -57,7 +57,7 @@ export function RoutingSidePanels({
               <tbody>
                 {readyOrders.length === 0 && (
                   <tr>
-                    <td colSpan={4} style={{ color: "#6b7280" }}>
+                    <td colSpan={4} style={{ color: "var(--muted)" }}>
                       Sin pedidos planned para esta fecha.
                     </td>
                   </tr>
@@ -78,7 +78,7 @@ export function RoutingSidePanels({
         <div className="card grid">
           <h3>Vehículos Disponibles</h3>
           {!canManage && (
-            <p style={{ margin: 0, color: "#6b7280" }}>Solo `logistics/admin` pueden consultar este bloque.</p>
+            <p style={{ margin: 0, color: "var(--muted)" }}>Solo `logistics/admin` pueden consultar este bloque.</p>
           )}
           {canManage && (
             <table>
@@ -92,7 +92,7 @@ export function RoutingSidePanels({
               <tbody>
                 {availableVehicles.length === 0 && (
                   <tr>
-                    <td colSpan={3} style={{ color: "#6b7280" }}>
+                    <td colSpan={3} style={{ color: "var(--muted)" }}>
                       Sin vehículos activos disponibles.
                     </td>
                   </tr>
@@ -102,7 +102,7 @@ export function RoutingSidePanels({
                     <td>
                       {item.name}
                       <br />
-                      <small style={{ color: "#6b7280" }}>{item.code}</small>
+                      <small style={{ color: "var(--muted)" }}>{item.code}</small>
                     </td>
                     <td>{item.capacity_kg == null ? "—" : item.capacity_kg}</td>
                     <td>{item.driver ? `${item.driver.name} (${item.driver.phone})` : "—"}</td>
@@ -116,7 +116,7 @@ export function RoutingSidePanels({
 
       <div className="card grid routing-plan-form">
         <h3>Planificar Ruta</h3>
-        {!canManage && <p style={{ margin: 0, color: "#6b7280" }}>Solo `logistics/admin` pueden planificar.</p>}
+        {!canManage && <p style={{ margin: 0, color: "var(--muted)" }}>Solo `logistics/admin` pueden planificar.</p>}
         {canManage && (
           <>
             <div className="row">

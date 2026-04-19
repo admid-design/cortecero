@@ -122,7 +122,7 @@ export function OperationalResolutionQueueTableCard({
         <tbody>
           {items.length === 0 && (
             <tr>
-              <td colSpan={9} style={{ color: "#6b7280" }}>
+              <td colSpan={9} style={{ color: "var(--muted)" }}>
                 Sin items de resolución para los filtros actuales.
               </td>
             </tr>

@@ -46,9 +46,9 @@ export function RouteDetailCard({
         </select>
       </div>
 
-      {routeDetailLoading && <p style={{ margin: 0, color: "#6b7280" }}>Cargando detalle de ruta...</p>}
+      {routeDetailLoading && <p style={{ margin: 0, color: "var(--muted)" }}>Cargando detalle de ruta...</p>}
       {!routeDetailLoading && !selectedRoute && (
-        <p style={{ margin: 0, color: "#6b7280" }}>Selecciona una ruta para ver paradas y eventos.</p>
+        <p style={{ margin: 0, color: "var(--muted)" }}>Selecciona una ruta para ver paradas y eventos.</p>
       )}
 
       {selectedRoute && (
@@ -72,7 +72,7 @@ export function RouteDetailCard({
             <tbody>
               {selectedRoute.stops.length === 0 && (
                 <tr>
-                  <td colSpan={5} style={{ color: "#6b7280" }}>
+                  <td colSpan={5} style={{ color: "var(--muted)" }}>
                     Ruta sin paradas.
                   </td>
                 </tr>
@@ -101,7 +101,7 @@ export function RouteDetailCard({
             <tbody>
               {routeEvents.length === 0 && (
                 <tr>
-                  <td colSpan={3} style={{ color: "#6b7280" }}>
+                  <td colSpan={3} style={{ color: "var(--muted)" }}>
                     Sin eventos para esta ruta.
                   </td>
                 </tr>

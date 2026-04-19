@@ -478,8 +478,8 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
         <span className="pill">paradas geo-ready: {stopPoints.length}</span>
         {depotLat != null && depotLng != null && <span className="pill">depot: disponible</span>}
         {hasTransitionGeometry
-          ? <span className="pill" style={{ color: "#16a34a" }}>✓ trayectoria vial real</span>
-          : <span className="pill" style={{ color: "#92400e" }}>⚠ trayectoria aproximada — pulse Optimizar para ver ruta real</span>
+          ? <span className="pill" style={{ color: "var(--success)" }}>✓ trayectoria vial real</span>
+          : <span className="pill" style={{ color: "var(--warn-text)" }}>⚠ trayectoria aproximada — pulse Optimizar para ver ruta real</span>
         }
       </div>
       {route && (

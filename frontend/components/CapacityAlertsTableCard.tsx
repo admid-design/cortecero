@@ -73,7 +73,7 @@ export function CapacityAlertsTableCard({
         <tbody>
           {alerts.length === 0 && (
             <tr>
-              <td colSpan={7} style={{ color: "#6b7280" }}>
+              <td colSpan={7} style={{ color: "var(--muted)" }}>
                 Sin alertas para los filtros actuales.
               </td>
             </tr>

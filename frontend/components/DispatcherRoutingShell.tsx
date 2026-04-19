@@ -26,7 +26,7 @@ export function DispatcherRoutingShell({
       <div className="card dispatcher-routing-shell-header">
         <div>
           <h2>Routing Dispatcher</h2>
-          <p style={{ margin: "4px 0 0", color: "#6b7280" }}>
+          <p style={{ margin: "4px 0 0", color: "var(--muted)" }}>
             Planificación, optimización y despacho sobre la fecha operativa activa.
           </p>
         </div>

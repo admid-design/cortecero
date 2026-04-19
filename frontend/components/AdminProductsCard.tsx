@@ -116,8 +116,8 @@ export function AdminProductsCard({ token }: AdminProductsCardProps) {
   return (
     <div className="admin-layout">
       {error && (
-        <div className="card" style={{ backgroundColor: "#fef2f2", borderColor: "#fca5a5" }}>
-          <p style={{ margin: 0, color: "#b91c1c", fontWeight: "bold" }}>{error}</p>
+        <div className="card" style={{ backgroundColor: "var(--danger-bg)", borderColor: "var(--danger-border)" }}>
+          <p style={{ margin: 0, color: "var(--danger-text)", fontWeight: "bold" }}>{error}</p>
         </div>
       )}
 
@@ -151,7 +151,7 @@ export function AdminProductsCard({ token }: AdminProductsCardProps) {
           <tbody>
             {products.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ color: "#6b7280", textAlign: "center" }}>
+                <td colSpan={7} style={{ color: "var(--muted)", textAlign: "center" }}>
                   Sin productos encontrados.
                 </td>
               </tr>
@@ -197,7 +197,7 @@ export function AdminProductsCard({ token }: AdminProductsCardProps) {
         <div className="card grid">
           <h2>Editar Producto</h2>
           {!editingProductId && (
-            <p style={{ margin: 0, color: "#6b7280" }}>
+            <p style={{ margin: 0, color: "var(--muted)" }}>
               Selecciona un producto de la tabla para editar.
             </p>
           )}

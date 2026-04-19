@@ -154,13 +154,13 @@ function StopExpandContent({ stop }: { stop: { estimated_service_minutes: number
   if (stop.arrived_at)
     items.push(<span key="arr">📍 Llegada registrada {stop.arrived_at.slice(11, 16)}</span>);
   if (stop.completed_at)
-    items.push(<span key="cmp" style={{ color: "#16a34a" }}>✓ Entregado a las {stop.completed_at.slice(11, 16)}</span>);
+    items.push(<span key="cmp" style={{ color: "var(--success)" }}>✓ Entregado a las {stop.completed_at.slice(11, 16)}</span>);
   if (stop.failure_reason)
-    items.push(<span key="fail" style={{ color: "#dc2626" }}>✗ {stop.failure_reason}</span>);
+    items.push(<span key="fail" style={{ color: "var(--danger)" }}>✗ {stop.failure_reason}</span>);
   if (stop.customer_lat && stop.customer_lng)
-    items.push(<span key="geo" style={{ color: "#6b7280" }}>🗺 {stop.customer_lat.toFixed(4)}, {stop.customer_lng.toFixed(4)}</span>);
+    items.push(<span key="geo" style={{ color: "var(--muted)" }}>🗺 {stop.customer_lat.toFixed(4)}, {stop.customer_lng.toFixed(4)}</span>);
   if (items.length === 0)
-    items.push(<span key="none" style={{ color: "#9ca3af" }}>Sin actividad registrada aún</span>);
+    items.push(<span key="none" style={{ color: "var(--subtle)" }}>Sin actividad registrada aún</span>);
   return (
     <div className="mf-stop-expand">
       {items.map((item, i) => <div key={i} className="mf-stop-expand-row">{item}</div>)}
@@ -185,7 +185,7 @@ const DriverAvatarSm = ({ name, selected }: { name: string; selected?: boolean }
   const colors = ["#2563eb","#7c3aed","#059669","#d97706","#dc2626","#0891b2"];
   const idx = (name.charCodeAt(0) || 0) % colors.length;
   return (
-    <span className="mf-driver-avatar-sm" style={{ background: selected ? "#1d4ed8" : colors[idx] }}>
+    <span className="mf-driver-avatar-sm" style={{ background: selected ? "var(--accent-2)" : colors[idx] }}>
       {name[0]?.toUpperCase() ?? "?"}
     </span>
   );
@@ -488,7 +488,7 @@ export function OpsMapDashboard({
         <div className="mf-gestion-area">
           <div className="mf-gestion-header">
             <h2 className="mf-gestion-title">Gestión operativa</h2>
-            <span style={{ fontSize: 13, color: "#6b7280" }}>{serviceDate}</span>
+            <span style={{ fontSize: 13, color: "var(--muted)" }}>{serviceDate}</span>
           </div>
 
           {/* Pedidos sin asignar — colapsable */}
@@ -525,7 +525,7 @@ export function OpsMapDashboard({
                         title={selected ? "Clic para deseleccionar" : "Clic para añadir a la ruta"}
                       >
                         <span className="mf-orders-id">
-                          {selected && <span style={{ color: "#2563eb", marginRight: 4 }}>✓</span>}
+                          {selected && <span style={{ color: "var(--accent)", marginRight: 4 }}>✓</span>}
                           {shortId(order.id)}
                         </span>
                         <span className="mf-orders-zone">{order.zone_id || "—"}</span>
@@ -641,7 +641,7 @@ export function OpsMapDashboard({
               {/* Paso 4: Conductor */}
               <div className="mf-create-step">
                 <div className="mf-create-step-label">
-                  <span className="mf-step-num">4</span> Conductor <span style={{ fontWeight: 400, color: "#9ca3af" }}>(opcional)</span>
+                  <span className="mf-step-num">4</span> Conductor <span style={{ fontWeight: 400, color: "var(--subtle)" }}>(opcional)</span>
                 </div>
                 {planDriverId ? (
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -853,7 +853,7 @@ export function OpsMapDashboard({
             <div className="mf-overlay-stat">
               <span
                 className="mf-overlay-stat-value"
-                style={{ color: activeRoutes > 0 ? "#2563eb" : "#6b7280" }}
+                style={{ color: activeRoutes > 0 ? "var(--accent)" : "var(--muted)" }}
               >
                 {activeRoutes}
               </span>
@@ -863,7 +863,7 @@ export function OpsMapDashboard({
               <>
                 <div className="mf-overlay-stat-sep" />
                 <div className="mf-overlay-stat">
-                  <span className="mf-overlay-stat-value" style={{ color: "#16a34a" }}>
+                  <span className="mf-overlay-stat-value" style={{ color: "var(--success)" }}>
                     {completedRoutes}
                   </span>
                   <span className="mf-overlay-stat-label">Completadas</span>
@@ -902,7 +902,7 @@ export function OpsMapDashboard({
 
           <div className="mf-drawer-body">
             {routeDetailLoading && (
-              <div style={{ color: "#9ca3af", fontSize: 13, padding: "20px 0" }}>
+              <div style={{ color: "var(--subtle)", fontSize: 13, padding: "20px 0" }}>
                 Cargando ruta...
               </div>
             )}
@@ -933,19 +933,19 @@ export function OpsMapDashboard({
                     <span className="mf-drawer-stat-label">Paradas</span>
                   </div>
                   <div className="mf-drawer-stat">
-                    <span className="mf-drawer-stat-value" style={{ color: "#16a34a" }}>
+                    <span className="mf-drawer-stat-value" style={{ color: "var(--success)" }}>
                       {drawerRoute.stops.filter((s) => s.status === "completed").length}
                     </span>
                     <span className="mf-drawer-stat-label">Entregadas</span>
                   </div>
                   <div className="mf-drawer-stat">
-                    <span className="mf-drawer-stat-value" style={{ color: "#dc2626" }}>
+                    <span className="mf-drawer-stat-value" style={{ color: "var(--danger)" }}>
                       {drawerRoute.stops.filter((s) => s.status === "failed").length}
                     </span>
                     <span className="mf-drawer-stat-label">Fallidas</span>
                   </div>
                   <div className="mf-drawer-stat">
-                    <span className="mf-drawer-stat-value" style={{ color: "#f59e0b" }}>
+                    <span className="mf-drawer-stat-value" style={{ color: "var(--warn)" }}>
                       {drawerRoute.stops.filter((s) => s.status === "pending" || s.status === "en_route").length}
                     </span>
                     <span className="mf-drawer-stat-label">Pendientes</span>
@@ -960,7 +960,7 @@ export function OpsMapDashboard({
                 {/* Delay alerts — B2 (ETA-001) */}
                 {delayAlertCount > 0 && (
                   <div className="mf-delay-alerts-section">
-                    <div className="mf-drawer-section-label" style={{ color: "#b45309" }}>
+                    <div className="mf-drawer-section-label" style={{ color: "var(--warn)" }}>
                       ⚠️ Alertas de retraso ({delayAlertCount})
                     </div>
                     {delayAlerts.slice(0, 5).map((a) => (
@@ -979,7 +979,7 @@ export function OpsMapDashboard({
                       </div>
                     ))}
                     {delayAlertCount > 5 && (
-                      <div style={{ fontSize: 11, color: "#9ca3af", padding: "2px 0 6px" }}>
+                      <div style={{ fontSize: 11, color: "var(--subtle)", padding: "2px 0 6px" }}>
                         +{delayAlertCount - 5} más
                       </div>
                     )}
@@ -1062,7 +1062,7 @@ export function OpsMapDashboard({
               </>
             )}
             {!routeDetailLoading && !drawerRoute && drawerRouteId && (
-              <div style={{ color: "#9ca3af", fontSize: 13 }}>
+              <div style={{ color: "var(--subtle)", fontSize: 13 }}>
                 Cargando detalle de ruta...
               </div>
             )}
@@ -1151,7 +1151,7 @@ export function OpsMapDashboard({
           </div>
 
           {routesSectionOpen && filteredRoutes.length === 0 && (
-            <div style={{ padding: "10px 16px 14px", color: "#9ca3af", fontSize: 13 }}>
+            <div style={{ padding: "10px 16px 14px", color: "var(--subtle)", fontSize: 13 }}>
               Sin rutas para los filtros actuales.
             </div>
           )}
@@ -1190,7 +1190,7 @@ export function OpsMapDashboard({
                     {driverNameMap[route.driver_id] ?? shortId(route.driver_id)}
                   </span>
                 ) : (
-                  <span style={{ color: "#9ca3af", fontSize: 11 }}>—</span>
+                  <span style={{ color: "var(--subtle)", fontSize: 11 }}>—</span>
                 )}
               </div>
               <div className="mf-route-col-stops">
@@ -1241,7 +1241,7 @@ export function OpsMapDashboard({
             {/* Delay alerts — panel derecho */}
             {delayAlertCount > 0 && (
               <div className="mf-delay-alerts-section" style={{ marginBottom: 10 }}>
-                <div style={{ fontWeight: 600, fontSize: 12, color: "#b45309", marginBottom: 4 }}>
+                <div style={{ fontWeight: 600, fontSize: 12, color: "var(--warn)", marginBottom: 4 }}>
                   ⚠️ {delayAlertCount} alerta{delayAlertCount !== 1 ? "s" : ""} de retraso
                 </div>
                 {delayAlerts.slice(0, 3).map((a) => (
@@ -1300,7 +1300,7 @@ export function OpsMapDashboard({
 
             {/* Stops list */}
             {routeDetailLoading ? (
-              <div style={{ color: "#9ca3af", fontSize: 13 }}>Cargando paradas...</div>
+              <div style={{ color: "var(--subtle)", fontSize: 13 }}>Cargando paradas...</div>
             ) : (
               <div>
                 {selectedRoute.stops
@@ -1372,7 +1372,7 @@ export function OpsMapDashboard({
                 </div>
               ))}
               {readyOrders.length > 6 && (
-                <div style={{ color: "#9ca3af", fontSize: 12, padding: "6px 16px" }}>
+                <div style={{ color: "var(--subtle)", fontSize: 12, padding: "6px 16px" }}>
                   +{readyOrders.length - 6} más
                 </div>
               )}
@@ -1466,7 +1466,7 @@ export function OpsMapDashboard({
               <div>
                 <h3 style={{ margin: 0 }}>Conductores</h3>
                 {driverSectionOpen && (
-                  <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 1 }}>
+                  <div style={{ fontSize: 10, color: "var(--subtle)", marginTop: 1 }}>
                     Clic para asignar a la ruta
                   </div>
                 )}
@@ -1513,7 +1513,7 @@ export function OpsMapDashboard({
               <div>
                 <h3 style={{ margin: 0 }}>Flota disponible</h3>
                 {fleetSectionOpen && (
-                  <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 1 }}>
+                  <div style={{ fontSize: 10, color: "var(--subtle)", marginTop: 1 }}>
                     {sidebarView === "gestion" ? "Clic para asignar a la ruta" : "Clic para ver en mapa"}
                   </div>
                 )}

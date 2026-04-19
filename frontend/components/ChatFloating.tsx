@@ -184,7 +184,7 @@ export function ChatFloating({
               <div className="mf-chat-messages">
                 {isLoadingTab && (
                   <div className="mf-chat-empty">
-                    <div style={{ color: "#9ca3af", fontSize: 13 }}>Cargando mensajes...</div>
+                    <div style={{ color: "var(--subtle)", fontSize: 13 }}>Cargando mensajes...</div>
                   </div>
                 )}
 

@@ -301,8 +301,8 @@ export function AdminCustomersSection({ token, zones }: AdminCustomersSectionPro
   return (
     <div className="admin-layout">
       {error && (
-        <div className="card" style={{ gridColumn: "1 / -1", background: "#fef2f2", borderColor: "#fca5a5" }}>
-          <p style={{ margin: 0, color: "#dc2626" }}>{error}</p>
+        <div className="card" style={{ gridColumn: "1 / -1", background: "var(--danger-bg)", borderColor: "var(--danger-border)" }}>
+          <p style={{ margin: 0, color: "var(--danger)" }}>{error}</p>
         </div>
       )}
 
@@ -344,7 +344,7 @@ export function AdminCustomersSection({ token, zones }: AdminCustomersSectionPro
           <tbody>
             {customers.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ color: "#6b7280" }}>
+                <td colSpan={7} style={{ color: "var(--muted)" }}>
                   Sin clientes.
                 </td>
               </tr>
@@ -411,7 +411,7 @@ export function AdminCustomersSection({ token, zones }: AdminCustomersSectionPro
 
         <div className="card grid">
           <h2>Editar Cliente</h2>
-          {!editingCustomerId && <p style={{ margin: 0, color: "#6b7280" }}>Selecciona un cliente para editar.</p>}
+          {!editingCustomerId && <p style={{ margin: 0, color: "var(--muted)" }}>Selecciona un cliente para editar.</p>}
           {editingCustomerId && (
             <>
               <input value={editCustomerName} onChange={(e) => setEditCustomerName(e.target.value)} />
@@ -438,13 +438,13 @@ export function AdminCustomersSection({ token, zones }: AdminCustomersSectionPro
         <div className="card grid">
           <h2>Perfil Operativo</h2>
           {!editingCustomerId && (
-            <p style={{ margin: 0, color: "#6b7280" }}>
+            <p style={{ margin: 0, color: "var(--muted)" }}>
               Selecciona un cliente (Editar) para ver y actualizar su perfil operativo.
             </p>
           )}
           {editingCustomerId && (
             <>
-              {operationalProfileLoading && <p style={{ margin: 0, color: "#6b7280" }}>Cargando perfil...</p>}
+              {operationalProfileLoading && <p style={{ margin: 0, color: "var(--muted)" }}>Cargando perfil...</p>}
               {operationalProfile && (
                 <div className="row" style={{ gap: 6 }}>
                   <span className="pill">window_mode: {operationalProfile.window_mode}</span>
@@ -510,7 +510,7 @@ export function AdminCustomersSection({ token, zones }: AdminCustomersSectionPro
         <div className="card grid">
           <h2>Excepciones Operativas</h2>
           {!editingCustomerId && (
-            <p style={{ margin: 0, color: "#6b7280" }}>
+            <p style={{ margin: 0, color: "var(--muted)" }}>
               Selecciona un cliente (Editar) para gestionar excepciones por fecha.
             </p>
           )}
@@ -546,7 +546,7 @@ export function AdminCustomersSection({ token, zones }: AdminCustomersSectionPro
                 </button>
               </div>
               {operationalExceptionsLoading && (
-                <p style={{ margin: 0, color: "#6b7280" }}>Cargando excepciones...</p>
+                <p style={{ margin: 0, color: "var(--muted)" }}>Cargando excepciones...</p>
               )}
               <table>
                 <thead>
@@ -561,7 +561,7 @@ export function AdminCustomersSection({ token, zones }: AdminCustomersSectionPro
                 <tbody>
                   {operationalExceptions.length === 0 && (
                     <tr>
-                      <td colSpan={5} style={{ color: "#6b7280" }}>
+                      <td colSpan={5} style={{ color: "var(--muted)" }}>
                         Sin excepciones operativas para este cliente.
                       </td>
                     </tr>

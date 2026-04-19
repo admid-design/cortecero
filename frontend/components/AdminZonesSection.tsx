@@ -116,8 +116,8 @@ export function AdminZonesSection({ token }: AdminZonesSectionProps) {
   return (
     <div className="grid cols-2">
       {error && (
-        <div className="card" style={{ gridColumn: "1 / -1", backgroundColor: "#fef2f2", borderColor: "#fca5a5" }}>
-          <p style={{ margin: 0, color: "#b91c1c", fontWeight: "bold" }}>{error}</p>
+        <div className="card" style={{ gridColumn: "1 / -1", backgroundColor: "var(--danger-bg)", borderColor: "var(--danger-border)" }}>
+          <p style={{ margin: 0, color: "var(--danger-text)", fontWeight: "bold" }}>{error}</p>
         </div>
       )}
 
@@ -139,7 +139,7 @@ export function AdminZonesSection({ token }: AdminZonesSectionProps) {
 
       <div className="card grid">
         <h2>Editar Zona</h2>
-        {!editingZoneId && <p style={{ margin: 0, color: "#6b7280" }}>Selecciona una zona para editar.</p>}
+        {!editingZoneId && <p style={{ margin: 0, color: "var(--muted)" }}>Selecciona una zona para editar.</p>}
         {editingZoneId && (
           <>
             <input value={editZoneName} onChange={(e) => setEditZoneName(e.target.value)} />
@@ -184,7 +184,7 @@ export function AdminZonesSection({ token }: AdminZonesSectionProps) {
           <tbody>
             {zones.length === 0 && (
               <tr>
-                <td colSpan={6} style={{ color: "#6b7280", textAlign: "center" }}>
+                <td colSpan={6} style={{ color: "var(--muted)", textAlign: "center" }}>
                   Sin zonas encontradas.
                 </td>
               </tr>
