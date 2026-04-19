@@ -398,6 +398,7 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
 - R9-PERF-001: _serialize_routes_batch (2 queries planas para list_routes), dispatch batch IN query, optimize 3× batch pre-loop (orders+customers+profiles) — PROMULGADO
 - FIX-DEPLOY-001: eliminado bloque `"functions"` de `backend/vercel.json` que conflictuaba con `"builds"` — causa raíz de todos los fallos silenciosos de `cortecero-api` en Vercel (commit `7a5e159`, 2026-04-20) — PROMULGADO
 - DRIVER-MOBILE-001: smoke en device real — login conductor, GPS, parada Pendiente→Llegó, truck marker en posición real, trayectoria vial real — CERRADO_CON_EVIDENCIA_REAL (2026-04-20)
+- VISUAL-POLISH-001: token set `:root` expandido (17→45 vars), semánticos superficie/estado completos, 50+ inline styles reemplazados por vars CSS en 19 componentes, deploy frontend READY (commit `09b3f03`, 2026-04-20) — PROMULGADO
 
 ### R9 — CERRADO (2026-04-20)
 **R9-REALTIME-001** — CONGELADO por decisión de arquitectura. Redis resuelve fanout entre procesos pero no la naturaleza efímera de Vercel Functions. Solo se activa cuando se decida arquitectura realtime definitiva (servicio persistente vs. serverless).
