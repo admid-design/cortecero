@@ -314,34 +314,37 @@ def seed() -> None:
                     )
 
         # ── Reset demo: asegura pedidos visibles en la cola ──────────────────────
-        # Corre siempre en cold start. La protección real está en el loop:
-        # solo se resetean pedidos en estado 'planned' que NO tienen RouteStop
-        # asignado — los pedidos de rutas activas están protegidos por has_stop.
-        all_today_orders = list(
-            db.scalars(select(Order).where(Order.tenant_id == tenant.id, Order.service_date == service_date))
-        )
-        queueable_today = [o for o in all_today_orders if o.status == OrderStatus.ready_for_planning]
-        if len(queueable_today) < 5:
-            for o in all_today_orders:
-                if o.status == OrderStatus.planned:
-                    has_stop = db.scalar(
-                        select(RouteStop).where(
-                            RouteStop.tenant_id == tenant.id,
-                            RouteStop.order_id == o.id,
-                        )
-                    )
-                    if not has_stop:
-                        plan_order_rec = db.scalar(
-                            select(PlanOrder).where(
-                                PlanOrder.tenant_id == tenant.id,
-                                PlanOrder.order_id == o.id,
+        # Solo corre si STARTUP_SEED_RESET=true (settings.startup_seed_reset).
+        # En entorno demo Vercel: setear a true para que la cola sea visible en cada cold start.
+        # En producción real o durante sesiones activas: dejar en false (default).
+        # La protección interna del loop: solo se resetean pedidos en estado 'planned'
+        # que NO tienen RouteStop asignado — los pedidos de rutas activas están protegidos.
+        if settings.startup_seed_reset:
+            all_today_orders = list(
+                db.scalars(select(Order).where(Order.tenant_id == tenant.id, Order.service_date == service_date))
+            )
+            queueable_today = [o for o in all_today_orders if o.status == OrderStatus.ready_for_planning]
+            if len(queueable_today) < 5:
+                for o in all_today_orders:
+                    if o.status == OrderStatus.planned:
+                        has_stop = db.scalar(
+                            select(RouteStop).where(
+                                RouteStop.tenant_id == tenant.id,
+                                RouteStop.order_id == o.id,
                             )
                         )
-                        if plan_order_rec:
-                            db.delete(plan_order_rec)
-                        o.status = OrderStatus.ready_for_planning
-                        o.updated_at = now_utc()
-            db.flush()
+                        if not has_stop:
+                            plan_order_rec = db.scalar(
+                                select(PlanOrder).where(
+                                    PlanOrder.tenant_id == tenant.id,
+                                    PlanOrder.order_id == o.id,
+                                )
+                            )
+                            if plan_order_rec:
+                                db.delete(plan_order_rec)
+                            o.status = OrderStatus.ready_for_planning
+                            o.updated_at = now_utc()
+                db.flush()
 
         open_plan = db.scalar(
             select(Plan).where(

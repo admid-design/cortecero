@@ -27,8 +27,8 @@ class Settings(BaseSettings):
     # Seed de arranque — controla si el reset demo corre en cold start.
     # La creación idempotente (tenant/usuarios/vehículos/clientes) siempre corre.
     # El reset de pedidos (planned → ready_for_planning) solo corre si este flag es true.
-    # Setear CORTECERO_STARTUP_SEED=true en Vercel solo para entorno demo controlado.
-    # En producción real o durante sesiones activas de demo: dejar en false.
+    # Var de entorno: STARTUP_SEED_RESET=true  (en Vercel demo controlado)
+    # En producción real o durante sesiones activas de demo: STARTUP_SEED_RESET=false (default)
     startup_seed_reset: bool = False
 
     # Cloudflare R2 — Proof of delivery photos (R8-POD-FOTO)
