@@ -2,6 +2,10 @@ export type UserRole = "office" | "logistics" | "admin" | "driver";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
+// Timeout por defecto para todas las peticiones al backend.
+// 45 s cubre el peor caso: optimización con Google (30 s backend) + overhead red.
+const REQUEST_TIMEOUT_MS = 45_000;
+
 type QueryValue = string | number | boolean | null | undefined;
 
 type RequestOptions = {
@@ -9,6 +13,8 @@ type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
   headers?: Record<string, string>;
+  /** Override del timeout en ms. Por defecto: REQUEST_TIMEOUT_MS (45 s). */
+  timeoutMs?: number;
 };
 
 export class APIError extends Error {
@@ -44,17 +50,32 @@ function buildQuery(params: Record<string, QueryValue>): string {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { token, method = "GET", body, headers = {} } = options;
-  const response = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers: {
-      ...(body ? { "Content-Type": "application/json" } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    cache: "no-store",
-  });
+  const { token, method = "GET", body, headers = {}, timeoutMs = REQUEST_TIMEOUT_MS } = options;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers: {
+        ...(body ? { "Content-Type": "application/json" } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new APIError(`Timeout: el servidor no respondió en ${timeoutMs / 1000} s`, 408);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as
@@ -70,6 +91,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
           : `HTTP ${response.status}`;
     const message = code ? `${code}: ${detailMessage}` : detailMessage;
     throw new APIError(message, response.status, code);
+  }
+
+  // 204 No Content / 205 Reset Content — respuestas válidas sin body.
+  if (response.status === 204 || response.status === 205) {
+    return undefined as T;
   }
 
   return (await response.json()) as T;
