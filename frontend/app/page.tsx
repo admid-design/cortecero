@@ -1362,6 +1362,7 @@ export default function HomePage() {
             : undefined
         }
         isAdmin={isAdmin}
+        token={token || undefined}
         error={error}
         summary={summary}
         serviceDate={serviceDate}

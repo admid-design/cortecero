@@ -15,6 +15,7 @@ import type {
   UserRole,
 } from "../lib/api";
 import { RouteMapCard } from "./RouteMapCard";
+import { ChatFloating } from "./ChatFloating";
 
 type LocalDriverPosition = {
   lat?: number | null;
@@ -28,6 +29,7 @@ type OpsMapDashboardProps = {
   onLogout: () => void;
   onSwitchToAdmin?: () => void;
   isAdmin: boolean;
+  token?: string;
   error: string;
 
   // Summary KPIs
@@ -281,6 +283,7 @@ export function OpsMapDashboard({
   onLogout,
   onSwitchToAdmin,
   isAdmin,
+  token,
   error,
   summary,
   serviceDate,
@@ -1523,6 +1526,16 @@ export function OpsMapDashboard({
           </div>
         )}
       </div>}
+
+      {/* Floating chat — visible only in monitor mode */}
+      {monitorMode && token && (
+        <ChatFloating
+          token={token}
+          activeRoutes={activeRoutesList}
+          vehicleNameMap={vehicleNameMap}
+          driverNameMap={driverNameMap}
+        />
+      )}
     </div>
   );
 }
