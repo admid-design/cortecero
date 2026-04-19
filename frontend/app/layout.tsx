@@ -10,6 +10,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <head>
+        {/* HAL-001: viewport meta — obligatorio para PWA conductor en móvil */}
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         {/* PWA manifest — habilita installability en Chrome/Safari */}
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#2563eb" />

@@ -2478,3 +2478,365 @@ body.map-first-mode {
 }
 .mf-chat-send-btn:hover:not(:disabled) { background: #1e40af; }
 .mf-chat-send-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DRIVER-MOBILE-001 — DriverMobileView styles (.drv-*)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Full-screen shell — bypasses AppShell entirely */
+.drv-shell {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0f172a;
+  overflow: hidden;
+  font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.drv-header {
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: #1e293b;
+  color: #f1f5f9;
+  gap: 8px;
+  z-index: 30;
+  -webkit-tap-highlight-color: transparent;
+}
+.drv-header-logo {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: #f8fafc;
+}
+.drv-header-spacer {
+  flex: 1;
+}
+.drv-header-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+.drv-gps-pill {
+  background: rgba(22, 163, 74, 0.25);
+  color: #86efac;
+}
+.drv-gps-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4ade80;
+  animation: drv-pulse 1.5s ease-in-out infinite;
+}
+@keyframes drv-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.drv-header-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.1);
+  color: #f1f5f9;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.drv-header-btn:hover:not(:disabled) { background: rgba(255,255,255,0.18); }
+.drv-header-btn:disabled { opacity: 0.4; cursor: default; }
+.drv-header-btn-logout {
+  font-size: 13px;
+  background: rgba(220,38,38,0.2);
+  color: #fca5a5;
+}
+.drv-header-btn-logout:hover:not(:disabled) { background: rgba(220,38,38,0.35); }
+
+/* ── Map zone ────────────────────────────────────────────────────────────── */
+.drv-map-zone {
+  flex: 1 1 0;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Bottom sheet ────────────────────────────────────────────────────────── */
+.drv-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+  overflow: hidden;
+  transition: height 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* Drag handle */
+.drv-handle {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px 0 4px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.drv-handle-bar {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: #cbd5e1;
+}
+
+/* Sheet scrollable area */
+.drv-sheet-content {
+  flex: 1 1 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 16px 32px;
+}
+
+/* ── Banners ─────────────────────────────────────────────────────────────── */
+.drv-banner {
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  margin-bottom: 10px;
+  margin-top: 4px;
+}
+.drv-banner-error { background: #fef2f2; color: #b91c1c; }
+.drv-banner-ok { background: #f0fdf4; color: #15803d; }
+
+/* Empty state */
+.drv-empty {
+  padding: 32px 0;
+  text-align: center;
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* ── Route pills ─────────────────────────────────────────────────────────── */
+.drv-route-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 0 4px;
+}
+.drv-route-pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: all 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.drv-route-pill.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+/* ── Next stop card ──────────────────────────────────────────────────────── */
+.drv-next-card {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  margin-top: 8px;
+}
+.drv-next-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #2563eb;
+  margin: 0 0 6px;
+}
+.drv-next-loading {
+  font-size: 13px;
+  color: #3b82f6;
+  margin: 0;
+}
+.drv-next-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.drv-next-seq {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+.drv-next-eta {
+  font-size: 11px;
+  color: #3b82f6;
+  background: #dbeafe;
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+.drv-next-remaining {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+/* Nav link */
+.drv-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2563eb;
+  text-decoration: none;
+  margin-bottom: 10px;
+  padding: 4px 10px;
+  background: #dbeafe;
+  border-radius: 8px;
+  -webkit-tap-highlight-color: transparent;
+}
+.drv-nav-link:active { background: #bfdbfe; }
+
+/* ── Action buttons ──────────────────────────────────────────────────────── */
+.drv-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.drv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  min-width: 80px;
+  transition: opacity 0.12s, background 0.12s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.drv-btn:disabled { opacity: 0.4; cursor: default; }
+.drv-btn-primary { background: #2563eb; color: #fff; }
+.drv-btn-primary:active:not(:disabled) { background: #1d4ed8; }
+.drv-btn-danger { background: #dc2626; color: #fff; }
+.drv-btn-danger:active:not(:disabled) { background: #b91c1c; }
+.drv-btn-muted { background: #e2e8f0; color: #475569; }
+.drv-btn-muted:active:not(:disabled) { background: #cbd5e1; }
+.drv-btn-incident {
+  width: 100%;
+  background: #fff7ed;
+  border: 1.5px solid #fed7aa;
+  color: #c2410c;
+  border-radius: 10px;
+}
+.drv-btn-incident:active:not(:disabled) { background: #ffedd5; }
+
+/* ── Incident row ────────────────────────────────────────────────────────── */
+.drv-incident-row {
+  margin-top: 12px;
+}
+
+/* ── Stop list (expanded sheet) ──────────────────────────────────────────── */
+.drv-stop-list {
+  margin-top: 12px;
+}
+.drv-stop-list-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  margin: 0 0 8px;
+}
+.drv-stop-row {
+  border-left: 3px solid #e2e8f0;
+  padding: 8px 0 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 0 8px 8px 0;
+  background: #f8fafc;
+}
+.drv-stop-row-next {
+  background: #eff6ff;
+}
+.drv-stop-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.drv-stop-seq {
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+}
+.drv-stop-eta {
+  font-size: 11px;
+  color: #6b7280;
+}
+.drv-stop-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Small action buttons (stop list) */
+.drv-btn-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.12s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.drv-btn-sm:disabled { opacity: 0.4; cursor: default; }
+.drv-btn-sm.drv-btn-primary { background: #2563eb; color: #fff; }
+.drv-btn-sm.drv-btn-danger { background: #dc2626; color: #fff; }
+.drv-btn-sm.drv-btn-muted { background: #e2e8f0; color: #475569; }
+
+/* Inline nav link in stop list */
+.drv-nav-link-sm {
+  font-size: 14px;
+  text-decoration: none;
+  padding: 2px 4px;
+  border-radius: 5px;
+  -webkit-tap-highlight-color: transparent;
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
   APIError,
@@ -55,7 +55,7 @@ function isTerminal(status: RouteStopStatus): boolean {
 
 /** Builds a Maps/Waze deep-link from coordinates if available.
  *  Builds a Waze/Maps deep-link from coordinates embedded in the stop. */
-function buildNavUrl(lat?: number | null, lng?: number | null): string | null {
+export function buildNavUrl(lat?: number | null, lng?: number | null): string | null {
   if (lat == null || lng == null) return null;
   // Universal Waze deep link; falls back gracefully on desktop to Maps web.
   return `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
@@ -63,8 +63,8 @@ function buildNavUrl(lat?: number | null, lng?: number | null): string | null {
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-type StopStatusBadgeProps = { status: RouteStopStatus };
-function StopStatusBadge({ status }: StopStatusBadgeProps) {
+export type StopStatusBadgeProps = { status: RouteStopStatus };
+export function StopStatusBadge({ status }: StopStatusBadgeProps) {
   const colors: Record<RouteStopStatus, string> = {
     pending: "bg-gray-100 text-gray-700",
     en_route: "bg-blue-100 text-blue-700",
@@ -82,13 +82,13 @@ function StopStatusBadge({ status }: StopStatusBadgeProps) {
 
 // ── Fail modal ───────────────────────────────────────────────────────────────
 
-type FailModalProps = {
+export type FailModalProps = {
   stopId: string;
   onConfirm: (stopId: string, reason: string) => void;
   onCancel: () => void;
   loading: boolean;
 };
-function FailModal({ stopId, onConfirm, onCancel, loading }: FailModalProps) {
+export function FailModal({ stopId, onConfirm, onCancel, loading }: FailModalProps) {
   const [reason, setReason] = useState("");
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -129,14 +129,14 @@ function FailModal({ stopId, onConfirm, onCancel, loading }: FailModalProps) {
 
 // ── Incident modal ───────────────────────────────────────────────────────────
 
-type IncidentModalProps = {
+export type IncidentModalProps = {
   routeId: string;
   stopId?: string | null;
   onConfirm: (payload: IncidentCreateRequest) => void;
   onCancel: () => void;
   loading: boolean;
 };
-function IncidentModal({ routeId, stopId, onConfirm, onCancel, loading }: IncidentModalProps) {
+export function IncidentModal({ routeId, stopId, onConfirm, onCancel, loading }: IncidentModalProps) {
   const [type, setType] = useState<IncidentType>("other");
   const [severity, setSeverity] = useState<IncidentSeverity>("medium");
   const [description, setDescription] = useState("");
@@ -398,6 +398,14 @@ export function ProofModal({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSig, setHasSig] = useState(false);
+
+  // Canvas pixel-buffer fix: sync canvas.width from layout width (HAL-001 / mobile)
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const w = canvas.offsetWidth;
+    if (w > 0) canvas.width = w;
+  }, []);
   const [signedBy, setSignedBy] = useState("");
   const lastPos = useRef<{ x: number; y: number } | null>(null);
 
@@ -662,7 +670,7 @@ export function ProofModal({
 
 // ── Image compression helper (R8-POD-FOTO-UI) ────────────────────────────────
 
-function compressImage(file: File, maxBytes = 500 * 1024): Promise<Blob> {
+export function compressImage(file: File, maxBytes = 500 * 1024): Promise<Blob> {
   return new Promise((resolve, reject) => {
     if (file.size <= maxBytes) {
       resolve(file);
@@ -697,12 +705,22 @@ function compressImage(file: File, maxBytes = 500 * 1024): Promise<Blob> {
 
 // ── GPS tracking hook (A3 — GPS-001) ─────────────────────────────────────────
 
-function useGpsTracking(
+export type GpsPosition = { lat: number; lng: number; heading: number | null };
+export type GpsTrackingState = {
+  /** true cuando watchPosition está activo */
+  active: boolean;
+  /** Última posición conocida — null hasta el primer fix */
+  position: GpsPosition | null;
+};
+
+export function useGpsTracking(
   activeRouteId: string | null,
   token: string | null,
   apiBaseUrl: string,
-) {
+): GpsTrackingState {
   const watchIdRef = useRef<number | null>(null);
+  const [position, setPosition] = useState<GpsPosition | null>(null);
+  const [active, setActive] = useState(false);
 
   const sendPosition = useCallback(
     (routeId: string, lat: number, lng: number, accuracy: number | null, speed: number | null, heading: number | null) => {
@@ -731,8 +749,14 @@ function useGpsTracking(
   useEffect(() => {
     if (!activeRouteId || !token || typeof navigator === "undefined" || !navigator.geolocation) return;
 
+    setActive(true);
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
+        setPosition({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          heading: pos.coords.heading,
+        });
         sendPosition(
           activeRouteId,
           pos.coords.latitude,
@@ -749,12 +773,15 @@ function useGpsTracking(
     );
 
     return () => {
+      setActive(false);
       if (watchIdRef.current != null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
     };
   }, [activeRouteId, token, sendPosition]);
+
+  return { active, position };
 }
 
 // ── Main card props ──────────────────────────────────────────────────────────
@@ -817,7 +844,7 @@ export function DriverRoutingCard({
   // A3 — GPS tracking: activo mientras haya ruta in_progress seleccionada
   const gpsRouteId =
     selectedRoute?.status === "in_progress" ? selectedRoute.id : null;
-  useGpsTracking(gpsRouteId, token, apiBaseUrl);
+  const { active: gpsActive } = useGpsTracking(gpsRouteId, token, apiBaseUrl);
 
   const failLoadingThisStop = failStopId !== null && actionLoadingStopId === failStopId;
   const sigLoadingThisStop = signatureStopId !== null && proofLoading;
@@ -828,7 +855,7 @@ export function DriverRoutingCard({
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-base font-bold text-gray-900">Driver — Mis Rutas</h2>
         <div className="flex items-center gap-2">
-          {gpsRouteId && (
+          {gpsActive && (
             <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
               GPS activo

@@ -89,7 +89,6 @@ import {
   type Zone,
 } from "../lib/api";
 import { DispatcherRoutingCard } from "../components/DispatcherRoutingCard";
-import { DriverRoutingCard } from "../components/DriverRoutingCard";
 import { OperationalQueueTableCard } from "../components/OperationalQueueTableCard";
 import { OperationalResolutionQueueTableCard } from "../components/OperationalResolutionQueueTableCard";
 import { OrderSnapshotsTimelineCard } from "../components/OrderSnapshotsTimelineCard";
@@ -107,6 +106,7 @@ import { AdminShell } from "../components/AdminShell";
 import { AdminZonesSection } from "../components/AdminZonesSection";
 import { AdminCustomersSection } from "../components/AdminCustomersSection";
 import { OpsMapDashboard } from "../components/OpsMapDashboard";
+import { DriverMobileView } from "../components/DriverMobileView";
 type ViewMode = "ops" | "admin";
 type AdminSection = "zones" | "customers" | "users" | "tenant" | "products";
 type OrdersOperationalStateFilter = "all" | "eligible" | "restricted";
@@ -1482,6 +1482,36 @@ export default function HomePage() {
       />
     ) : undefined;
 
+  // DRIVER-MOBILE-001 — bypass AppShell entirely for conductores
+  if (isAuthenticated && isDriver) {
+    return (
+      <DriverMobileView
+        loading={driverLoading}
+        routes={driverRoutes}
+        selectedRouteId={selectedDriverRouteId}
+        onSelectedRouteIdChange={(id) => void onSelectDriverRoute(id)}
+        selectedRoute={selectedDriverRoute}
+        nextStopResponse={driverNextStop}
+        nextStopLoading={driverNextStopLoading}
+        actionLoadingStopId={driverActionLoadingStopId}
+        incidentLoading={driverIncidentLoading}
+        proofLoading={driverProofLoading}
+        errorMessage={driverError}
+        successMessage={driverSuccess}
+        token={token}
+        apiBaseUrl={process.env.NEXT_PUBLIC_API_BASE_URL ?? ""}
+        onRefresh={() => void refreshDriver()}
+        onArrive={(stopId) => void onDriverArrive(stopId)}
+        onComplete={(stopId) => void onDriverComplete(stopId)}
+        onCompleteWithProof={(stopId, sig, signedBy) => void onDriverCompleteWithProof(stopId, sig, signedBy)}
+        onFail={(stopId, reason) => void onDriverFail(stopId, reason)}
+        onSkip={(stopId) => void onDriverSkip(stopId)}
+        onReportIncident={(payload) => void onDriverReportIncident(payload)}
+        onLogout={onLogout}
+      />
+    );
+  }
+
   return (
     <AppShell
       header={
@@ -1563,32 +1593,6 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-      )}
-
-      {isAuthenticated && isDriver && (
-        <DriverRoutingCard
-          loading={driverLoading}
-          routes={driverRoutes}
-          selectedRouteId={selectedDriverRouteId}
-          onSelectedRouteIdChange={(id) => void onSelectDriverRoute(id)}
-          selectedRoute={selectedDriverRoute}
-          nextStopResponse={driverNextStop}
-          nextStopLoading={driverNextStopLoading}
-          actionLoadingStopId={driverActionLoadingStopId}
-          incidentLoading={driverIncidentLoading}
-          proofLoading={driverProofLoading}
-          errorMessage={driverError}
-          successMessage={driverSuccess}
-          token={token}
-          apiBaseUrl={process.env.NEXT_PUBLIC_API_BASE_URL ?? ""}
-          onRefresh={() => void refreshDriver()}
-          onArrive={(stopId) => void onDriverArrive(stopId)}
-          onComplete={(stopId) => void onDriverComplete(stopId)}
-          onCompleteWithProof={(stopId, sig, signedBy) => void onDriverCompleteWithProof(stopId, sig, signedBy)}
-          onFail={(stopId, reason) => void onDriverFail(stopId, reason)}
-          onSkip={(stopId) => void onDriverSkip(stopId)}
-          onReportIncident={(payload) => void onDriverReportIncident(payload)}
-        />
       )}
 
       {isAuthenticated && !isDriver && viewMode === "ops" && (
