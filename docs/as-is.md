@@ -4,7 +4,7 @@
 > Todo lo que aquí se afirma debe tener evidencia: código existente, test verde o smoke ejecutado.
 > Si una capacidad no aparece aquí, no asumas que existe.
 
-Última actualización: R8 activo — Fase A completa + B1–B4 + C1 + F1 + F2 + F4–F6 + FLEET-VIEW-001 + R8-SSE-FE PROMULGADO + R8-POD-FOTO CERRADO_LOCAL + HARDENING-SEC-001 CERRADO_LOCAL + HARDENING-DB-001 **PROMULGADO** + HARDENING-MIGRATE-NEON-001 CERRADO_LOCAL + DEMO-DB-RESEED-001 CERRADO_CON_EVIDENCIA_LOCAL (292 tests backend en verde, migration 027 verificada 5/5 en Neon prod, 2026-04-19). Abril 2026.
+Última actualización: R8 CERRADO — Fase A–C + F1–F6 + FLEET-VIEW-001 + UX-GESTION-001 + MONITOR-MODE-001 + R8-SSE-FE PROMULGADO + R8-POD-FOTO CERRADO_LOCAL + R8-POD-FOTO-R2-REAL PARCIAL/deferred (decisión operativa) + HARDENING-SEC-001 + HARDENING-DB-001 **PROMULGADO** + DEMO-DB-RESEED-001 CERRADO_CON_EVIDENCIA_LOCAL (292 tests backend en verde, migration 027 en Neon prod, 2026-04-19). Abril 2026.
 
 ---
 
@@ -31,6 +31,9 @@
 - Componentes operativos: `DispatcherRoutingCard`, `DriverRoutingCard`, `OperationalQueueCard`, `PendingQueueCard`, `OperationalResolutionQueueCard`, `OrderOperationalSnapshotsCard`, `AdminProductsCard`
 - Panel dispatcher: asignación de rutas, despacho, visualización de paradas, mapa de ruta con marcadores por estado y marcador conductor en tiempo real (SSE via `useRouteStream`, fallback a polling)
 - PWA del conductor: arrive / complete / fail / skip / incidencias / firma de entrega (modal canvas) / GPS tracking activo durante ruta in_progress
+- Gestión (`DispatcherRoutingCard`): formulario en 4 pasos numerados; Plan dropdown real desde API; selector conductores en sidebar; chips de pedido con × individual; botón deshabilitado hasta plan + vehículo + ≥1 pedido (UX-GESTION-001, commit `d11defe`, 2026-04-19)
+- Monitor mode (`OpsMapDashboard`): se activa cuando hay rutas dispatched/in_progress; mapa full-width, barra flotante de chips por ruta activa, drawer slide-in con lista de paradas (clickable expand), stats de ruta y acciones; paradas expandibles con service time / timestamps / motivo fallo / coordenadas; avatares de conductor con inicial coloreada; icono SVG camión en flota (MONITOR-MODE-001, commit `c5980aa`; visual UX commit `c50b8fe`, 2026-04-19)
+- Depósito: coordenadas fijas Son Llaut (39.65779, 2.79008) — eliminada dependencia de `NEXT_PUBLIC_DEPOT_LAT/LNG` para evitar sobreescritura (SM-001, commit `6aa7ef1`)
 - Frontend build en verde (CI `frontend-smoke`)
 - Tests de componentes: 26 tests en verde
 
@@ -87,7 +90,7 @@
 | Mapa de ruta (Google Maps JS API) | VERIFICADO LOCAL — `RouteMapCard.tsx` renderiza con marcadores por estado; evidence green en browser con `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` configurada (MAP-001) |
 | Marcador conductor en mapa dispatcher | PARCIAL — implementado con polling 30 s; requiere ruta in_progress con posición publicada para evidencia e2e |
 | Proof of delivery (firma canvas) | VERIFICADO LOCAL — modal firma en `DriverRoutingCard` + endpoints backend (`STOP_NOT_ARRIVED`, `SIGNATURE_DATA_REQUIRED`) + migración `stop_proofs`; tests en verde (`test_routing_proof_a2.py`) |
-| Proof of delivery (foto) | VERIFICADO LOCAL — `POST /proof-upload-url` + `PATCH /proof/photo`; presigned PUT R2 (mockeado); `ProofModal` con tab foto en `DriverRoutingCard`; 9 tests en verde (`test_routing_proof_foto_r8.py`); R2 bucket real pendiente de smoke |
+| Proof of delivery (foto) | PARCIAL / deferred — backend (`POST /proof-upload-url` + `PATCH /proof/photo`) y UI (`ProofModal` tab foto) listos; presigned PUT R2 mockeado; 9 tests en verde. Smoke con R2 bucket real no ejecutado; pospuesto por decisión operativa (R8-POD-FOTO-R2-REAL). Sin bloqueante técnico. |
 | GPS tracking conductor (publicación de posición) | VERIFICADO LOCAL — `useGpsTracking` hook + `POST /driver/location` + migración `driver_positions`; two-query logic (404 vs 409); tests en verde (`test_routing_gps_a3.py`) |
 
 ---
@@ -103,7 +106,7 @@
 | Prueba de entrega: firma | VERIFICADO LOCAL — backend + frontend + tests en verde; e2e con device real pendiente |
 | Prueba de entrega: foto | VERIFICADO LOCAL — presigned URL R2 (`POST /proof-upload-url`) + confirmación (`PATCH /proof/photo`); R2 mockeado; 9 tests en verde (`test_routing_proof_foto_r8.py`); `ProofModal` con tab foto en `DriverRoutingCard` (commit `c095510`); R2 bucket real pendiente de smoke |
 | Notificación de ETA a cliente final | NO EXISTE |
-| Fleet view (vista de flota en mapa) | VERIFICADO LOCAL — `GET /driver/active-positions` + polling 30s en `page.tsx` + marcadores 🚚 por conductor en `RouteMapCard` + badge GPS 📍 en panel de flota `OpsMapDashboard`. Requiere conductores con GPS activo para evidencia e2e. Build frontend limpio (2026-04-17). |
+| Fleet view (vista de flota en mapa) | VERIFICADO LOCAL — `GET /driver/active-positions` + polling 30s en `page.tsx` + marcadores por conductor en `RouteMapCard` + `OpsMapDashboard` con monitor mode: chips flotantes por ruta, drawer de paradas, SVG truck en flota. Requiere conductores con GPS activo para evidencia e2e. Build frontend limpio. |
 | Asistente IA en dispatcher | NO EXISTE |
 | Asistente IA en app del conductor | NO EXISTE |
 | Multi-vehicle en UI (fleet view) | NO EXISTE — backend soporta múltiples vehículos, UI no los visualiza juntos |
@@ -217,3 +220,11 @@ Service account montado en Docker: `~/.config/kelko/google/route-optimization-sa
 - R8: HARDENING-SEC-001 — CERRADO_LOCAL (2026-04-18). Eliminado endpoint `/debug/db`. JWT guard en lifespan: rechaza arranque con secret por defecto en entorno no-dev. Credenciales frontend limpiadas del repo.
 - R8: HARDENING-DB-001 — **PROMULGADO** (commit `094a702`, migración Neon verificada 2026-04-19). FK constraints `stop_proofs→route_stops` y `stop_proofs→routes` + FK `route_messages→routes` + índices `idx_orders_tenant_status` + `idx_route_stops_route_status`. `StopProof` en `models.py` alineado. Verificado: `5/5 PASS` vía `verify_migration_027.py` contra Neon prod.
 - R8: DEMO-DB-RESEED-001 — CERRADO_CON_EVIDENCIA_LOCAL (2026-04-18, commit `e6cbd34`). `seed()` en lifespan FastAPI. Verificado en Neon via `cortecero-api.vercel.app`: 30 pedidos + 9 vehículos activos.
+- R8: DEMO-SEED-001-TESTS — fix colisión Plans en 5 archivos de test (`check-first` pattern en proof_a2, gps_a3, foto_r8, bloque_e ×2). 292 tests en verde (2026-04-18).
+- R8: SM-001 — fix coordenadas depósito. Eliminada dependencia `NEXT_PUBLIC_DEPOT_LAT/LNG`; hardcoded Son Llaut (39.65779, 2.79008) en `RouteMapCard.tsx`. Commit `6aa7ef1` (2026-04-19).
+- R8: SM-003 — fix reset seed. Eliminada guardia `active_routes_count`; protección real en loop via `has_stop`. Commit `c98d25d` (2026-04-19).
+- R8: UX-GESTION-001 — PROMULGADO (commit `d11defe`, 2026-04-19). Gestión en 4 pasos numerados; Plan dropdown real; selector conductores sidebar; chips × por pedido; botón deshabilitado hasta requisitos completos.
+- R8: MONITOR-MODE-001 — PROMULGADO (commit `c5980aa`, 2026-04-19). Monitor mode en OpsMapDashboard: mapa full-width, chips flotantes, drawer slide-in con stops/stats/acciones. tsc clean. CI verde.
+- R8: Visual UX — PROMULGADO (commit `c50b8fe`, 2026-04-19). Stops clickables con expand/collapse (service time, timestamps, motivo fallo, coords); avatares conductor con inicial coloreada; SVG truck en flota.
+- R8: R8-POD-FOTO-R2-REAL — PARCIAL / deferred por decisión operativa (2026-04-19). Backend y UI listos. Smoke con R2 bucket real no ejecutado. Sin bloqueante técnico; credenciales R2 no suministradas.
+- R8: CERRADO — DoD cumplido excepto R8-POD-FOTO-R2-REAL (deferred). 292 tests en verde. CI verde en `main`.

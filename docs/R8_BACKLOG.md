@@ -1,7 +1,8 @@
 # R8 Backlog — CorteCero
 
-> Fase activa: R8 — Mapas, Realtime y Operaciones avanzadas  
-> Última actualización: 2026-04-18
+> Fase: R8 — CERRADO (2026-04-19)  
+> DoD cumplido excepto R8-POD-FOTO-R2-REAL (deferred por decisión operativa).  
+> Última actualización: 2026-04-19
 
 ---
 
@@ -24,6 +25,12 @@
 | R8-C1 | RETURN-001 — `POST /orders/{id}/return-to-planning`, failed_delivery → ready_for_planning | VERIFICADO LOCAL | test_return_c1.py (7/7 ✓) | `3e5980d` |
 | R8-SSE-FE | SSE frontend — hook `useRouteStream`, reemplaza polling 30s en `RouteMapCard`; MAX_RETRIES=3, fallback a polling | **PROMULGADO** | CI verde: backend-tests ✅ openapi-check ✅ frontend-smoke ✅ (`8e28ede`) | `8e28ede` |
 | R8-POD-FOTO | Proof of delivery foto — `POST /proof-upload-url` + `PATCH /proof/photo` + `ProofModal` tab foto en `DriverRoutingCard`; R2 mockeado | CERRADO_LOCAL | test_routing_proof_foto_r8.py (9/9 ✓), 292 total | `c095510` + DEMO-SEED-001 fixes |
+| UX-GESTION-001 | Gestión 4 pasos numerados, Plan dropdown real, selector conductores sidebar, chips ×, botón deshabilitado | **PROMULGADO** | tsc clean, CI verde | `d11defe` |
+| MONITOR-MODE-001 | Monitor mode OpsMapDashboard: mapa full-width, chips flotantes, drawer stops/stats/acciones | **PROMULGADO** | tsc clean, CI verde | `c5980aa` |
+| VISUAL-UX-001 | Stops clickables expand/collapse, avatares conductor con inicial, SVG truck en flota | **PROMULGADO** | CI verde | `c50b8fe` |
+| SM-001 | Fix depósito: elimina `NEXT_PUBLIC_DEPOT_LAT/LNG`, hardcode Son Llaut coords | **PROMULGADO** | build frontend verde | `6aa7ef1` |
+| SM-003 | Fix seed reset: elimina guardia `active_routes_count`, protección real via `has_stop` | **PROMULGADO** | py_compile ✓ | `c98d25d` |
+| R8-POD-FOTO-R2-REAL | Smoke R2 bucket real — credenciales no suministradas | **DEFERRED** (decisión operativa 2026-04-19) | — | — |
 | HARDENING-SEC-001 | Seguridad — eliminado `/debug/db`, JWT guard en lifespan, credenciales frontend limpiadas | CERRADO_LOCAL | — | (sin commit único; aplicado en sesión 2026-04-18) |
 | HARDENING-DB-001 | FK constraints stop_proofs→route_stops/routes + route_messages→routes + índices rendimiento; `StopProof` models.py alineado | **PROMULGADO** (5/5 verificado en Neon 2026-04-19) | test_routing_proof_foto_r8.py (9/9 ✓) | `094a702` |
 | DEMO-DB-RESEED-001 | Seed idempotente en lifespan FastAPI → cold start Vercel siembra datos demo en Neon | CERRADO_CON_EVIDENCIA_LOCAL | 30 pedidos + 9 vehículos verificados en Neon | `e6cbd34` |
@@ -60,10 +67,12 @@
 - 9 tests en verde (`test_routing_proof_foto_r8.py`), 292 tests total
 - **Pendiente**: smoke con R2 bucket real (credenciales R2 necesarias → R8-POD-FOTO-R2-REAL)
 
-### R8-POD-FOTO-R2-REAL — Smoke R2 real (PENDIENTE)
+### R8-POD-FOTO-R2-REAL — Smoke R2 real (DEFERRED — decisión operativa 2026-04-19)
 
-- Verificar presigned URL contra bucket R2 real de Cloudflare
-- **Bloqueado por**: credenciales R2 (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`) no configuradas en entorno
+- Backend y UI listos; presigned PUT R2 mockeado; 9 tests en verde
+- Smoke con R2 bucket real no ejecutado: credenciales no suministradas (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`)
+- **Decisión**: no bloquea cierre de R8. Pospuesto a R9 o cuando se decida proveedor de storage
+- Sin bloqueante técnico — cuando haya credenciales, el smoke es ejecutable sin cambios de código
 
 ---
 
