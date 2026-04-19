@@ -2,19 +2,31 @@
 backend/.venv/
 backend/__pycache__/
 backend/.pytest_cache/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
 
 # Node
 frontend/node_modules/
 frontend/.next/
+frontend/.vercel/
+frontend/tsconfig.tsbuildinfo
 
 # Env
 backend/.env
 frontend/.env.local
+**/.env
+**/.env.*
+!backend/.env.example
+!frontend/.env.example
 
 # Private local data (never commit)
 backend/private/
 backend/private_data/
 backend/app/seed_private.py
+.claude/worktrees/
+frontend/.agents/
+frontend/skills-lock.json
 
 # Credentials — never commit
 *.json.key
@@ -36,3 +48,8 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local tool artifacts (no pertenecen al repo)
+TASKS.md
+memory/
+cortecero_migrations_combined.sql

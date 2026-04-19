@@ -78,6 +78,15 @@ cortecero/
 
 Un bloque por vez. No mezcles tickets. No adelantes el siguiente sin instrucción explícita.
 
+### Reglas de comportamiento con el usuario
+
+1. **Nunca dar código para que el usuario lo ejecute.** Si hay algo que ejecutar (git, bash, npm), hacerlo directamente con las herramientas disponibles.
+2. **Verificar estado antes de actuar.** Antes de hacer un commit o cualquier acción sobre el repo, leer el estado actual (`git status`, `git log`) — no asumir.
+3. **No ejecutar sin confirmación previa cuando hay ambigüedad.** Si no está claro si el usuario ya hizo algo, preguntar primero.
+4. **Análisis crítico, no complaciente.** Si algo está roto o incompleto, decirlo directamente. No suavizar ni dar por bueno lo que no lo es.
+5. **No abrir el siguiente bloque sin instrucción explícita.** Bloque 1 en evidence green antes de mencionar Bloque 2.
+6. **No repetir el resumen de lo que se acaba de hacer** a menos que el usuario lo pida. Acción → silencio → esperar feedback.
+
 ### Antes de escribir código
 
 1. Lee `docs/as-is.md` para entender el estado real
@@ -366,11 +375,14 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
 - HARDENING-SEC-001: eliminado `/debug/db`; JWT guard en lifespan; credenciales frontend limpiadas (2026-04-18)
 - HARDENING-DB-001: FK constraints stop_proofs + route_messages, índices rendimiento, migration 027, `StopProof` models.py alineado (commit `094a702`, 2026-04-18) — Neon pendiente manual
 - DEMO-DB-RESEED-001: `seed()` en lifespan FastAPI → cold start Vercel siembra Neon (commit `e6cbd34`, 2026-04-18) — verificado: 30 pedidos + 9 vehículos activos
+- UX-GESTION-001: Gestión form como 4 pasos numerados; Plan dropdown real; selector conductores sidebar; chips con × por pedido; botón deshabilitado hasta plan+vehículo+≥1 pedido (commit `d11defe`, 2026-04-19)
+- MONITOR-MODE-001: Monitor mode en OpsMapDashboard — mapa full-width, chips flotantes por ruta activa, drawer slide-in con stops/stats/acciones (commit `c5980aa`, 2026-04-19) — tsc clean, PROMULGADO
 
 ### Pendiente activo (orden de prioridad)
 1. **Aplicar migration 027 en Neon** — `DATABASE_URL=<neon_url> python3 backend/scripts/apply_migration.py` (cierra HARDENING-DB-001 → PROMULGADO)
 2. **R8-POD-FOTO-R2-REAL** — smoke con bucket R2 real (credenciales: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`)
 3. **Confirmar CI green `094a702`** — run 24614267738 in_progress → HARDENING-DB-001 → PROMULGADO
+4. **MONITOR-MODE-002 — Chat flotante** (Bloque 2): adaptar LiveChat de smart-logistics, conectar a CHAT-001 (`GET/POST /routes/{id}/messages`), flotante bottom-right, tabs por conductor activo
 
 ### Huecos conocidos
 - SSE backend usa asyncio.Queue in-process → no escala con gunicorn multi-worker (fix R9: Redis)
