@@ -378,11 +378,15 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
 - UX-GESTION-001: Gestión form como 4 pasos numerados; Plan dropdown real; selector conductores sidebar; chips con × por pedido; botón deshabilitado hasta plan+vehículo+≥1 pedido (commit `d11defe`, 2026-04-19)
 - MONITOR-MODE-001: Monitor mode en OpsMapDashboard — mapa full-width, chips flotantes por ruta activa, drawer slide-in con stops/stats/acciones (commit `c5980aa`, 2026-04-19) — tsc clean, PROMULGADO
 
-### Pendiente activo (orden de prioridad)
-1. **Aplicar migration 027 en Neon** — `DATABASE_URL=<neon_url> python3 backend/scripts/apply_migration.py` (cierra HARDENING-DB-001 → PROMULGADO)
-2. **R8-POD-FOTO-R2-REAL** — smoke con bucket R2 real (credenciales: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`)
-3. **Confirmar CI green `094a702`** — run 24614267738 in_progress → HARDENING-DB-001 → PROMULGADO
-4. **MONITOR-MODE-002 — Chat flotante** (Bloque 2): adaptar LiveChat de smart-logistics, conectar a CHAT-001 (`GET/POST /routes/{id}/messages`), flotante bottom-right, tabs por conductor activo
+### Bloques R9 completados
+- R9-HARDENING-001: envs auditados (STARTUP_SEED_RESET, ENVIRONMENT), api.ts timeout+204+205, CI npm test glob fix, startup_seed_reset wired — PROMULGADO (commits 099ec24+ed6cfbe+a5c3f27)
+- R9-PERF-001: _serialize_routes_batch (2 queries planas para list_routes), dispatch batch IN query, optimize 3× batch pre-loop (orders+customers+profiles), vercel.json maxDuration=60s — PROMULGADO
+
+### Pendiente activo R9 (orden de prioridad)
+1. **R9-CONTRACT-001** — OpenAPI ↔ runtime alineados + catálogo de errores cerrado
+2. **R9-MONITOR-UX-001** — Delay alerts visibles en panel/drawer + fixes monitor mode
+3. **MONITOR-MODE-002 — Chat flotante** dispatcher↔conductor: conectar a CHAT-001 (`GET/POST /routes/{id}/messages`), flotante bottom-right, tabs por conductor activo
+4. **R9-REALTIME-001** — SSE Redis pub-sub multi-worker (condicional a decisión de infra)
 
 ### Huecos conocidos
 - SSE backend usa asyncio.Queue in-process → no escala con gunicorn multi-worker (fix R9: Redis)

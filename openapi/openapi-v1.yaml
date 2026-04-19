@@ -2640,6 +2640,143 @@ paths:
         "404":
           description: ROUTE_NOT_FOUND — Ruta no encontrada en el tenant del token
 
+  /routes/{route_id}/recalculate-eta:
+    post:
+      tags: [Routing]
+      summary: Recalcula la ETA de las paradas pendientes (B2 — ETA-001)
+      description: >
+        Recalcula la ETA de las paradas pendientes/en_route basándose en la
+        posición actual del conductor (haversine). Actualiza `recalculated_eta_at`
+        en cada parada. Si el retraso supera 15 min sobre la ETA original,
+        crea un evento `delay_alert` y emite SSE `eta_updated`.
+
+        Requiere que el conductor haya publicado al menos una posición GPS.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: route_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: ETAs recalculadas correctamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecalculateEtaResponse"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permisos (requiere logistics o admin)
+        "404":
+          description: ROUTE_NOT_FOUND — Ruta no encontrada
+        "422":
+          description: NO_DRIVER_POSITION — Sin posición GPS registrada para esta ruta
+
+  /routes/{route_id}/delay-alerts:
+    get:
+      tags: [Routing]
+      summary: Lista los delay_alerts de una ruta (B2 — ETA-001)
+      description: >
+        Devuelve todos los eventos de tipo `delay_alert` asociados a la ruta,
+        ordenados por timestamp descendente. Requiere rol `logistics` o `admin`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: route_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lista de delay alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DelayAlertOut"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permisos
+        "404":
+          description: ROUTE_NOT_FOUND — Ruta no encontrada
+
+  /routes/{route_id}/messages:
+    get:
+      tags: [Routing]
+      summary: Historial de mensajes de chat de una ruta (B3 — CHAT-001)
+      description: >
+        Devuelve todos los mensajes del hilo de chat de la ruta, ordenados
+        cronológicamente (asc). Accesible por `logistics`, `admin` y `driver`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: route_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Historial de mensajes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RouteMessageOut"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permisos
+        "404":
+          description: ROUTE_NOT_FOUND — Ruta no encontrada
+    post:
+      tags: [Routing]
+      summary: Enviar mensaje de chat en una ruta (B3 — CHAT-001)
+      description: >
+        Envía un mensaje al hilo de chat de la ruta. El autor queda registrado
+        con su user_id y role. Emite evento SSE `chat_message` a todos los
+        suscriptores activos. Accesible por `logistics`, `admin` y `driver`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: route_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RouteMessageIn"
+      responses:
+        "201":
+          description: Mensaje creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RouteMessageOut"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permisos
+        "404":
+          description: ROUTE_NOT_FOUND — Ruta no encontrada
+        "422":
+          description: VALIDATION_ERROR — body vacío o supera 2000 caracteres
+
   /driver/active-positions:
     get:
       tags: [Routing]
@@ -4621,5 +4758,102 @@ components:
           nullable: true
           description: Rumbo en grados (0=Norte, 90=Este). Usado para rotar el marcador en el mapa.
         recorded_at:
+          type: string
+          format: date-time
+
+    EtaStopResult:
+      type: object
+      required: [stop_id, sequence_number, recalculated_eta, delay_minutes, delay_alert]
+      properties:
+        stop_id:
+          type: string
+          format: uuid
+        sequence_number:
+          type: integer
+        original_eta:
+          type: string
+          format: date-time
+          nullable: true
+        recalculated_eta:
+          type: string
+          format: date-time
+        delay_minutes:
+          type: number
+        delay_alert:
+          type: boolean
+
+    RecalculateEtaResponse:
+      type: object
+      required: [route_id, stops_updated, delay_alerts_created, results]
+      properties:
+        route_id:
+          type: string
+          format: uuid
+        stops_updated:
+          type: integer
+        delay_alerts_created:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/EtaStopResult"
+
+    DelayAlertOut:
+      type: object
+      required: [event_id, route_id, delay_minutes, ts]
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        route_id:
+          type: string
+          format: uuid
+        stop_id:
+          type: string
+          format: uuid
+          nullable: true
+        original_eta:
+          type: string
+          format: date-time
+          nullable: true
+        recalculated_eta:
+          type: string
+          format: date-time
+          nullable: true
+        delay_minutes:
+          type: number
+          nullable: true
+        ts:
+          type: string
+          format: date-time
+
+    RouteMessageIn:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
+    RouteMessageOut:
+      type: object
+      required: [id, route_id, author_user_id, author_role, body, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        route_id:
+          type: string
+          format: uuid
+        author_user_id:
+          type: string
+          format: uuid
+        author_role:
+          type: string
+          description: '"dispatcher" o "driver"'
+        body:
+          type: string
+        created_at:
           type: string
           format: date-time
