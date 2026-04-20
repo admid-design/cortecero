@@ -1410,6 +1410,351 @@ body.map-first-mode {
   margin-top: 4px;
 }
 
+/* ── RoutePlannerCalendar v2 additions ── */
+
+/* Nav right side */
+.rpc-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* View toggle */
+.rpc-view-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.rpc-toggle-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.rpc-toggle-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+.rpc-toggle-btn:hover:not(.active) {
+  background: var(--accent-bg);
+}
+
+/* KPI strip */
+.rpc-kpi-strip {
+  display: flex;
+  padding: 10px 16px;
+  gap: 28px;
+  flex-shrink: 0;
+  align-items: center;
+}
+.rpc-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rpc-kpi-val {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink-strong);
+  line-height: 1;
+}
+.rpc-kpi-lbl {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+/* Sidebar search */
+.rpc-search {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font-size: 12px;
+  margin-bottom: 6px;
+  outline: none;
+  box-sizing: border-box;
+}
+.rpc-search:focus {
+  border-color: var(--accent);
+}
+
+/* Right panel layout */
+.rpc-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+}
+.rpc-cal-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Active column header */
+.rpc-col-hdr-active {
+  background: var(--accent-bg);
+  border-bottom: 2px solid var(--accent);
+}
+
+/* Day view */
+.rpc-day-view {
+  padding: 4px 0;
+}
+.rpc-day-view-hdr {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-strong);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+}
+
+/* ── Gantt timeline ── */
+.rpc-tl {
+  height: 210px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+.rpc-tl-hdr {
+  display: flex;
+  height: 28px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.rpc-tl-label-col {
+  width: 160px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 8px;
+  border-right: 1px solid var(--border);
+  gap: 1px;
+}
+.rpc-tl-hours {
+  flex: 1;
+  display: flex;
+}
+.rpc-tl-hour {
+  flex: 1;
+  font-size: 10px;
+  color: var(--ink-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid #f0f1f3;
+}
+.rpc-tl-body {
+  flex: 1;
+  overflow-y: auto;
+}
+.rpc-tl-row {
+  display: flex;
+  height: 42px;
+  border-bottom: 1px solid #f0f1f3;
+  align-items: center;
+  transition: background 0.1s;
+}
+.rpc-tl-row:hover {
+  background: var(--accent-bg);
+}
+.rpc-tl-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 12px;
+  color: var(--ink-muted);
+  text-align: center;
+  padding: 0 24px;
+}
+.rpc-tl-route-id {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-strong);
+  font-family: monospace;
+}
+.rpc-tl-route-st {
+  font-size: 10px;
+}
+.rpc-gantt-cell {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+.rpc-gcol {
+  flex: 1;
+  border-right: 1px solid #f0f1f3;
+  height: 100%;
+}
+.rpc-sbubble {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 700;
+  color: #fff;
+  transform: translateX(-50%);
+  z-index: 2;
+  cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.6);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.rpc-sbubble:hover {
+  transform: translateX(-50%) scale(1.25);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+/* ── Drawer ── */
+.rpc-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.18);
+  z-index: 40;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.rpc-drawer-backdrop.open {
+  opacity: 1;
+  pointer-events: all;
+}
+.rpc-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 480px;
+  max-width: 100vw;
+  height: 100%;
+  background: #fff;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
+  z-index: 50;
+  transform: translateX(100%);
+  transition: transform 0.22s ease;
+  display: flex;
+  flex-direction: column;
+}
+.rpc-drawer.open {
+  transform: translateX(0);
+}
+.rpc-drawer-hdr {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.rpc-drawer-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink-strong);
+  font-family: monospace;
+}
+.rpc-drawer-sub {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin-top: 2px;
+}
+.rpc-drawer-close {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: var(--ink-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.rpc-drawer-close:hover { color: var(--ink-strong); }
+.rpc-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
+/* Stops table */
+.rpc-stbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.rpc-stbl th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+.rpc-stbl td {
+  padding: 6px 6px;
+  border-bottom: 1px solid #f5f5f5;
+  vertical-align: middle;
+}
+.rpc-snum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+.rpc-sbadge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+}
+
+/* Inline time input */
+.rpc-ti {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 7px;
+  font-size: 12px;
+  width: 80px;
+  outline: none;
+}
+.rpc-ti:focus {
+  border-color: var(--accent);
+}
+.rpc-eta {
+  font-size: 12px;
+  color: var(--ink-strong);
+}
+.rpc-eta-editable {
+  cursor: pointer;
+  color: var(--accent);
+  text-decoration: underline dotted;
+}
+.rpc-eta-editable:hover {
+  text-decoration: underline;
+}
+
 /* Advanced panel toggle */
 .mf-advanced-toggle {
   display: flex;
