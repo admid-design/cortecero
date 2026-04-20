@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CorteCero — Planificador R10</title>
+<style>
+:root {
+  --bg:#f5f6f8; --surface:#fff; --border:#e2e5ea; --border-strong:#c8cdd6;
+  --ink:#1a1d23; --ink-strong:#0d0f14; --ink-muted:#6b7280;
+  --accent:#2563eb; --accent-bg:#eff6ff; --accent-border:#bfdbfe;
+  --success:#16a34a; --success-bg:#f0fdf4; --success-border:#bbf7d0;
+  --warn:#d97706; --warn-bg:#fffbeb; --warn-border:#fde68a;
+  --danger:#dc2626; --danger-bg:#fef2f2; --danger-border:#fecaca;
+  --shadow:0 1px 3px rgba(0,0,0,.08);
+  --shadow-md:0 4px 14px rgba(0,0,0,.13);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--ink);font-size:13px;height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+
+/* Header */
+.hdr{background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;height:46px;padding:0 14px;flex-shrink:0;box-shadow:var(--shadow);}
+.logo{font-weight:800;font-size:14px;color:var(--accent);letter-spacing:-.3px;margin-right:20px;}
+.tabs{display:flex;height:100%;}
+.tab{display:flex;align-items:center;padding:0 14px;font-size:12.5px;font-weight:500;color:var(--ink-muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;}
+.tab:hover{color:var(--ink);}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.wbtn{border:1px solid var(--border);background:#fff;border-radius:4px;padding:3px 7px;cursor:pointer;font-size:11px;color:var(--ink-muted);}
+.wbtn:hover{background:var(--bg);}
+.wlabel{font-weight:600;font-size:12px;color:var(--ink);}
+.btn-p{background:var(--accent);color:#fff;border:none;border-radius:5px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;}
+.btn-p:hover{background:#1d4ed8;}
+.btn-o{background:#fff;color:var(--ink);border:1px solid var(--border);border-radius:5px;padding:4px 10px;font-size:12px;font-weight:500;cursor:pointer;}
+
+/* 2-col body */
+.body{display:flex;flex:1;overflow:hidden;position:relative;}
+
+/* Sidebar */
+.sidebar{width:230px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+.sb-hdr{padding:10px 12px 8px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.sb-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-muted);margin-bottom:6px;}
+.sb-count{background:var(--accent);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px;}
+.sb-search{width:100%;border:1px solid var(--border);border-radius:4px;padding:5px 7px;font-size:12px;color:var(--ink);background:var(--bg);}
+.sb-list{flex:1;overflow-y:auto;padding:6px;display:flex;flex-direction:column;gap:3px;}
+.hint-text{font-size:10.5px;color:var(--ink-muted);text-align:center;padding:5px 8px;font-style:italic;line-height:1.4;}
+.pcard{border:1px solid var(--border);border-radius:5px;padding:7px 9px;background:#fff;cursor:pointer;transition:all .1s;}
+.pcard:hover{border-color:var(--accent-border);background:var(--accent-bg);}
+.pcard.sel{border-color:var(--accent);background:var(--accent-bg);}
+.pref{font-weight:700;font-size:10.5px;color:var(--accent);margin-bottom:1px;}
+.pcli{font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pmeta{font-size:10.5px;color:var(--ink-muted);margin-top:2px;display:flex;justify-content:space-between;}
+.pbadge{font-size:9.5px;font-weight:700;padding:1px 5px;border-radius:8px;}
+.pbadge.ok{background:var(--success-bg);color:var(--success);border:1px solid var(--success-border);}
+.pbadge.adr{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-border);}
+
+/* Planner */
+.planner{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+
+/* KPI */
+.kpi-strip{display:flex;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;}
+.kpi{padding:7px 18px;border-right:1px solid var(--border);}
+.kpi:last-child{border-right:none;}
+.kpi-lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-muted);font-weight:700;}
+.kpi-val{font-size:19px;font-weight:700;color:var(--ink-strong);line-height:1.1;margin-top:1px;}
+.kpi-sub{font-size:10px;color:var(--ink-muted);}
+
+/* MAP — taller now */
+.map-section{flex:1;min-height:0;position:relative;border-bottom:2px solid var(--border);overflow:hidden;background:#c8dff0;}
+.map-svg{width:100%;height:100%;}
+.map-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;}
+.live-badge{position:absolute;top:8px;left:8px;background:var(--danger);color:#fff;border-radius:12px;padding:3px 10px;font-size:11px;font-weight:700;display:flex;align-items:center;gap:5px;z-index:10;box-shadow:var(--shadow);}
+.live-dot{width:6px;height:6px;border-radius:50%;background:#fff;animation:pulse 1.2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+.map-alert{position:absolute;top:8px;left:50%;transform:translateX(-50%);background:var(--warn);color:#fff;border-radius:6px;padding:4px 12px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:6px;z-index:20;box-shadow:var(--shadow-md);cursor:pointer;white-space:nowrap;}
+.map-ctrl{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:3px;z-index:10;}
+.map-btn{width:26px;height:26px;background:white;border:1px solid var(--border);border-radius:4px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;box-shadow:var(--shadow);font-weight:700;color:var(--ink-muted);}
+.map-legend{position:absolute;bottom:8px;right:8px;background:rgba(255,255,255,.95);border:1px solid var(--border);border-radius:5px;padding:6px 9px;font-size:10.5px;box-shadow:var(--shadow);}
+.leg-title{font-weight:700;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-muted);margin-bottom:4px;}
+.leg-row{display:flex;align-items:center;gap:5px;margin-bottom:2px;font-size:10.5px;color:var(--ink);}
+.leg-line{width:20px;height:3px;border-radius:2px;}
+.vmarker{position:absolute;transform:translate(-50%,-50%);z-index:30;cursor:pointer;}
+.vmarker-inner{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;border:2.5px solid #fff;box-shadow:var(--shadow-md);transition:transform .15s;}
+.vmarker:hover .vmarker-inner{transform:scale(1.2);}
+.vmarker-tip{position:absolute;top:28px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.96);border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:9.5px;font-weight:600;white-space:nowrap;color:var(--ink);box-shadow:var(--shadow);pointer-events:none;}
+
+/* Timeline header */
+.tl-header{display:flex;flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--border);}
+.tl-driver-col{width:220px;flex-shrink:0;padding:6px 14px;font-size:10px;font-weight:700;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.4px;border-right:1px solid var(--border);}
+.tl-times{flex:1;display:flex;overflow:hidden;}
+.tl-hour{flex:1;text-align:left;padding:6px 0 6px 4px;font-size:10px;color:var(--ink-muted);font-weight:500;border-right:1px solid var(--border);}
+
+/* Timeline rows — compact, docked at bottom */
+.tl-body{height:210px;flex-shrink:0;overflow-y:auto;}
+.rrow{display:flex;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;}
+.rrow:hover{background:#f7f8fa;}
+.rrow.active{background:var(--accent-bg);}
+.driver-cell{width:220px;flex-shrink:0;padding:5px 14px;border-right:1px solid var(--border);display:flex;flex-direction:column;justify-content:center;}
+.driver-name{font-weight:700;font-size:12px;color:var(--ink-strong);display:flex;align-items:center;gap:6px;}
+.rdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.driver-meta{font-size:10px;color:var(--ink-muted);margin-top:2px;display:flex;gap:8px;}
+.pbar{width:100%;height:3px;background:var(--border);border-radius:2px;margin-top:4px;}
+.pbar-fill{height:100%;border-radius:2px;}
+.rstatus{font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-top:3px;display:inline-block;width:fit-content;}
+.st-ip{background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;}
+.st-di{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-border);}
+.st-pl{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border);}
+.st-co{background:#f9fafb;color:var(--ink-muted);border:1px solid var(--border);}
+
+/* Gantt */
+.gantt-cell{flex:1;position:relative;display:flex;align-items:center;overflow:hidden;min-height:42px;}
+.gantt-track{position:relative;width:100%;height:100%;display:flex;align-items:center;}
+.gantt-grid{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;pointer-events:none;}
+.gcol{flex:1;border-right:1px solid #f0f1f3;height:100%;}
+.stops-line{position:absolute;height:2px;background:var(--border-strong);top:50%;transform:translateY(-50%);}
+.sbubble{position:absolute;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:#fff;top:50%;transform:translate(-50%,-50%);z-index:2;cursor:pointer;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform .1s;}
+.sbubble:hover{transform:translate(-50%,-50%) scale(1.2);}
+.shome{position:absolute;width:20px;height:20px;top:50%;transform:translate(-50%,-50%);z-index:2;font-size:13px;line-height:20px;text-align:center;}
+.assign-hint{position:absolute;inset:3px;border:2px dashed var(--accent-border);border-radius:5px;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:600;color:var(--accent);opacity:0;pointer-events:none;transition:opacity .12s;}
+.gantt-cell:hover .assign-hint{opacity:1;}
+
+/* ── STOP DETAIL DRAWER ── */
+.drawer-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.18);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s;}
+.drawer-backdrop.open{opacity:1;pointer-events:all;}
+.drawer{position:absolute;top:0;right:0;width:480px;height:100%;background:#fff;box-shadow:-4px 0 20px rgba(0,0,0,.15);z-index:50;transform:translateX(100%);transition:transform .22s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;overflow:hidden;}
+.drawer.open{transform:translateX(0);}
+.drawer-hdr{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;gap:10px;}
+.drawer-title{font-size:13px;font-weight:700;color:var(--ink-strong);flex:1;}
+.drawer-sub{font-size:11px;color:var(--ink-muted);}
+.drawer-close{width:28px;height:28px;border:1px solid var(--border);border-radius:5px;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--ink-muted);flex-shrink:0;}
+.drawer-close:hover{background:var(--bg);}
+.drawer-body{flex:1;overflow-y:auto;padding:12px 16px;}
+
+/* Stop table inside drawer */
+.stbl{width:100%;border-collapse:collapse;font-size:12px;}
+.stbl th{text-align:left;padding:5px 8px;font-size:10px;font-weight:700;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);}
+.stbl td{padding:7px 8px;border-bottom:1px solid #f3f4f6;vertical-align:middle;}
+.stbl tr:last-child td{border-bottom:none;}
+.stbl tr:hover td{background:#fafbfd;}
+.snum{width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:800;color:#fff;}
+.ti{border:1px solid var(--border);border-radius:4px;padding:4px 7px;font-size:12px;color:var(--ink);background:var(--bg);width:80px;cursor:pointer;transition:border-color .12s;}
+.ti:focus{outline:none;border-color:var(--accent);background:#fff;box-shadow:0 0 0 2px var(--accent-bg);}
+.ti:hover:not(:disabled){border-color:var(--border-strong);}
+.sbadge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:8px;}
+.sb-ok{background:var(--success-bg);color:var(--success);}
+.sb-pe{background:#f3f4f6;color:#6b7280;}
+.sb-fa{background:var(--danger-bg);color:var(--danger);}
+.drawer-alert{margin-top:12px;background:var(--danger-bg);border:1px solid var(--danger-border);border-radius:6px;padding:8px 12px;font-size:12px;color:var(--danger);display:flex;align-items:center;gap:10px;}
+
+/* Tooltip */
+.tip{position:fixed;background:var(--ink-strong);color:#fff;padding:5px 9px;border-radius:5px;font-size:11px;pointer-events:none;z-index:200;opacity:0;transition:opacity .1s;box-shadow:var(--shadow-md);}
+
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="hdr">
+  <div class="logo">CorteCero</div>
+  <div class="tabs">
+    <div class="tab">Gestión</div>
+    <div class="tab active">Planificador</div>
+    <div class="tab">Seguimiento</div>
+    <div class="tab">Monitor</div>
+  </div>
+  <div class="hdr-right">
+    <div style="display:flex;align-items:center;gap:5px;">
+      <button class="wbtn">‹</button>
+      <span class="wlabel">Lun 21 Abr 2026</span>
+      <button class="wbtn">›</button>
+      <button class="wbtn">Hoy</button>
+    </div>
+    <select style="border:1px solid var(--border);border-radius:4px;padding:4px 7px;font-size:12px;color:var(--ink);background:#fff">
+      <option>Vista día</option><option>Vista semana</option>
+    </select>
+    <button class="btn-o">Optimizar todas</button>
+    <button class="btn-p">+ Nueva ruta</button>
+  </div>
+</div>
+
+<!-- Body -->
+<div class="body">
+
+  <!-- Sidebar pedidos -->
+  <div class="sidebar">
+    <div class="sb-hdr">
+      <div class="sb-title">Pedidos por asignar <span class="sb-count">8</span></div>
+      <input class="sb-search" type="text" placeholder="Buscar pedido...">
+    </div>
+    <div class="sb-list">
+      <div class="hint-text">Selecciona un pedido y haz click en una ruta para asignarlo</div>
+      <div class="pcard sel" onclick="selectP(this)"><div style="display:flex;justify-content:space-between"><div class="pref">#PED-2041</div><span class="pbadge ok">Normal</span></div><div class="pcli">Mercado Es Mercat</div><div class="pmeta"><span>📍 Sineu</span><span>340 kg</span></div></div>
+      <div class="pcard" onclick="selectP(this)"><div style="display:flex;justify-content:space-between"><div class="pref">#PED-2042</div><span class="pbadge ok">Normal</span></div><div class="pcli">Bar Sa Plaça</div><div class="pmeta"><span>📍 Algaida</span><span>120 kg</span></div></div>
+      <div class="pcard" onclick="selectP(this)"><div style="display:flex;justify-content:space-between"><div class="pref">#PED-2043</div><span class="pbadge adr">ADR</span></div><div class="pcli">Can Cifre SA</div><div class="pmeta"><span>📍 Llucmajor</span><span>510 kg</span></div></div>
+      <div class="pcard" onclick="selectP(this)"><div style="display:flex;justify-content:space-between"><div class="pref">#PED-2044</div><span class="pbadge ok">Normal</span></div><div class="pcli">Supermercado Inca</div><div class="pmeta"><span>📍 Inca</span><span>280 kg</span></div></div>
+      <div class="pcard" onclick="selectP(this)"><div style="display:flex;justify-content:space-between"><div class="pref">#PED-2045</div><span class="pbadge ok">Normal</span></div><div class="pcli">Hotel Melià Palma</div><div class="pmeta"><span>📍 Palma</span><span>190 kg</span></div></div>
+      <div class="pcard" onclick="selectP(this)"><div style="display:flex;justify-content:space-between"><div class="pref">#PED-2046</div><span class="pbadge ok">Normal</span></div><div class="pcli">Celler Miquel Àngel</div><div class="pmeta"><span>📍 Felanitx</span><span>230 kg</span></div></div>
+      <div class="pcard" onclick="selectP(this)"><div style="display:flex;justify-content:space-between"><div class="pref">#PED-2047</div><span class="pbadge adr">ADR</span></div><div class="pcli">Gasolinera Manacor</div><div class="pmeta"><span>📍 Manacor</span><span>820 kg</span></div></div>
+      <div class="pcard" onclick="selectP(this)"><div style="display:flex;justify-content:space-between"><div class="pref">#PED-2048</div><span class="pbadge ok">Normal</span></div><div class="pcli">Restaurant Es Molí</div><div class="pmeta"><span>📍 Pollença</span><span>155 kg</span></div></div>
+    </div>
+  </div>
+
+  <!-- Planner -->
+  <div class="planner">
+
+    <!-- KPIs -->
+    <div class="kpi-strip">
+      <div class="kpi"><div class="kpi-lbl">Rutas hoy</div><div class="kpi-val">5</div><div class="kpi-sub">3 activas · 2 completadas</div></div>
+      <div class="kpi"><div class="kpi-lbl">Paradas</div><div class="kpi-val">47</div><div class="kpi-sub">38 comp · 9 pend</div></div>
+      <div class="kpi"><div class="kpi-lbl">Km planif.</div><div class="kpi-val">312</div><div class="kpi-sub">Prom 62 km/ruta</div></div>
+      <div class="kpi"><div class="kpi-lbl">Sin asignar</div><div class="kpi-val" style="color:var(--warn)">8</div><div class="kpi-sub">pedidos</div></div>
+      <div class="kpi"><div class="kpi-lbl">Incidencias</div><div class="kpi-val" style="color:var(--danger)">2</div><div class="kpi-sub">entregas fallidas</div></div>
+    </div>
+
+    <!-- MAP -->
+    <div class="map-section" id="mapSection">
+      <svg id="mapSvg" class="map-svg" viewBox="0 0 900 300" preserveAspectRatio="xMidYMid slice">
+        <rect width="900" height="300" fill="#c8dff0"/>
+        <path d="M 120,215 C 105,202 85,194 72,178 66,160 70,142 80,128
+                 C 95,110 115,100 138,95 162,90 192,86 222,79
+                 C 255,72 288,66 320,64 355,63 388,68 418,79
+                 C 446,89 470,105 488,125 502,142 510,163 514,185
+                 C 518,208 517,232 512,254 507,274 497,292 485,300"
+              fill="#d8e8c0" stroke="#b0c890" stroke-width="1.2"/>
+        <path d="M 500,300 Q 470,295 438,288 C 420,283 400,276 382,268
+                 C 362,259 343,247 327,234 C 311,221 297,205 287,188
+                 C 277,171 270,152 267,133 C 264,118 265,105 267,95"
+              fill="#d8e8c0" stroke="#b0c890" stroke-width="1.2"/>
+        <!-- Roads -->
+        <path d="M 265,175 Q 335,167 405,172 Q 462,177 500,205" stroke="#ddd8c0" stroke-width="2.5" fill="none" opacity=".7"/>
+        <path d="M 265,175 Q 250,212 254,248 Q 260,272 280,290" stroke="#ddd8c0" stroke-width="1.8" fill="none" opacity=".6"/>
+        <path d="M 405,172 Q 415,140 428,110 Q 444,82 472,68" stroke="#ddd8c0" stroke-width="1.8" fill="none" opacity=".5"/>
+        <path d="M 500,205 Q 525,238 530,268 Q 532,284 514,295" stroke="#ddd8c0" stroke-width="1.8" fill="none" opacity=".5"/>
+        <path d="M 180,195 Q 220,188 265,175" stroke="#ddd8c0" stroke-width="1.5" fill="none" opacity=".5"/>
+        <g id="routeLines"></g>
+      </svg>
+      <div class="map-overlay" id="mapOverlay"></div>
+      <div class="live-badge"><div class="live-dot"></div><span id="liveClock">EN VIVO · 10:34</span></div>
+      <div class="map-alert" id="mapAlert" onclick="this.style.display='none'">⚠️ R002 Ana García — Incidencia parada 5 · Click para ver</div>
+      <div class="map-ctrl"><div class="map-btn">+</div><div class="map-btn">−</div><div class="map-btn" style="font-size:11px">⊙</div></div>
+      <div class="map-legend"><div class="leg-title">Rutas activas</div><div id="mapLegend"></div></div>
+    </div>
+
+    <!-- Timeline header -->
+    <div class="tl-header">
+      <div class="tl-driver-col">Conductor / Ruta</div>
+      <div class="tl-times" id="tlTimes"></div>
+    </div>
+
+    <!-- Timeline rows (compact, no inline expand) -->
+    <div class="tl-body" id="tlBody"></div>
+
+    <!-- ── DRAWER: stop detail ── -->
+    <div class="drawer-backdrop" id="backdrop" onclick="closeDrawer()"></div>
+    <div class="drawer" id="drawer">
+      <div class="drawer-hdr">
+        <div>
+          <div class="drawer-title" id="drawerTitle">—</div>
+          <div class="drawer-sub" id="drawerSub">—</div>
+        </div>
+        <button class="drawer-close" onclick="closeDrawer()">✕</button>
+      </div>
+      <div class="drawer-body" id="drawerBody"></div>
+    </div>
+
+  </div><!-- /planner -->
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+const HOURS = ['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00'];
+const COLORS = ['#2563eb','#7c3aed','#059669','#d97706','#dc2626'];
+
+function toSvg(lat, lng) {
+  return { x: (lng - 2.45) / 0.88 * 900, y: (39.95 - lat) / 0.55 * 300 };
+}
+function stopPct(tw) {
+  const [h,m] = tw.split(':').map(Number);
+  return ((h-7)*60+m) / (9*60) * 100;
+}
+function stClass(s) {
+  return {in_progress:'st-ip',dispatched:'st-di',planned:'st-pl',completed:'st-co'}[s]||'';
+}
+
+const ROUTES = [
+  { id:'R001', driver:'Carlos M.', vehicle:'VH-003 · MAN 18T', color:COLORS[0], status:'in_progress', statusLabel:'En ruta', stops_done:7, stops_total:11, km:68, dur:'4h 20m', alert:false, vLat:39.590, vLng:2.895,
+    stops:[
+      {n:0,client:'Depot Son Llaut',lat:39.658,lng:2.790,tw:'07:00',status:'completed',home:true},
+      {n:1,client:'Mercado Central Palma',lat:39.570,lng:2.650,tw:'07:30',status:'completed'},
+      {n:2,client:'Hotel Melià Palma',lat:39.558,lng:2.645,tw:'08:00',status:'completed'},
+      {n:3,client:'Bar Es Pou Palma',lat:39.568,lng:2.658,tw:'09:00',status:'completed'},
+      {n:4,client:'Celler Can Xim',lat:39.580,lng:2.870,tw:'09:15',status:'completed'},
+      {n:5,client:'Spar Algaida',lat:39.565,lng:2.893,tw:'10:00',status:'completed'},
+      {n:6,client:'Restaurant Sa Plana',lat:39.570,lng:2.903,tw:'10:30',status:'completed'},
+      {n:7,client:'Mercado Es Mercat',lat:39.644,lng:3.013,tw:'11:00',status:'pending'},
+      {n:8,client:'Can Cifre Sineu',lat:39.650,lng:3.022,tw:'12:00',status:'pending'},
+      {n:9,client:'Gasolinera Sineu',lat:39.638,lng:3.018,tw:'12:30',status:'pending'},
+      {n:10,client:'Depot Son Llaut',lat:39.658,lng:2.790,tw:'13:00',status:'pending',home:true},
+    ]},
+  { id:'R002', driver:'Ana García', vehicle:'VH-001 · Mercedes 12T', color:COLORS[1], status:'in_progress', statusLabel:'En ruta', stops_done:4, stops_total:9, km:54, dur:'3h 50m', alert:true, vLat:39.877, vLng:3.010,
+    stops:[
+      {n:0,client:'Depot Son Llaut',lat:39.658,lng:2.790,tw:'07:00',status:'completed',home:true},
+      {n:1,client:'Supermercado Inca',lat:39.720,lng:2.912,tw:'08:00',status:'completed'},
+      {n:2,client:'Bar Sa Plaça Inca',lat:39.722,lng:2.910,tw:'09:00',status:'completed'},
+      {n:3,client:'Forn de Pa Muro',lat:39.733,lng:3.000,tw:'09:30',status:'completed'},
+      {n:4,client:'Hotel Formentor',lat:39.855,lng:3.050,tw:'10:00',status:'failed'},
+      {n:5,client:'Restaurant Es Molí',lat:39.877,lng:3.016,tw:'11:00',status:'pending'},
+      {n:6,client:'Mercat Pollença',lat:39.877,lng:3.018,tw:'12:00',status:'pending'},
+      {n:7,client:'Can Cifre Alcúdia',lat:39.852,lng:3.121,tw:'12:30',status:'pending'},
+      {n:8,client:'Depot Son Llaut',lat:39.658,lng:2.790,tw:'13:00',status:'pending',home:true},
+    ]},
+  { id:'R003', driver:'Miquel T.', vehicle:'VH-005 · Iveco 7.5T', color:COLORS[2], status:'dispatched', statusLabel:'Despachada', stops_done:0, stops_total:7, km:43, dur:'3h 10m', alert:false, vLat:39.660, vLng:2.793,
+    stops:[
+      {n:0,client:'Depot Son Llaut',lat:39.658,lng:2.790,tw:'10:00',status:'pending',home:true},
+      {n:1,client:'Celler Miquel Àngel',lat:39.467,lng:3.148,tw:'11:00',status:'pending'},
+      {n:2,client:'Hotel Sa Bassa Rossa',lat:39.460,lng:3.155,tw:'11:30',status:'pending'},
+      {n:3,client:'Bar Es Cantó',lat:39.468,lng:3.140,tw:'12:00',status:'pending'},
+      {n:4,client:'Mercat Felanitx',lat:39.466,lng:3.145,tw:'12:30',status:'pending'},
+      {n:5,client:'Gasolinera Manacor',lat:39.567,lng:3.207,tw:'13:00',status:'pending'},
+      {n:6,client:'Depot Son Llaut',lat:39.658,lng:2.790,tw:'14:00',status:'pending',home:true},
+    ]},
+  { id:'R004', driver:'Joana F.', vehicle:'VH-007 · Ford Transit', color:COLORS[3], status:'planned', statusLabel:'Planificada', stops_done:0, stops_total:6, km:38, dur:'2h 45m', alert:false, vLat:null, vLng:null,
+    stops:[
+      {n:0,client:'Depot Son Llaut',lat:39.658,lng:2.790,tw:'11:00',status:'pending',home:true},
+      {n:1,client:"Hotel Melià S'Arenal",lat:39.502,lng:2.748,tw:'11:30',status:'pending'},
+      {n:2,client:'Spar Llucmajor',lat:39.483,lng:2.890,tw:'12:30',status:'pending'},
+      {n:3,client:'Can Cifre Llucmajor',lat:39.486,lng:2.895,tw:'13:00',status:'pending'},
+      {n:4,client:'Restaurant El Faro',lat:39.475,lng:2.885,tw:'13:30',status:'pending'},
+      {n:5,client:'Depot Son Llaut',lat:39.658,lng:2.790,tw:'14:00',status:'pending',home:true},
+    ]},
+  { id:'R005', driver:'Pere B.', vehicle:'VH-002 · Renault 8T', color:COLORS[4], status:'completed', statusLabel:'Completada', stops_done:8, stops_total:8, km:51, dur:'3h 30m', alert:false, vLat:null, vLng:null,
+    stops:[
+      {n:0,client:'Depot Son Llaut',lat:39.658,lng:2.790,tw:'07:30',status:'completed',home:true},
+      {n:1,client:'Mercado Marratxí',lat:39.633,lng:2.732,tw:'08:00',status:'completed'},
+      {n:2,client:'Bar Can Tomàs',lat:39.630,lng:2.728,tw:'08:30',status:'completed'},
+      {n:3,client:'Spar Binissalem',lat:39.686,lng:2.844,tw:'09:00',status:'completed'},
+      {n:4,client:'Celler Ribas',lat:39.690,lng:2.848,tw:'10:00',status:'completed'},
+      {n:5,client:'Forn Lloseta',lat:39.720,lng:2.870,tw:'10:30',status:'completed'},
+      {n:6,client:'Bar Sa Font',lat:39.718,lng:2.868,tw:'11:00',status:'completed'},
+      {n:7,client:'Depot Son Llaut',lat:39.658,lng:2.790,tw:'11:30',status:'completed',home:true},
+    ]},
+];
+
+// ── MAP ───────────────────────────────────────────────────────
+function buildMap() {
+  const svg = document.getElementById('routeLines');
+  svg.innerHTML = '';
+  document.getElementById('mapOverlay').innerHTML = '';
+
+  ROUTES.forEach(r => {
+    const pts = r.stops.map(s => toSvg(s.lat, s.lng));
+    const poly = document.createElementNS('http://www.w3.org/2000/svg','polyline');
+    poly.setAttribute('points', pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' '));
+    poly.setAttribute('stroke', r.color);
+    poly.setAttribute('stroke-width', r.status==='completed' ? '2' : '2.8');
+    poly.setAttribute('fill','none');
+    poly.setAttribute('opacity', r.status==='completed' ? '0.35' : '0.82');
+    if (r.status==='dispatched') poly.setAttribute('stroke-dasharray','6,4');
+    svg.appendChild(poly);
+
+    r.stops.forEach(s => {
+      if (s.home) return;
+      const p = toSvg(s.lat, s.lng);
+      const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('cx', p.x.toFixed(1)); c.setAttribute('cy', p.y.toFixed(1)); c.setAttribute('r','4.5');
+      c.setAttribute('fill', s.status==='completed' ? r.color : s.status==='failed' ? '#dc2626' : '#9ca3af');
+      c.setAttribute('stroke','#fff'); c.setAttribute('stroke-width','1.5');
+      c.style.cursor='pointer';
+      c.addEventListener('mouseenter', e => showTip(e, `${r.driver} · ${s.n}. ${s.client}`));
+      c.addEventListener('mouseleave', hideTip);
+      c.addEventListener('click', () => openDrawer(r));
+      svg.appendChild(c);
+    });
+  });
+
+  // Depot
+  const d = toSvg(39.658, 2.790);
+  const dr = document.createElementNS('http://www.w3.org/2000/svg','rect');
+  dr.setAttribute('x',(d.x-7).toFixed()); dr.setAttribute('y',(d.y-7).toFixed());
+  dr.setAttribute('width','14'); dr.setAttribute('height','14');
+  dr.setAttribute('rx','3'); dr.setAttribute('fill','#374151');
+  dr.setAttribute('stroke','#fff'); dr.setAttribute('stroke-width','2');
+  svg.appendChild(dr);
+  const dt = document.createElementNS('http://www.w3.org/2000/svg','text');
+  dt.setAttribute('x',d.x.toFixed()); dt.setAttribute('y',d.y.toFixed());
+  dt.setAttribute('text-anchor','middle'); dt.setAttribute('dominant-baseline','middle');
+  dt.setAttribute('font-size','8'); dt.setAttribute('fill','#fff'); dt.setAttribute('font-weight','800');
+  dt.textContent='D'; svg.appendChild(dt);
+
+  // Vehicle markers
+  const box = document.getElementById('mapSvg').getBoundingClientRect();
+  const sx = box.width/900, sy = box.height/300;
+  ROUTES.forEach(r => {
+    if (!r.vLat || r.status==='completed' || r.status==='planned') return;
+    const p = toSvg(r.vLat, r.vLng);
+    const mk = document.createElement('div');
+    mk.className = 'vmarker';
+    mk.style.cssText = `left:${(p.x*sx).toFixed(1)}px;top:${(p.y*sy).toFixed(1)}px;`;
+    const ini = r.driver.split(' ').map(w=>w[0]).join('').slice(0,2);
+    mk.innerHTML = `<div class="vmarker-inner" style="background:${r.color}">${ini}</div><div class="vmarker-tip">${r.driver}</div>`;
+    mk.addEventListener('click', () => openDrawer(r));
+    document.getElementById('mapOverlay').appendChild(mk);
+  });
+
+  // Legend
+  document.getElementById('mapLegend').innerHTML = ROUTES
+    .filter(r => r.status !== 'completed')
+    .map(r => `<div class="leg-row"><div class="leg-line" style="background:${r.color}"></div>${r.driver}${r.alert?' ⚠':''}</div>`)
+    .join('');
+}
+
+// ── TIMELINE ──────────────────────────────────────────────────
+let activeId = null;
+
+function buildTimeline() {
+  const body = document.getElementById('tlBody');
+  body.innerHTML = '';
+  ROUTES.forEach(r => {
+    const pct = Math.round(r.stops_done/r.stops_total*100);
+    const row = document.createElement('div');
+    row.className = 'rrow' + (activeId===r.id ? ' active' : '');
+
+    // Driver cell
+    const dc = document.createElement('div');
+    dc.className = 'driver-cell';
+    dc.innerHTML = `
+      <div class="driver-name"><div class="rdot" style="background:${r.color}"></div>${r.driver}${r.alert?'<span style="color:var(--danger);font-size:10px;margin-left:2px">⚠</span>':''}</div>
+      <div class="driver-meta"><span>${r.stops_done}/${r.stops_total} paradas</span><span>⟳ ${r.km} km</span><span>⏱ ${r.dur}</span></div>
+      <div class="pbar"><div class="pbar-fill" style="width:${pct}%;background:${r.color}"></div></div>
+      <span class="rstatus ${stClass(r.status)}">${r.statusLabel}</span>
+    `;
+    dc.addEventListener('click', () => openDrawer(r));
+
+    // Gantt cell
+    const gc = document.createElement('div');
+    gc.className = 'gantt-cell';
+    gc.innerHTML = `<div class="assign-hint">+ Asignar pedido seleccionado</div>`;
+    gc.addEventListener('click', () => {
+      const sel = document.querySelector('.pcard.sel');
+      if (sel) {
+        const ref = sel.querySelector('.pref').textContent;
+        const cli = sel.querySelector('.pcli').textContent;
+        if (confirm(`¿Asignar ${ref} (${cli}) a la ruta de ${r.driver}?`)) {
+          sel.classList.remove('sel');
+          alert(`✅ ${ref} asignado a ${r.driver}`);
+        }
+      } else {
+        openDrawer(r);
+      }
+    });
+
+    const track = document.createElement('div'); track.className = 'gantt-track';
+    const grid  = document.createElement('div'); grid.className = 'gantt-grid';
+    HOURS.forEach(() => { const c=document.createElement('div'); c.className='gcol'; grid.appendChild(c); });
+    track.appendChild(grid);
+
+    const fp = stopPct(r.stops[0].tw), lp = stopPct(r.stops[r.stops.length-1].tw);
+    const line = document.createElement('div');
+    line.className='stops-line'; line.style.left=fp+'%'; line.style.width=(lp-fp)+'%';
+    track.appendChild(line);
+
+    r.stops.forEach((s,i) => {
+      const pp = stopPct(s.tw);
+      const b = document.createElement('div');
+      if (s.home) { b.className='shome'; b.style.left=pp+'%'; b.textContent=i===0?'🏠':'🏁'; }
+      else {
+        b.className='sbubble'; b.style.left=pp+'%';
+        b.style.background = s.status==='completed' ? r.color : s.status==='failed' ? '#dc2626' : '#9ca3af';
+        b.textContent = s.n;
+        b.addEventListener('mouseenter', e => showTip(e, `${s.n}. ${s.client} · ${s.tw}`));
+        b.addEventListener('mouseleave', hideTip);
+      }
+      track.appendChild(b);
+    });
+    gc.appendChild(track);
+    row.appendChild(dc); row.appendChild(gc);
+    body.appendChild(row);
+  });
+}
+
+// ── DRAWER ────────────────────────────────────────────────────
+function openDrawer(r) {
+  activeId = r.id;
+  buildTimeline();
+
+  document.getElementById('drawerTitle').textContent = r.driver + ' · ' + r.vehicle;
+  document.getElementById('drawerSub').textContent   = `${r.stops_done}/${r.stops_total} paradas · ${r.km} km · ${r.dur}`;
+
+  const body = document.getElementById('drawerBody');
+  body.innerHTML = `
+    <p style="font-size:11px;color:var(--ink-muted);margin-bottom:10px">Edita la hora de llegada esperada de cada parada. Las paradas completadas no son editables.</p>
+    <table class="stbl">
+      <thead><tr><th>#</th><th>Cliente</th><th>Hora prevista</th><th>Estado</th></tr></thead>
+      <tbody>
+        ${r.stops.map((s,i) => {
+          const isH = s.home;
+          return `<tr>
+            <td>${isH?`<span style="font-size:16px">${i===0?'🏠':'🏁'}</span>`:`<span class="snum" style="background:${s.status==='completed'?r.color:s.status==='failed'?'#dc2626':'#9ca3af'}">${s.n}</span>`}</td>
+            <td style="font-weight:${isH?600:400};color:${isH?'var(--ink-muted)':'var(--ink)'}">${s.client}</td>
+            <td><input class="ti" type="time" value="${s.tw}"
+              ${s.status==='completed'?'disabled style="opacity:.4;cursor:not-allowed"':''}
+              onchange="onTW(this,'${r.id}',${s.n})"></td>
+            <td><span class="sbadge ${s.status==='completed'?'sb-ok':s.status==='failed'?'sb-fa':'sb-pe'}">${s.status==='completed'?'Completada':s.status==='failed'?'Fallida':'Pendiente'}</span></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    ${r.alert ? `<div class="drawer-alert"><strong>⚠ Parada 4 fallida</strong> — Hotel Formentor. <button style="margin-left:auto;background:var(--danger);color:#fff;border:none;border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;font-weight:600">Reasignar</button></div>` : ''}
+  `;
+
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('backdrop').classList.add('open');
+}
+
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('backdrop').classList.remove('open');
+  activeId = null;
+  buildTimeline();
+}
+
+function onTW(input, routeId, stopN) {
+  const s = ROUTES.find(r=>r.id===routeId).stops.find(s=>s.n===stopN);
+  s.tw = input.value;
+  buildTimeline();
+  input.style.borderColor='var(--success)'; input.style.background='var(--success-bg)';
+  setTimeout(()=>{ input.style.borderColor=''; input.style.background=''; }, 1400);
+}
+
+function selectP(card) {
+  document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('sel'));
+  card.classList.add('sel');
+}
+
+function showTip(e,text){ const t=document.getElementById('tip'); t.textContent=text; t.style.opacity='1'; t.style.left=(e.clientX+12)+'px'; t.style.top=(e.clientY-28)+'px'; }
+function hideTip(){ document.getElementById('tip').style.opacity='0'; }
+
+// ── Init ──────────────────────────────────────────────────────
+HOURS.forEach(h=>{ const el=document.createElement('div'); el.className='tl-hour'; el.textContent=h; document.getElementById('tlTimes').appendChild(el); });
+
+window.addEventListener('load', () => {
+  buildMap();
+  buildTimeline();
+  window.addEventListener('resize', () => buildMap());
+
+  let tick = 0;
+  setInterval(() => {
+    tick++;
+    ROUTES[0].vLat += 0.0006; ROUTES[0].vLng += 0.0009;
+    ROUTES[1].vLat -= 0.0003; ROUTES[1].vLng += 0.0002;
+    buildMap();
+    const b = new Date(2026,3,21,10,34,0);
+    b.setSeconds(b.getSeconds() + tick*5);
+    document.getElementById('liveClock').textContent = `EN VIVO · ${b.getHours().toString().padStart(2,'0')}:${b.getMinutes().toString().padStart(2,'0')}`;
+  }, 3000);
+});
+</script>
+</body>
+</html>

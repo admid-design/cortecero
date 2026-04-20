@@ -409,37 +409,52 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
 
 ## Fase activa actual — R10
 
-Ver detalle completo en `docs/R10_BACKLOG.md`.
+> Última actualización: 2026-04-20
+> Ver detalle completo en `docs/R10_BACKLOG.md` y `TASKS.md`.
 
-### Bloques R10 completados
-- ROUTE-PLANNER-TW-001: `PATCH /stops/{stop_id}/scheduled-arrival` + schema + OpenAPI + api.ts — PROMULGADO (commit `7cf26e3`, 2026-04-20)
-- ROUTE-PLANNER-CAL-001 v2: `RoutePlannerCalendar` — KPI strip, toggle semana/día, búsqueda sidebar, gantt timeline con bubbles, drawer slide-in con tabla de paradas + edición inline ETA (`patchStopScheduledArrival`) — PROMULGADO (commit `6d505ac`, 2026-04-20)
-- TW-001-UI: input inline `type="time"` en drawer del planificador — incluido en CAL-001 v2 — PROMULGADO
-- R9-MONITOR-UX-001: chip delay badge persiste tras cerrar drawer — PROMULGADO (commit `b9e9374`, 2026-04-20)
-- PLANNER-AS-HOME-001: Planificador como pantalla inicial; login/logout → viewMode `planner` — PROMULGADO (commit `1516307`, 2026-04-20)
-- UX-SHELL-002: Rutas defaulta a Gestión Operativa (sin mapa, sin panel derecho); search en Pedidos/Conductores; DataTable rows clickables; header Planificador full-width — PROMULGADO (commit `815ba0a`, 2026-04-20)
-- UX-CLEANUP-001: eliminado nav "Rutas" interno + pills de estado azules en `OpsMapDashboard` — CERRADO_LOCAL (commit `442be46`, 2026-04-20)
-- ROUTIFIC-ANALYSIS-001: análisis quirúrgico Routific Beta + tabla comparativa + diseño XLSX import (Tipo A pedidos + Tipo B plantillas estacionales) — CERRADO, entregable en `docs/routific-analysis-and-xlsx-import.md` (2026-04-20)
+### Bloques R10 completados (PROMULGADO)
+- ROUTE-PLANNER-TW-001: `PATCH /stops/{stop_id}/scheduled-arrival` + schema + OpenAPI + api.ts — commit `7cf26e3`
+- ROUTE-PLANNER-CAL-001 v2: `RoutePlannerCalendar` — KPI strip, toggle semana/día, gantt, drawer ETA inline — commit `6d505ac`
+- TW-001-UI: input inline `type="time"` en drawer del planificador — incluido en CAL-001 v2
+- R9-MONITOR-UX-001: chip delay badge persiste tras cerrar drawer — commit `b9e9374`
+- PLANNER-AS-HOME-001: Planificador como pantalla inicial — commit `1516307`
+- UX-SHELL-002: Gestión Operativa sin mapa por defecto; search; DataTable clickable — commit `815ba0a`
+- UX-CLEANUP-001: nav "Rutas" interno + pills azules eliminados — commit `442be46`
+- FIX-DEPLOY-001: eliminado `"functions"` de `backend/vercel.json` (causa raíz de silent failures Vercel) — commit `7a5e159`
+- VISUAL-POLISH-001: token set `:root` expandido (17→45 vars), 50+ inline styles → CSS vars en 19 componentes — commit `09b3f03`
+- ROUTIFIC-ANALYSIS-001: análisis Routific Beta + comparativa + diseño XLSX import — `docs/routific-analysis-and-xlsx-import.md`
 
-### Pendiente en R10 — XLSX Import (prioridad por orden)
-- ROUTE-TEMPLATE-MODEL-001 — Migration + models `RouteTemplate` + `RouteTemplateStop` (sin dependencias)
-- XLSX-PARSE-001 — Parser `openpyxl` reutilizable en `backend/app/utils/xlsx_parser.py` (sin dependencias)
-- XLSX-TEMPLATES-001 — `POST /route-templates/import-xlsx` — importación rutas estacionales Tipo B (depende de los dos anteriores)
-- ROUTE-FROM-TEMPLATE-001 — `POST /routes/from-template` — genera ruta operativa desde plantilla
-- XLSX-UI-TEMPLATES-001 — Frontend: modal importación temporada + preview plantillas detectadas
-- XLSX-ORDERS-001 — `POST /orders/import-xlsx` — importación pedidos Tipo A
-- XLSX-UI-ORDERS-001 — Frontend: modal pedidos con mapper visual + vista previa
-- DATE-FORMAT-CONFIG-001 — Setting `xlsx_date_format` en tenant + PATCH endpoint + UI
+### Bloque en CI (commit lanzado, esperando verde)
+- **UX-FIXES-001** (2026-04-20): `hideSidebar` en OpsMapDashboard (elimina sidebar doble), `<select>` inline vehículo/conductor en Gestión form pasos 3+4, `DetailPanel` en Pedidos/Clientes/Conductores, `useToast` hook, Insights 6 KPIs (rutas + paradas + tasa), "+ Nueva ruta" en Planificador → navega a Gestión. Archivos: `OpsMapDashboard.tsx`, `RoutePlannerCalendar.tsx`, `page.tsx`, `GlobalShell.tsx`.
 
-### Pendiente en R10 — otros
-- R9-CONTRACT-001 — OpenAPI ↔ runtime alineados + catálogo de errores cerrado
-- MONITOR-MODE-002 conductor — Chat en `DriverRoutingCard` móvil
+### Siguiente bloque — EJECUTAR cuando UX-FIXES-001 esté en verde
+**ROUTE-TEMPLATE-MODEL-001 + XLSX-PARSE-001** en el mismo commit (sin dependencias entre sí):
+- Migration `NNN_route_templates.sql`: tablas `route_templates` + `route_template_stops` con FK multi-tenant
+- `backend/app/models.py`: clases `RouteTemplate` + `RouteTemplateStop`
+- `backend/app/schemas.py`: schemas Pydantic de ambas entidades
+- `backend/app/utils/xlsx_parser.py`: parser `openpyxl`, `parse_xlsx()`, `normalize_header()`, `auto_map_columns()`, soporte `.xlsx`+`.csv`
+- Tests unitarios `test_xlsx_parser.py`
 
-### Huecos conocidos
-- SSE backend usa asyncio.Queue in-process → no escala con gunicorn multi-worker (fix: Redis + decisión de arquitectura)
-- MAP-001 frontend: evidence en browser local; sin CI automatizado con API key
-- POD foto: UI implementada (ProofModal); R2 bucket real no probado
-- "Omitir" visible en estado `arrived` — ajuste cosmético pendiente
-- Migration 027: en repo, no aplicada aún en Neon (HARDENING-DB-001 pendiente)
+### Pipeline XLSX completo (ver TASKS.md para dependencias)
+```
+ROUTE-TEMPLATE-MODEL-001 ──┐
+                            ├──► XLSX-TEMPLATES-001 ──► XLSX-UI-TEMPLATES-001
+XLSX-PARSE-001 ─────────────┤
+                            ├──► XLSX-ORDERS-001 ──────► XLSX-UI-ORDERS-001
+                            └──► DATE-FORMAT-CONFIG-001
+
+ROUTE-TEMPLATE-MODEL-001 ──► ROUTE-FROM-TEMPLATE-001 ──► (incluido en XLSX-UI-TEMPLATES-001)
+```
+
+### Pendiente — otros (independientes, menor prioridad)
+- R9-CONTRACT-001 — Auditoría OpenAPI ↔ runtime completa + catálogo errores 4xx
+- MONITOR-MODE-002-CONDUCTOR — Chat en `DriverRoutingCard` móvil (lado dispatcher ya operativo)
+- HARDENING-DB-001-NEON — Aplicar migration 027 en Neon (manual, solo SQL)
+
+### Huecos conocidos (no en backlog activo)
+- SSE backend usa asyncio.Queue in-process → no escala multi-worker (fix: Redis + decisión arquitectura realtime)
+- POD foto: UI + backend listos; R2 bucket real no probado (pospuesto hasta decidir storage)
+- Migration 027: en repo, pendiente aplicar en Neon manualmente
 - Notificaciones (D1): congeladas, pendiente proveedor email/SMS
+- GPS conductor: polling 30s — tiempo real requiere arquitectura persistente
 - Asistente IA: no existe en ninguna capa
