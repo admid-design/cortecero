@@ -823,11 +823,14 @@ export function OpsMapDashboard({
                     )}
                     <span className="mf-chip-stops">{r.stops.length} par.</span>
                     {hasGps && <span title="GPS activo">📍</span>}
-                    {isChipActive && delayAlertCount > 0 && (
-                      <span className="mf-chip-delay-badge" title={`${delayAlertCount} alerta(s) de retraso`}>
-                        ⚠️ {delayAlertCount}
-                      </span>
-                    )}
+                    {(() => {
+                      const rAlerts = delayAlerts.filter((a) => a.route_id === r.id);
+                      return rAlerts.length > 0 ? (
+                        <span className="mf-chip-delay-badge" title={`${rAlerts.length} alerta(s) de retraso`}>
+                          ⚠️ {rAlerts.length}
+                        </span>
+                      ) : null;
+                    })()}
                   </button>
                 );
               })}
