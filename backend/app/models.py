@@ -669,3 +669,60 @@ class RouteMessage(Base):
     __table_args__ = (
         ForeignKeyConstraint(["route_id", "tenant_id"], ["routes.id", "routes.tenant_id"], ondelete="CASCADE"),
     )
+
+
+# ============================================================================
+# XLSX IMPORT ENTITIES: RouteTemplate, RouteTemplateStop
+# ROUTE-TEMPLATE-MODEL-001
+# ============================================================================
+
+
+class RouteTemplate(Base):
+    """Plantilla de ruta estacional importada desde XLSX.
+
+    Una plantilla representa la ruta fija de un vehículo en un día de la semana
+    para una temporada dada (verano/invierno).  Puede generarse una ruta operativa
+    real (Route + RouteStops) mediante POST /routes/from-template.
+    """
+
+    __tablename__ = "route_templates"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    # Temporada libre: 'verano' | 'invierno' | cualquier etiqueta definida por el usuario
+    season: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # vehicle_id: nullable — puede quedar sin vincular si la matrícula no se resuelve en la importación
+    vehicle_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True)
+    # day_of_week: 1=Lunes … 7=Domingo (ISO 8601); nullable = plantilla sin día fijo
+    day_of_week: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    shift_start: Mapped[time | None] = mapped_column(Time, nullable=True)
+    shift_end: Mapped[time | None] = mapped_column(Time, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RouteTemplateStop(Base):
+    """Parada dentro de una plantilla de ruta estacional.
+
+    sequence_number determina el orden de visita.  customer_id es nullable
+    para permitir paradas cuyo cliente no existe aún en la DB al importar.
+    """
+
+    __tablename__ = "route_template_stops"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    template_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("route_templates.id", ondelete="CASCADE"), nullable=False)
+    sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    # customer_id: nullable — puede quedar sin vincular si el nombre no se resuelve al importar
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("customers.id", ondelete="SET NULL"), nullable=True)
+    lat: Mapped[float | None] = mapped_column(Numeric(9, 6), nullable=True)
+    lng: Mapped[float | None] = mapped_column(Numeric(9, 6), nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_min: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("template_id", "sequence_number", name="uq_route_template_stops_seq"),
+    )

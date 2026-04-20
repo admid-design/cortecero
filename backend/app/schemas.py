@@ -887,3 +887,51 @@ class ReturnToPlanningResponse(BaseModel):
     previous_status: str
     new_status: str
     returned_at: datetime
+
+
+# ── Route Templates — XLSX import (ROUTE-TEMPLATE-MODEL-001) ─────────────────
+
+class RouteTemplateStopOut(APIModel):
+    id: uuid.UUID
+    template_id: uuid.UUID
+    sequence_number: int
+    customer_id: uuid.UUID | None
+    lat: float | None
+    lng: float | None
+    address: str | None
+    duration_min: int
+    notes: str | None
+    created_at: datetime
+
+
+class RouteTemplateOut(APIModel):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    name: str
+    season: str | None
+    vehicle_id: uuid.UUID | None
+    day_of_week: int | None
+    shift_start: time | None
+    shift_end: time | None
+    created_at: datetime
+    stops: list[RouteTemplateStopOut] = []
+
+
+class RouteTemplateImportResult(BaseModel):
+    templates_created: int
+    stops_total: int
+    errors: list[str] = []
+    warnings: list[str] = []
+
+
+class RouteFromTemplateRequest(BaseModel):
+    template_id: uuid.UUID
+    service_date: date
+    plan_id: uuid.UUID
+
+
+class RouteFromTemplateResponse(BaseModel):
+    route_id: uuid.UUID
+    template_id: uuid.UUID
+    service_date: date
+    stops_count: int
