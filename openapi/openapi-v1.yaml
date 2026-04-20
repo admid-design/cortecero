@@ -512,6 +512,60 @@ paths:
       security:
         - bearerAuth: []
 
+  /orders/import-xlsx:
+    post:
+      tags: [Orders]
+      summary: Importar pedidos desde fichero XLSX o CSV
+      description: >
+        Importación masiva de pedidos del día a partir de un fichero .xlsx o .csv.
+        Resuelve el cliente por nombre (exact match → partial único → crea nuevo).
+        La importación es idempotente: filas con (tenant_id, external_ref, service_date)
+        ya existente se saltan con warning. Devuelve un resumen con imported/skipped/errors/warnings.
+        Roles permitidos: office, logistics, admin.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, service_date]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Fichero .xlsx o .csv con las columnas de pedido
+                service_date:
+                  type: string
+                  format: date
+                  description: Fecha de servicio para todos los pedidos del fichero (YYYY-MM-DD)
+      responses:
+        "200":
+          description: Importación completada (parcialmente o totalmente)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderImportResult'
+        "401":
+          description: Token inválido o ausente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "403":
+          description: Rol sin permiso para importar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "422":
+          description: Fichero con extensión no permitida, fichero corrupto o service_date ausente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+      security:
+        - bearerAuth: []
+
   /plans:
     get:
       tags: [Plans]
@@ -2858,6 +2912,38 @@ components:
         returned_at:
           type: string
           format: date-time
+
+    OrderImportRowError:
+      type: object
+      required: [row, reason]
+      properties:
+        row:
+          type: integer
+          description: Número de fila del fichero (base 1, sin contar cabecera)
+        reason:
+          type: string
+          description: Motivo del error o warning
+
+    OrderImportResult:
+      type: object
+      required: [imported, skipped, errors, warnings]
+      properties:
+        imported:
+          type: integer
+          description: Número de pedidos creados correctamente
+        skipped:
+          type: integer
+          description: Número de filas ignoradas (error o duplicado)
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderImportRowError'
+          description: Filas con error que impidieron la importación
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderImportRowError'
+          description: Avisos no bloqueantes (cliente nuevo, match parcial, etc.)
 
     ErrorDetail:
       type: object

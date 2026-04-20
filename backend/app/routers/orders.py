@@ -4,8 +4,8 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import delete, select
+from fastapi import APIRouter, Depends, File, Form, UploadFile
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.audit import write_audit
@@ -53,6 +53,8 @@ from app.schemas import (
     OperationalResolutionQueueListResponse,
     OperationalExplanationOut,
     OperationalSnapshotRunResponse,
+    OrderImportResult,
+    OrderImportRowError,
     OrderIngestionBatchInput,
     OrderIngestionItemResult,
     OrderIngestionResult,
@@ -65,6 +67,7 @@ from app.schemas import (
     PendingQueueReason,
     ReturnToPlanningResponse,
 )
+from app.utils.xlsx_parser import ORDER_FIELD_ALIASES, auto_map_columns, parse_file, parse_float
 
 
 router = APIRouter(tags=["Orders"])
@@ -1240,4 +1243,220 @@ def return_order_to_planning(
         previous_status=previous_status,
         new_status=OrderStatus.ready_for_planning.value,
         returned_at=now,
+    )
+
+
+# ---------------------------------------------------------------------------
+# XLSX-ORDERS-001 — Importación de pedidos desde XLSX/CSV
+# ---------------------------------------------------------------------------
+
+def _resolve_or_create_customer(
+    db: Session,
+    tenant_id: uuid.UUID,
+    customer_name: str,
+    default_zone: "Zone",
+    now: datetime,
+) -> tuple["Customer | None", "str | None", bool]:
+    """Resuelve un cliente por nombre con regla de matching segura.
+
+    Returns:
+        (customer, reason, is_ambiguous)
+        - is_ambiguous=True → la fila debe marcarse como skipped/error.
+        - reason != None y is_ambiguous=False → warning (partial match o cliente nuevo).
+    """
+    name_stripped = customer_name.strip()
+
+    # 1. Exact match (case-insensitive)
+    exact = db.scalars(
+        select(Customer).where(
+            Customer.tenant_id == tenant_id,
+            func.lower(Customer.name) == name_stripped.lower(),
+        )
+    ).all()
+
+    if len(exact) == 1:
+        return exact[0], None, False
+    if len(exact) > 1:
+        return None, f"customer_name ambiguo: '{name_stripped}' coincide exactamente con {len(exact)} clientes", True
+
+    # 2. Partial match — solo si devuelve un único resultado
+    partial = db.scalars(
+        select(Customer).where(
+            Customer.tenant_id == tenant_id,
+            Customer.name.ilike(f"%{name_stripped}%"),
+        )
+    ).all()
+
+    if len(partial) == 1:
+        return partial[0], f"cliente '{partial[0].name}' resuelto por coincidencia parcial de '{name_stripped}'", False
+    if len(partial) > 1:
+        return None, f"customer_name ambiguo: '{name_stripped}' coincide parcialmente con {len(partial)} clientes", True
+
+    # 3. Sin match → crear cliente nuevo en zona por defecto
+    new_customer = Customer(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        zone_id=default_zone.id,
+        name=name_stripped,
+        priority=0,
+        active=True,
+        in_zbe_zone=False,
+        created_at=now,
+    )
+    db.add(new_customer)
+    db.flush()
+    return new_customer, f"cliente '{name_stripped}' creado como nuevo", False
+
+
+@router.post(
+    "/orders/import-xlsx",
+    response_model=OrderImportResult,
+    summary="Importar pedidos desde XLSX o CSV",
+)
+def import_orders_xlsx(
+    file: UploadFile = File(..., description="Archivo .xlsx o .csv con los pedidos"),
+    service_date: date = Form(..., description="Fecha de servicio de los pedidos (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.office, UserRole.logistics, UserRole.admin)),
+) -> OrderImportResult:
+    """Importa pedidos desde un archivo XLSX o CSV.
+
+    Columnas reconocidas automáticamente (ES/EN): cliente/name/customer,
+    direccion/address, lat, lng, desde/delivery_start, hasta/delivery_end,
+    duracion/duration, peso/load, referencia/external_ref, notas/notes.
+
+    Reglas de resolución de cliente:
+    1. Exact match (case-insensitive) → si único, usar.
+    2. Si >1 exact → fila skipped (ambiguo).
+    3. Partial ILIKE %name% → si único, usar + warning.
+    4. Si >1 partial → fila skipped (ambiguo).
+    5. Sin match → cliente nuevo creado en zona por defecto.
+
+    Idempotencia: (tenant_id, external_ref, service_date) ya existe → fila skipped + warning.
+    """
+    # Leer archivo
+    file_bytes = file.file.read()
+    filename = file.filename or "upload.xlsx"
+    try:
+        rows = list(parse_file(file_bytes, filename))
+    except ValueError as exc:
+        raise unprocessable("INVALID_FILE", str(exc))
+
+    if not rows:
+        return OrderImportResult(imported=0, skipped=0, errors=[], warnings=[])
+
+    # Cargar tenant y zona por defecto (primera zona activa, ordenada por created_at)
+    tenant = db.scalar(select(Tenant).where(Tenant.id == current.tenant_id))
+    if not tenant:
+        raise not_found("TENANT_NOT_FOUND", "Tenant no encontrado")
+
+    default_zone = db.scalar(
+        select(Zone).where(Zone.tenant_id == current.tenant_id, Zone.active.is_(True))
+        .order_by(Zone.created_at)
+    )
+    if not default_zone:
+        raise unprocessable("NO_ACTIVE_ZONE", "No hay zonas activas en el tenant")
+
+    # Auto-mapeo de columnas
+    headers = list(rows[0].keys())
+    col_map = auto_map_columns(headers, ORDER_FIELD_ALIASES)
+
+    imported = 0
+    skipped = 0
+    errors: list[OrderImportRowError] = []
+    warnings: list[OrderImportRowError] = []
+    now = datetime.now(UTC)
+
+    for row_idx, raw_row in enumerate(rows, start=2):  # fila 1 = cabeceras
+
+        def get(field: str) -> str | None:
+            col = col_map.get(field)
+            return raw_row.get(col) if col else None
+
+        # customer_name obligatorio
+        customer_name = get("customer_name")
+        if not customer_name or not customer_name.strip():
+            errors.append(OrderImportRowError(row=row_idx, reason="customer_name vacío o columna no reconocida"))
+            skipped += 1
+            continue
+
+        # Resolución de cliente
+        customer, reason, is_ambiguous = _resolve_or_create_customer(
+            db, current.tenant_id, customer_name, default_zone, now
+        )
+        if is_ambiguous:
+            errors.append(OrderImportRowError(row=row_idx, reason=reason or "customer_name ambiguo"))
+            skipped += 1
+            continue
+        if reason:
+            warnings.append(OrderImportRowError(row=row_idx, reason=reason))
+
+        # external_ref (auto-generado si no viene)
+        raw_ref = get("external_ref")
+        external_ref = raw_ref.strip() if raw_ref and raw_ref.strip() else f"XLSX-{uuid.uuid4().hex[:8]}"
+
+        # Idempotencia
+        existing = db.scalar(
+            select(Order).where(
+                Order.tenant_id == current.tenant_id,
+                Order.external_ref == external_ref,
+                Order.service_date == service_date,
+            )
+        )
+        if existing:
+            warnings.append(OrderImportRowError(
+                row=row_idx,
+                reason=f"pedido '{external_ref}' ya existe para {service_date} — omitido",
+            ))
+            skipped += 1
+            continue
+
+        # Zona del cliente resuelto (fallback a zona por defecto)
+        zone = db.scalar(
+            select(Zone).where(Zone.id == customer.zone_id, Zone.tenant_id == current.tenant_id)
+        ) or default_zone
+
+        # Cutoff y lateness usando funciones de dominio
+        cutoff_time, timezone = resolve_cutoff(customer, zone, tenant)
+        effective_cutoff_at = build_effective_cutoff_at(service_date, cutoff_time, timezone)
+        is_late, lateness_reason = compute_lateness(now, effective_cutoff_at)
+        status = initial_order_status(is_late)
+
+        # Peso total (opcional)
+        total_weight_kg = parse_float(get("load_kg"))
+
+        order = Order(
+            id=uuid.uuid4(),
+            tenant_id=current.tenant_id,
+            customer_id=customer.id,
+            zone_id=customer.zone_id,
+            external_ref=external_ref,
+            service_date=service_date,
+            requested_date=service_date,
+            status=status,
+            source_channel=SourceChannel.office,
+            intake_type=OrderIntakeType.new_order,
+            total_weight_kg=total_weight_kg,
+            requires_adr=False,
+            is_late=is_late,
+            lateness_reason=lateness_reason,
+            effective_cutoff_at=effective_cutoff_at,
+            created_at=now,
+            ingested_at=now,
+            updated_at=now,
+        )
+        db.add(order)
+        imported += 1
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise conflict("IMPORT_FAILED", f"Error al guardar pedidos importados: {exc}") from exc
+
+    return OrderImportResult(
+        imported=imported,
+        skipped=skipped,
+        errors=errors,
+        warnings=warnings,
     )

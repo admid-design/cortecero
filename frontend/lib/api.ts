@@ -1255,3 +1255,59 @@ export async function sendRouteMessage(
     body: { body },
   });
 }
+
+// ── XLSX Orders Import — XLSX-ORDERS-001 ──────────────────────────────────────
+
+export type OrderImportRowError = {
+  row: number;
+  reason: string;
+};
+
+export type OrderImportResult = {
+  imported: number;
+  skipped: number;
+  errors: OrderImportRowError[];
+  warnings: OrderImportRowError[];
+};
+
+/**
+ * Importa pedidos desde un fichero .xlsx o .csv.
+ * Usa fetch directo (no el helper request) porque requiere multipart/form-data.
+ */
+export async function importOrdersXlsx(
+  token: string,
+  file: File,
+  serviceDate: string, // YYYY-MM-DD
+): Promise<OrderImportResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("service_date", serviceDate);
+
+  const response = await fetch(`${API_BASE}/orders/import-xlsx`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      // No se añade Content-Type — el browser lo pone automáticamente con el boundary
+    },
+    body: formData,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as
+      | { detail?: { code?: string; message?: string } | string }
+      | null;
+    const detail = payload?.detail;
+    const code = typeof detail === "object" && detail ? detail.code : undefined;
+    const detailMessage =
+      typeof detail === "object" && detail
+        ? detail.message || "Error API"
+        : typeof detail === "string"
+          ? detail
+          : `HTTP ${response.status}`;
+    const message = code ? `${code}: ${detailMessage}` : detailMessage;
+    throw new APIError(message, response.status, code);
+  }
+
+  return (await response.json()) as OrderImportResult;
+}

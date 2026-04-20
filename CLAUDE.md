@@ -428,22 +428,27 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
 - **UX-FIXES-001** (2026-04-20): `hideSidebar` en OpsMapDashboard (elimina sidebar doble), `<select>` inline vehículo/conductor en Gestión form pasos 3+4, `DetailPanel` en Pedidos/Clientes/Conductores, `useToast` hook, Insights 6 KPIs (rutas + paradas + tasa), "+ Nueva ruta" en Planificador → navega a Gestión. Archivos: `OpsMapDashboard.tsx`, `RoutePlannerCalendar.tsx`, `page.tsx`, `GlobalShell.tsx`.
 
 ### Siguiente bloque — EJECUTAR cuando UX-FIXES-001 esté en verde
-**ROUTE-TEMPLATE-MODEL-001 + XLSX-PARSE-001** en el mismo commit (sin dependencias entre sí):
-- Migration `NNN_route_templates.sql`: tablas `route_templates` + `route_template_stops` con FK multi-tenant
-- `backend/app/models.py`: clases `RouteTemplate` + `RouteTemplateStop`
-- `backend/app/schemas.py`: schemas Pydantic de ambas entidades
-- `backend/app/utils/xlsx_parser.py`: parser `openpyxl`, `parse_xlsx()`, `normalize_header()`, `auto_map_columns()`, soporte `.xlsx`+`.csv`
-- Tests unitarios `test_xlsx_parser.py`
+**XLSX-PARSE-001** — commit solo, sin mezclar con migraciones:
+- `backend/app/utils/xlsx_parser.py`: `parse_xlsx()`, `normalize_header()`, `auto_map_columns()`, soporte `.xlsx`+`.csv`
+- `backend/tests/test_xlsx_parser.py`: tests unitarios (happy path, columnas faltantes, CSV, headers con tildes)
+- Sin tocar DB, sin migración, sin modelos
 
-### Pipeline XLSX completo (ver TASKS.md para dependencias)
+### Pipeline XLSX — orden de producto corregido (2026-04-20)
+> Prioridad: cerrar primero el gap visible frente a Routific (pedidos → ruta).
+> Plantillas estacionales son diferencial pero segundo paso.
+
 ```
-ROUTE-TEMPLATE-MODEL-001 ──┐
-                            ├──► XLSX-TEMPLATES-001 ──► XLSX-UI-TEMPLATES-001
-XLSX-PARSE-001 ─────────────┤
-                            ├──► XLSX-ORDERS-001 ──────► XLSX-UI-ORDERS-001
-                            └──► DATE-FORMAT-CONFIG-001
-
-ROUTE-TEMPLATE-MODEL-001 ──► ROUTE-FROM-TEMPLATE-001 ──► (incluido en XLSX-UI-TEMPLATES-001)
+XLSX-PARSE-001
+    ↓
+XLSX-ORDERS-001 + DATE-FORMAT-CONFIG-001
+    ↓
+XLSX-UI-ORDERS-001
+    ↓
+ROUTE-TEMPLATE-MODEL-001
+    ↓
+XLSX-TEMPLATES-001 + ROUTE-FROM-TEMPLATE-001
+    ↓
+XLSX-UI-TEMPLATES-001
 ```
 
 ### Pendiente — otros (independientes, menor prioridad)

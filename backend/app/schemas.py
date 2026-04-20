@@ -935,3 +935,21 @@ class RouteFromTemplateResponse(BaseModel):
     template_id: uuid.UUID
     service_date: date
     stops_count: int
+
+
+# ---------------------------------------------------------------------------
+# XLSX-ORDERS-001 — Importación de pedidos desde XLSX/CSV
+# ---------------------------------------------------------------------------
+
+class OrderImportRowError(BaseModel):
+    """Error o warning asociado a una fila concreta del archivo importado."""
+    row: int
+    reason: str
+
+
+class OrderImportResult(BaseModel):
+    """Resultado de POST /orders/import-xlsx."""
+    imported: int
+    skipped: int
+    errors: list[OrderImportRowError]
+    warnings: list[OrderImportRowError]
