@@ -1411,6 +1411,7 @@ export default function HomePage() {
         {/* ── Rutas (OpsMapDashboard) ── */}
         {viewMode === "ops" && (
           <OpsMapDashboard
+            hideSidebar={true}
             defaultSidebarView="gestion"
             role={role}
             onLogout={onLogout}
@@ -1473,7 +1474,11 @@ export default function HomePage() {
 
         {/* ── Planificador ── */}
         {viewMode === "planner" && (
-          <RoutePlannerCalendar token={token} onBack={() => setViewMode("ops")} />
+          <RoutePlannerCalendar
+            token={token}
+            onBack={() => setViewMode("ops")}
+            onNewRoute={() => setViewMode("ops")}
+          />
         )}
 
         {/* ── Nuevas secciones ── */}

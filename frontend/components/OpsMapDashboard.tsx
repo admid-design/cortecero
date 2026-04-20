@@ -31,6 +31,8 @@ type OpsMapDashboardProps = {
   onSwitchToPlanner?: () => void;
   isAdmin: boolean;
   defaultSidebarView?: "rutas" | "gestion";
+  /** Oculta la barra lateral interna cuando OpsMapDashboard se renderiza dentro de GlobalShell */
+  hideSidebar?: boolean;
   token?: string;
   error: string;
 
@@ -289,6 +291,7 @@ export function OpsMapDashboard({
   onSwitchToPlanner,
   isAdmin,
   defaultSidebarView,
+  hideSidebar,
   token,
   error,
   summary,
@@ -426,8 +429,8 @@ export function OpsMapDashboard({
   // ── render ──────────────────────────────────────────────────────────────────
   return (
     <div className={`map-first-shell${monitorMode ? " monitor-mode" : ""}${isGestionView ? " gestion-mode" : ""}`}>
-      {/* ── SIDEBAR ── */}
-      <aside className="mf-sidebar">
+      {/* ── SIDEBAR (oculto cuando OpsMapDashboard vive dentro de GlobalShell) ── */}
+      {!hideSidebar && <aside className="mf-sidebar">
         <div className="mf-sidebar-logo">
           <div className="mf-sidebar-logo-icon">C</div>
           <div>
@@ -483,7 +486,7 @@ export function OpsMapDashboard({
             Cerrar sesión
           </button>
         </div>
-      </aside>
+      </aside>}
 
       {/* ── CENTER COLUMN (map o gestión) ── */}
       <div className="mf-center-col">
@@ -637,7 +640,18 @@ export function OpsMapDashboard({
                     >×</button>
                   </div>
                 ) : (
-                  <div className="mf-create-hint">↙ Selecciona un vehículo del panel Flota</div>
+                  <select
+                    className="mf-input"
+                    value=""
+                    onChange={(e) => { if (e.target.value) onPlanVehicleIdChange(e.target.value); }}
+                  >
+                    <option value="">— Selecciona vehículo —</option>
+                    {availableVehicles.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        🚚 {v.name}{v.code ? ` · ${v.code}` : ""}{v.capacity_kg ? ` · ${v.capacity_kg} kg` : ""}
+                      </option>
+                    ))}
+                  </select>
                 )}
               </div>
 
@@ -658,7 +672,18 @@ export function OpsMapDashboard({
                     >×</button>
                   </div>
                 ) : (
-                  <div className="mf-create-hint">↙ Selecciona un conductor del panel Conductores</div>
+                  <select
+                    className="mf-input"
+                    value=""
+                    onChange={(e) => { if (e.target.value) onPlanDriverIdChange(e.target.value); }}
+                  >
+                    <option value="">— Selecciona conductor (opcional) —</option>
+                    {availableDrivers.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        👤 {d.name}{d.phone ? ` · ${d.phone}` : ""}
+                      </option>
+                    ))}
+                  </select>
                 )}
               </div>
 

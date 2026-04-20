@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import type { Order, Customer, DriverOut, DashboardSummary } from "../lib/api";
+import type { Order, Customer, DriverOut, DashboardSummary, RoutingRoute } from "../lib/api";
 import {
   listOrders,
   listAdminCustomers,
   listDrivers,
   getDailySummary,
+  listRoutes,
 } from "../lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -464,6 +465,98 @@ function Skeleton({ width = "100%", height = 16 }: { width?: string | number; he
   );
 }
 
+// ── Toast helper ─────────────────────────────────────────────────────────────
+
+function useToast() {
+  const [msg, setMsg] = useState("");
+  const show = useCallback((text: string) => {
+    setMsg(text);
+    setTimeout(() => setMsg(""), 3000);
+  }, []);
+  const el = msg ? (
+    <div
+      style={{
+        position: "fixed",
+        bottom: 24,
+        left: "50%",
+        transform: "translateX(-50%)",
+        background: C.text,
+        color: "#fff",
+        padding: "10px 20px",
+        borderRadius: 8,
+        fontSize: 13,
+        fontWeight: 500,
+        zIndex: 9999,
+        pointerEvents: "none",
+        boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
+      }}
+    >
+      {msg}
+    </div>
+  ) : null;
+  return { show, el };
+}
+
+// ── DetailPanel ───────────────────────────────────────────────────────────────
+
+function DetailPanel({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        background: C.surface,
+        border: `1px solid ${C.border}`,
+        borderRadius: 10,
+        padding: "18px 20px",
+        marginBottom: 20,
+        position: "relative",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 14,
+        }}
+      >
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{title}</div>
+        <button
+          onClick={onClose}
+          style={{
+            border: "none",
+            background: "transparent",
+            cursor: "pointer",
+            fontSize: 18,
+            color: C.muted,
+            lineHeight: 1,
+            padding: "0 2px",
+          }}
+        >
+          ×
+        </button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 13 }}>
+      <span style={{ color: C.muted, width: 120, flexShrink: 0 }}>{label}</span>
+      <span style={{ color: C.text }}>{value}</span>
+    </div>
+  );
+}
+
 // ── OrdersSection ─────────────────────────────────────────────────────────────
 
 export function OrdersSection({ token }: { token: string }) {
@@ -471,6 +564,8 @@ export function OrdersSection({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const toast = useToast();
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -511,12 +606,29 @@ export function OrdersSection({ token }: { token: string }) {
     <SectionPage
       title="Pedidos"
       subtitle={`${orders.length} pedido${orders.length !== 1 ? "s" : ""} · ${today}`}
-      action={<PrimaryBtn>+ Nuevo pedido</PrimaryBtn>}
+      action={<PrimaryBtn onClick={() => toast.show("Creación de pedidos disponible en la próxima versión")}>+ Nuevo pedido</PrimaryBtn>}
     >
+      {toast.el}
       {error && (
         <div style={{ padding: "12px 16px", background: "#fee2e2", borderRadius: 8, color: C.danger, marginBottom: 16, fontSize: 13 }}>
           {error}
         </div>
+      )}
+      {selectedOrder && (
+        <DetailPanel
+          title={`Pedido ${selectedOrder.external_ref || selectedOrder.id.slice(0, 8).toUpperCase()}`}
+          onClose={() => setSelectedOrder(null)}
+        >
+          <DetailRow label="ID" value={<span style={{ fontFamily: "monospace", fontSize: 12 }}>{selectedOrder.id}</span>} />
+          <DetailRow label="Referencia" value={selectedOrder.external_ref || "—"} />
+          <DetailRow label="Estado" value={<StatusPill status={selectedOrder.status} />} />
+          <DetailRow label="Fecha servicio" value={selectedOrder.service_date} />
+          <DetailRow label="Zona" value={selectedOrder.zone_id.slice(0, 8)} />
+          <DetailRow label="Peso" value={selectedOrder.total_weight_kg != null ? `${selectedOrder.total_weight_kg} kg` : "—"} />
+          {selectedOrder.operational_state && (
+            <DetailRow label="Estado operativo" value={<StatusPill status={selectedOrder.operational_state} />} />
+          )}
+        </DetailPanel>
       )}
       <div style={{ marginBottom: 16 }}>
         <input
@@ -544,7 +656,10 @@ export function OrdersSection({ token }: { token: string }) {
         <DataTable
           columns={cols}
           rows={rows}
-          onRowClick={(i) => { console.log("order", filtered[i]?.id); }}
+          onRowClick={(i) => {
+            const o = filtered[i];
+            if (o) setSelectedOrder(selectedOrder?.id === o.id ? null : o);
+          }}
           empty={
             <div>
               <div style={{ fontSize: 36, marginBottom: 12 }}>📦</div>
@@ -564,6 +679,8 @@ export function CustomersSection({ token }: { token: string }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -614,8 +731,24 @@ export function CustomersSection({ token }: { token: string }) {
     <SectionPage
       title="Clientes"
       subtitle={`${customers.length} cliente${customers.length !== 1 ? "s" : ""}`}
-      action={<PrimaryBtn>+ Añadir cliente</PrimaryBtn>}
+      action={<PrimaryBtn onClick={() => toast.show("Gestión de clientes disponible en Admin → Clientes")}>+ Añadir cliente</PrimaryBtn>}
     >
+      {toast.el}
+      {selectedCustomer && (
+        <DetailPanel
+          title={selectedCustomer.name}
+          onClose={() => setSelectedCustomer(null)}
+        >
+          <DetailRow label="ID" value={<span style={{ fontFamily: "monospace", fontSize: 12 }}>{selectedCustomer.id}</span>} />
+          <DetailRow label="Prioridad" value={selectedCustomer.priority} />
+          <DetailRow label="Zona" value={selectedCustomer.zone_id.slice(0, 8)} />
+          <DetailRow label="Estado" value={<StatusPill status={selectedCustomer.active ? "eligible" : "cancelled"} />} />
+          {selectedCustomer.cutoff_override_time && (
+            <DetailRow label="Corte personalizado" value={selectedCustomer.cutoff_override_time} />
+          )}
+          <DetailRow label="Creado" value={selectedCustomer.created_at?.slice(0, 10) ?? "—"} />
+        </DetailPanel>
+      )}
       <div style={{ marginBottom: 16 }}>
         <input
           type="search"
@@ -642,6 +775,10 @@ export function CustomersSection({ token }: { token: string }) {
         <DataTable
           columns={cols}
           rows={rows}
+          onRowClick={(i) => {
+            const c = filtered[i];
+            if (c) setSelectedCustomer(selectedCustomer?.id === c.id ? null : c);
+          }}
           empty={
             <div>
               <div style={{ fontSize: 36, marginBottom: 12 }}>🤝</div>
@@ -661,6 +798,8 @@ export function DriversSection({ token }: { token: string }) {
   const [drivers, setDrivers] = useState<DriverOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [selectedDriver, setSelectedDriver] = useState<DriverOut | null>(null);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -712,8 +851,20 @@ export function DriversSection({ token }: { token: string }) {
     <SectionPage
       title="Conductores"
       subtitle={`${drivers.length} conductor${drivers.length !== 1 ? "es" : ""}`}
-      action={<PrimaryBtn>+ Invitar conductor</PrimaryBtn>}
+      action={<PrimaryBtn onClick={() => toast.show("Alta de conductores disponible en Admin → Usuarios")}>+ Invitar conductor</PrimaryBtn>}
     >
+      {toast.el}
+      {selectedDriver && (
+        <DetailPanel
+          title={selectedDriver.name}
+          onClose={() => setSelectedDriver(null)}
+        >
+          <DetailRow label="ID" value={<span style={{ fontFamily: "monospace", fontSize: 12 }}>{selectedDriver.id}</span>} />
+          <DetailRow label="Teléfono" value={selectedDriver.phone || "—"} />
+          <DetailRow label="Vehículo" value={selectedDriver.vehicle_id ? selectedDriver.vehicle_id.slice(0, 8) : "Sin asignar"} />
+          <DetailRow label="Estado" value={<StatusPill status={selectedDriver.is_active ? "eligible" : "cancelled"} />} />
+        </DetailPanel>
+      )}
       <div style={{ marginBottom: 16 }}>
         <input
           type="search"
@@ -740,7 +891,10 @@ export function DriversSection({ token }: { token: string }) {
         <DataTable
           columns={cols}
           rows={rows}
-          onRowClick={(i) => { console.log("driver", filtered[i]?.id); }}
+          onRowClick={(i) => {
+            const d = filtered[i];
+            if (d) setSelectedDriver(selectedDriver?.id === d.id ? null : d);
+          }}
           empty={
             <div>
               <div style={{ fontSize: 36, marginBottom: 12 }}>🚚</div>
@@ -756,27 +910,62 @@ export function DriversSection({ token }: { token: string }) {
 
 // ── InsightsSection ───────────────────────────────────────────────────────────
 
+function KpiCard({ label, value, sub, color }: { label: string; value: number | string; sub: string; color: string }) {
+  return (
+    <div
+      style={{
+        background: C.surface,
+        border: `1px solid ${C.border}`,
+        borderRadius: 10,
+        padding: "20px 24px 16px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+      }}
+    >
+      <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 38, fontWeight: 700, color, lineHeight: 1.1 }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 12, color: C.subtle }}>{sub}</div>
+      <div style={{ marginTop: 14, height: 3, borderRadius: 99, background: `linear-gradient(90deg, ${color}30, ${color})` }} />
+    </div>
+  );
+}
+
 export function InsightsSection({ token }: { token: string }) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [routes, setRoutes] = useState<RoutingRoute[]>([]);
   const [loading, setLoading] = useState(true);
 
   const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
-    void getDailySummary(token, today)
-      .then(setSummary)
-      .catch(() => null)
-      .finally(() => setLoading(false));
+    const fetchAll = async () => {
+      setLoading(true);
+      try {
+        const [sum, rts] = await Promise.allSettled([
+          getDailySummary(token, today),
+          listRoutes(token, { service_date: today }),
+        ] as const);
+        if (sum.status === "fulfilled") setSummary(sum.value);
+        if (rts.status === "fulfilled") setRoutes(rts.value.items);
+      } finally {
+        setLoading(false);
+      }
+    };
+    void fetchAll();
   }, [token, today]);
 
-  const kpis = summary
-    ? [
-        { label: "Pedidos hoy",          value: summary.total_orders,        sub: `${summary.late_orders} tardíos`,         color: C.accent   },
-        { label: "Planes abiertos",      value: summary.plans_open,          sub: `${summary.plans_locked} cerrados`,       color: "#16a34a"  },
-        { label: "Excepciones activas",  value: summary.pending_exceptions,  sub: `${summary.approved_exceptions} aprobadas`, color: "#d97706" },
-        { label: "Excepciones rechaz.",  value: summary.rejected_exceptions, sub: "del período",                             color: "#dc2626"  },
-      ]
-    : [];
+  const totalRoutes     = routes.length;
+  const activeRoutes    = routes.filter((r) => r.status === "in_progress" || r.status === "dispatched").length;
+  const completedRoutes = routes.filter((r) => r.status === "completed").length;
+  const totalStops      = routes.reduce((acc, r) => acc + r.stops.length, 0);
+  const doneStops       = routes.reduce((acc, r) => acc + r.stops.filter((s) => s.status === "completed").length, 0);
+  const failedStops     = routes.reduce((acc, r) => acc + r.stops.filter((s) => s.status === "failed").length, 0);
+  const deliveryRate    = totalStops > 0 ? Math.round((doneStops / totalStops) * 100) : 0;
 
   return (
     <SectionPage
@@ -784,45 +973,32 @@ export function InsightsSection({ token }: { token: string }) {
       subtitle={`Resumen operativo · ${today}`}
     >
       {loading ? (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          {[1, 2, 3, 4].map((i) => <Skeleton key={i} height={140} />)}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+          {[1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} height={130} />)}
         </div>
       ) : (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
-            {kpis.map((k) => (
-              <div
-                key={k.label}
-                style={{
-                  background: C.surface,
-                  border: `1px solid ${C.border}`,
-                  borderRadius: 10,
-                  padding: "20px 24px 16px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 4,
-                }}
-              >
-                <div style={{ fontSize: 12, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                  {k.label}
-                </div>
-                <div style={{ fontSize: 38, fontWeight: 700, color: k.color, lineHeight: 1.1 }}>
-                  {k.value}
-                </div>
-                <div style={{ fontSize: 12, color: C.subtle }}>{k.sub}</div>
-                {/* Sparkline placeholder */}
-                <div
-                  style={{
-                    marginTop: 16,
-                    height: 3,
-                    borderRadius: 99,
-                    background: `linear-gradient(90deg, ${k.color}30, ${k.color})`,
-                  }}
-                />
-              </div>
-            ))}
+          {/* Pedidos */}
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+            Pedidos
           </div>
-          {!summary && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 24 }}>
+            <KpiCard label="Pedidos hoy"       value={summary?.total_orders ?? 0} sub={`${summary?.late_orders ?? 0} tardíos`}           color={C.accent}   />
+            <KpiCard label="Planes abiertos"   value={summary?.plans_open ?? 0}   sub={`${summary?.plans_locked ?? 0} cerrados`}          color="#16a34a"   />
+            <KpiCard label="Excepciones"       value={summary?.pending_exceptions ?? 0} sub={`${summary?.approved_exceptions ?? 0} aprobadas · ${summary?.rejected_exceptions ?? 0} rechazadas`} color="#d97706" />
+          </div>
+
+          {/* Rutas */}
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+            Rutas del día
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 24 }}>
+            <KpiCard label="Rutas totales"     value={totalRoutes}     sub={`${activeRoutes} activas · ${completedRoutes} completadas`} color={C.accent}  />
+            <KpiCard label="Paradas totales"   value={totalStops}      sub={`${doneStops} entregadas · ${failedStops} fallidas`}        color="#7c3aed"   />
+            <KpiCard label="Tasa de entrega"   value={`${deliveryRate}%`} sub={totalStops > 0 ? `${doneStops}/${totalStops} paradas` : "Sin datos"}   color={deliveryRate >= 90 ? "#16a34a" : deliveryRate >= 70 ? "#d97706" : "#dc2626"} />
+          </div>
+
+          {(summary == null && routes.length === 0) && (
             <div style={{ textAlign: "center", color: C.muted, padding: "40px 0", fontSize: 14 }}>
               Sin datos de resumen disponibles
             </div>

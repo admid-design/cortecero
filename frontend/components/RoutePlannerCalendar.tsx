@@ -120,11 +120,11 @@ function canEditRoute(r: RoutingRoute): boolean {
 
 // ── component ────────────────────────────────────────────────────────────────
 
-type Props = { token: string; onBack?: () => void };
+type Props = { token: string; onBack?: () => void; onNewRoute?: () => void };
 type Toast = { kind: "ok" | "err"; msg: string };
 type ViewType = "dia" | "semana";
 
-export function RoutePlannerCalendar({ token, onBack }: Props) {
+export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
   const [weekAnchor, setWeekAnchor]     = useState<Date>(() => new Date());
   const [viewType, setViewType]         = useState<ViewType>("dia");
   const [activeDayIso, setActiveDayIso] = useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -275,7 +275,7 @@ export function RoutePlannerCalendar({ token, onBack }: Props) {
           <button className="rpc-btn-o" onClick={() => void loadData()} disabled={loading}>
             {loading ? "Cargando…" : "↻ Actualizar"}
           </button>
-          <button className="rpc-btn-p">+ Nueva ruta</button>
+          <button className="rpc-btn-p" onClick={onNewRoute}>+ Nueva ruta</button>
         </div>
       </div>
 
