@@ -343,10 +343,12 @@ function DataTable({
   columns,
   rows,
   empty,
+  onRowClick,
 }: {
   columns: string[];
   rows: React.ReactNode[][];
   empty?: React.ReactNode;
+  onRowClick?: (index: number) => void;
 }) {
   return (
     <div
@@ -383,7 +385,14 @@ function DataTable({
           {rows.map((row, i) => (
             <tr
               key={i}
-              style={{ borderBottom: i < rows.length - 1 ? `1px solid #f0f0f0` : "none" }}
+              onClick={onRowClick ? () => onRowClick(i) : undefined}
+              style={{
+                borderBottom: i < rows.length - 1 ? `1px solid #f0f0f0` : "none",
+                cursor: onRowClick ? "pointer" : "default",
+                transition: "background 0.1s",
+              }}
+              onMouseEnter={onRowClick ? (e) => { (e.currentTarget as HTMLElement).style.background = "#f9fafb"; } : undefined}
+              onMouseLeave={onRowClick ? (e) => { (e.currentTarget as HTMLElement).style.background = ""; } : undefined}
             >
               {row.map((cell, j) => (
                 <td key={j} style={{ padding: "12px 16px", color: C.text, verticalAlign: "middle" }}>
@@ -461,6 +470,7 @@ export function OrdersSection({ token }: { token: string }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -478,9 +488,18 @@ export function OrdersSection({ token }: { token: string }) {
 
   useEffect(() => { void load(); }, [load]);
 
+  const filtered = orders.filter((o) => {
+    const q = search.toLowerCase();
+    return (
+      (o.external_ref ?? "").toLowerCase().includes(q) ||
+      o.id.toLowerCase().includes(q) ||
+      o.status.toLowerCase().includes(q)
+    );
+  });
+
   const cols = ["Referencia", "Estado", "Zona", "Peso (kg)", "Fecha servicio"];
 
-  const rows = orders.map((o) => [
+  const rows = filtered.map((o) => [
     <span style={{ fontFamily: "monospace", fontSize: 12, color: C.muted }}>{o.external_ref || o.id.slice(0, 8)}</span>,
     <StatusPill status={o.status} />,
     <span style={{ color: C.muted, fontSize: 12 }}>{o.zone_id.slice(0, 8)}</span>,
@@ -499,6 +518,24 @@ export function OrdersSection({ token }: { token: string }) {
           {error}
         </div>
       )}
+      <div style={{ marginBottom: 16 }}>
+        <input
+          type="search"
+          placeholder="Buscar pedidos…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            width: 280,
+            padding: "8px 14px",
+            borderRadius: 8,
+            border: `1px solid ${C.border}`,
+            fontSize: 13,
+            outline: "none",
+            background: C.surface,
+            color: C.text,
+          }}
+        />
+      </div>
       {loading ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {[1, 2, 3, 4].map((i) => <Skeleton key={i} height={44} />)}
@@ -507,6 +544,7 @@ export function OrdersSection({ token }: { token: string }) {
         <DataTable
           columns={cols}
           rows={rows}
+          onRowClick={(i) => { console.log("order", filtered[i]?.id); }}
           empty={
             <div>
               <div style={{ fontSize: 36, marginBottom: 12 }}>📦</div>
@@ -622,6 +660,7 @@ export function CustomersSection({ token }: { token: string }) {
 export function DriversSection({ token }: { token: string }) {
   const [drivers, setDrivers] = useState<DriverOut[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -637,8 +676,13 @@ export function DriversSection({ token }: { token: string }) {
 
   useEffect(() => { void load(); }, [load]);
 
+  const filtered = drivers.filter((d) =>
+    d.name.toLowerCase().includes(search.toLowerCase()) ||
+    (d.phone ?? "").toLowerCase().includes(search.toLowerCase())
+  );
+
   const cols = ["Conductor", "Teléfono", "Vehículo", "Estado"];
-  const rows = drivers.map((d) => [
+  const rows = filtered.map((d) => [
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <div
         style={{
@@ -670,6 +714,24 @@ export function DriversSection({ token }: { token: string }) {
       subtitle={`${drivers.length} conductor${drivers.length !== 1 ? "es" : ""}`}
       action={<PrimaryBtn>+ Invitar conductor</PrimaryBtn>}
     >
+      <div style={{ marginBottom: 16 }}>
+        <input
+          type="search"
+          placeholder="Buscar conductores…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            width: 280,
+            padding: "8px 14px",
+            borderRadius: 8,
+            border: `1px solid ${C.border}`,
+            fontSize: 13,
+            outline: "none",
+            background: C.surface,
+            color: C.text,
+          }}
+        />
+      </div>
       {loading ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {[1, 2, 3].map((i) => <Skeleton key={i} height={52} />)}
@@ -678,6 +740,7 @@ export function DriversSection({ token }: { token: string }) {
         <DataTable
           columns={cols}
           rows={rows}
+          onRowClick={(i) => { console.log("driver", filtered[i]?.id); }}
           empty={
             <div>
               <div style={{ fontSize: 36, marginBottom: 12 }}>🚚</div>

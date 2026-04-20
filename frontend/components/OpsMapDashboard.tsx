@@ -30,6 +30,7 @@ type OpsMapDashboardProps = {
   onSwitchToAdmin?: () => void;
   onSwitchToPlanner?: () => void;
   isAdmin: boolean;
+  defaultSidebarView?: "rutas" | "gestion";
   token?: string;
   error: string;
 
@@ -287,6 +288,7 @@ export function OpsMapDashboard({
   onSwitchToAdmin,
   onSwitchToPlanner,
   isAdmin,
+  defaultSidebarView,
   token,
   error,
   summary,
@@ -335,7 +337,9 @@ export function OpsMapDashboard({
   onMoveStop,
 }: OpsMapDashboardProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [sidebarView, setSidebarView] = useState<"rutas" | "gestion">("rutas");
+  const [sidebarView, setSidebarView] = useState<"rutas" | "gestion">(defaultSidebarView ?? "rutas");
+  // Pre-computed boolean to avoid TypeScript narrowing issues in JSX
+  const isGestionView = sidebarView === "gestion";
   const [routesSectionOpen, setRoutesSectionOpen] = useState(true);
   const [fleetSectionOpen, setFleetSectionOpen] = useState(true);
   const [unassignedGestionOpen, setUnassignedGestionOpen] = useState(true);
@@ -421,7 +425,7 @@ export function OpsMapDashboard({
 
   // ── render ──────────────────────────────────────────────────────────────────
   return (
-    <div className={`map-first-shell${monitorMode ? " monitor-mode" : ""}`}>
+    <div className={`map-first-shell${monitorMode ? " monitor-mode" : ""}${isGestionView ? " gestion-mode" : ""}`}>
       {/* ── SIDEBAR ── */}
       <aside className="mf-sidebar">
         <div className="mf-sidebar-logo">

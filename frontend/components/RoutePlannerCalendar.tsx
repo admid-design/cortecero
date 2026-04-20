@@ -254,13 +254,16 @@ export function RoutePlannerCalendar({ token, onBack }: Props) {
 
       {/* ── HEADER ── */}
       <div className="rpc-hdr">
-        <div className="rpc-hdr-right" style={{ marginLeft: 0 }}>
+        <div className="rpc-hdr-left">
+          <span className="rpc-hdr-title">Planificador</span>
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <button className="rpc-wbtn" onClick={prevWeek}>‹</button>
             <span className="rpc-wlabel">{weekLabel}</span>
             <button className="rpc-wbtn" onClick={nextWeek}>›</button>
             <button className="rpc-wbtn" onClick={() => setWeekAnchor(new Date())}>Hoy</button>
           </div>
+        </div>
+        <div className="rpc-hdr-right">
           <select
             className="rpc-select"
             value={viewType}

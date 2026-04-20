@@ -575,6 +575,19 @@ body.map-first-mode {
   overflow: hidden;
 }
 
+.map-first-shell.gestion-mode {
+  grid-template-columns: 360px 1fr;
+}
+
+.map-first-shell.gestion-mode .mf-sidebar {
+  width: 360px;
+  max-width: 360px;
+}
+
+.map-first-shell.gestion-mode .mf-right-panel {
+  display: none;
+}
+
 /* ── Left sidebar ── */
 .mf-sidebar {
   background: #111827;
@@ -1218,7 +1231,9 @@ body.map-first-mode {
 }
 .rpc-tab:hover { color: #1a1d23; }
 .rpc-tab.rpc-tab-active { color: #2563eb; border-bottom-color: #2563eb; }
-.rpc-hdr-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.rpc-hdr-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+.rpc-hdr-title { font-size: 13px; font-weight: 700; color: #1a1d23; white-space: nowrap; margin-right: 4px; }
+.rpc-hdr-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .rpc-wbtn {
   border: 1px solid #e2e5ea;
   background: #fff;

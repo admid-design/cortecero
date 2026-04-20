@@ -902,7 +902,7 @@ export default function HomePage() {
       const nextRole = decodeRoleFromToken(auth.access_token);
       setToken(auth.access_token);
       setRole(nextRole);
-      setViewMode("ops");
+      setViewMode(nextRole === "driver" ? "ops" : "planner");
       setAutoLockResult(null);
       setWeightDrafts({});
       setSavingWeightOrderId(null);
@@ -983,7 +983,7 @@ export default function HomePage() {
     setDriverIncidentLoading(false);
     setDriverError(null);
     setDriverSuccess(null);
-    setViewMode("ops");
+    setViewMode("planner");
     setAutoLockResult(null);
     setAutoLockRunning(false);
     setWeightDrafts({});
@@ -1411,6 +1411,7 @@ export default function HomePage() {
         {/* ── Rutas (OpsMapDashboard) ── */}
         {viewMode === "ops" && (
           <OpsMapDashboard
+            defaultSidebarView="gestion"
             role={role}
             onLogout={onLogout}
             onSwitchToAdmin={
