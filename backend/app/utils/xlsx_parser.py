@@ -185,8 +185,18 @@ def parse_csv(file_bytes: bytes, encoding: str = "utf-8") -> Generator[dict[str,
 
     reader = csv.DictReader(io.StringIO(text))
     for row in reader:
-        # Normalizar celdas vacías a None
-        cleaned = {k: (v.strip() if v and v.strip() else None) for k, v in row.items()}
+        # DictReader usa key=None con list[...] cuando una fila trae más columnas que cabeceras.
+        # Ignoramos esas columnas "sobrantes" y normalizamos valores de forma type-safe.
+        cleaned: dict[str, str | None] = {}
+        for key, value in row.items():
+            if key is None:
+                continue
+            if isinstance(value, list):
+                normalized_items = [str(item).strip() for item in value if item is not None and str(item).strip()]
+                cleaned[key] = ", ".join(normalized_items) if normalized_items else None
+            else:
+                stripped = str(value).strip() if value is not None else ""
+                cleaned[key] = stripped if stripped else None
         # Saltar filas completamente vacías
         if all(v is None for v in cleaned.values()):
             continue
