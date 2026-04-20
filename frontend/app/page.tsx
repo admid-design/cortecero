@@ -1367,21 +1367,7 @@ export default function HomePage() {
   // ── RoutePlannerCalendar — full-screen planificador semanal ─────────────────
   if (isAuthenticated && !isDriver && viewMode === "planner") {
     return (
-      <div style={{ height: "100vh", display: "flex", flexDirection: "column", padding: "18px", boxSizing: "border-box", gap: "10px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
-          <button
-            className="secondary"
-            style={{ fontSize: "13px", padding: "4px 12px" }}
-            onClick={() => setViewMode("ops")}
-          >
-            ← Operación
-          </button>
-          <span style={{ fontSize: "16px", fontWeight: 700, color: "var(--ink-strong)" }}>Planificador semanal</span>
-        </div>
-        <div style={{ flex: 1, minHeight: 0 }}>
-          <RoutePlannerCalendar token={token} />
-        </div>
-      </div>
+      <RoutePlannerCalendar token={token} onBack={() => setViewMode("ops")} />
     );
   }
 

@@ -413,15 +413,13 @@ Ver detalle completo en `docs/R10_BACKLOG.md`.
 
 ### Bloques R10 completados
 - ROUTE-PLANNER-TW-001: `PATCH /stops/{stop_id}/scheduled-arrival` + schema + OpenAPI + api.ts — PROMULGADO (commit `7cf26e3`, 2026-04-20)
-  - Hueco declarado: UI inline en RouteDetailCard no implementada (endpoint listo, sin llamador frontend)
-- ROUTE-PLANNER-CAL-001: `RoutePlannerCalendar` vista semanal — sidebar pedidos, click-select, click-ruta → includeOrderInPlan; nav en OpsMapDashboard; rpc-* CSS; ViewMode "planner" — CERRADO_LOCAL (commit `e8510d4`, 2026-04-20)
-  - Hueco declarado: UX implementada asigna pedidos a rutas existentes (includeOrderInPlan); la spec original pedía modal de creación de ruta nueva (POST /routes/plan). Diferencia de alcance declarada.
+- ROUTE-PLANNER-CAL-001 v2: `RoutePlannerCalendar` — KPI strip, toggle semana/día, búsqueda sidebar, gantt timeline con bubbles, drawer slide-in con tabla de paradas + edición inline ETA (`patchStopScheduledArrival`) — PROMULGADO (commit `6d505ac`, 2026-04-20)
+- TW-001-UI: input inline `type="time"` en drawer del planificador — incluido en CAL-001 v2 — PROMULGADO
 
 ### Pendiente en R10
 - R9-CONTRACT-001 — OpenAPI ↔ runtime alineados + catálogo de errores cerrado
 - R9-MONITOR-UX-001 — Delay alerts visibles en panel/drawer + fixes monitor mode
 - MONITOR-MODE-002 conductor — Chat en DriverRoutingCard móvil
-- TW-001 UI — Input inline `type="time"` en RouteDetailCard (hueco declarado de TW-001)
 
 ### Huecos conocidos
 - SSE backend usa asyncio.Queue in-process → no escala con gunicorn multi-worker (fix: Redis + decisión de arquitectura)

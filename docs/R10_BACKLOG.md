@@ -11,8 +11,8 @@
 | Prioridad | ID | Bloque | Estado |
 |-----------|-----|--------|--------|
 | 1 | ROUTE-PLANNER-TW-001 | `PATCH /stops/{stop_id}/scheduled-arrival` — backend + OpenAPI + api.ts | **PROMULGADO** |
-| 2 | ROUTE-PLANNER-CAL-001 | Calendario semanal `RoutePlannerCalendar` — sidebar + click-to-assign | **CERRADO_LOCAL** |
-| 3 | TW-001-UI | Input inline `type="time"` en `RouteDetailCard` para editar hora prevista por parada | PENDIENTE |
+| 2 | ROUTE-PLANNER-CAL-001 | Calendario semanal `RoutePlannerCalendar` v2 — KPI strip, gantt, drawer, TW-001-UI | **PROMULGADO** |
+| 3 | TW-001-UI | Input inline `type="time"` en drawer del planificador (incluido en CAL-001 v2) | **PROMULGADO** |
 | 4 | R9-CONTRACT-001 | OpenAPI ↔ runtime alineados + catálogo de errores cerrado | PENDIENTE |
 | 5 | R9-MONITOR-UX-001 | Delay alerts visibles en panel/drawer + fixes monitor mode | PENDIENTE |
 | 6 | MONITOR-MODE-002 | Chat flotante conductor en `DriverRoutingCard` (completa MONITOR-MODE-002) | PENDIENTE |
