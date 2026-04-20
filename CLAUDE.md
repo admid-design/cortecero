@@ -405,10 +405,23 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
 
 **MONITOR-MODE-002** — PARCIAL. Lado dispatcher (web): operativo — `ChatFloating` en `OpsMapDashboard`, polling 10s, tabs por ruta activa. Lado conductor (móvil): pendiente — `DriverRoutingCard` sin UI de chat. No presentar como "chat bidireccional completo".
 
-### Pendiente próxima fase
-1. **R9-CONTRACT-001** — OpenAPI ↔ runtime alineados + catálogo de errores cerrado
-2. **R9-MONITOR-UX-001** — Delay alerts visibles en panel/drawer + fixes monitor mode
-3. **MONITOR-MODE-002 conductor** — Chat en DriverRoutingCard móvil
+---
+
+## Fase activa actual — R10
+
+Ver detalle completo en `docs/R10_BACKLOG.md`.
+
+### Bloques R10 completados
+- ROUTE-PLANNER-TW-001: `PATCH /stops/{stop_id}/scheduled-arrival` + schema + OpenAPI + api.ts — PROMULGADO (commit `7cf26e3`, 2026-04-20)
+  - Hueco declarado: UI inline en RouteDetailCard no implementada (endpoint listo, sin llamador frontend)
+- ROUTE-PLANNER-CAL-001: `RoutePlannerCalendar` vista semanal — sidebar pedidos, click-select, click-ruta → includeOrderInPlan; nav en OpsMapDashboard; rpc-* CSS; ViewMode "planner" — CERRADO_LOCAL (commit `e8510d4`, 2026-04-20)
+  - Hueco declarado: UX implementada asigna pedidos a rutas existentes (includeOrderInPlan); la spec original pedía modal de creación de ruta nueva (POST /routes/plan). Diferencia de alcance declarada.
+
+### Pendiente en R10
+- R9-CONTRACT-001 — OpenAPI ↔ runtime alineados + catálogo de errores cerrado
+- R9-MONITOR-UX-001 — Delay alerts visibles en panel/drawer + fixes monitor mode
+- MONITOR-MODE-002 conductor — Chat en DriverRoutingCard móvil
+- TW-001 UI — Input inline `type="time"` en RouteDetailCard (hueco declarado de TW-001)
 
 ### Huecos conocidos
 - SSE backend usa asyncio.Queue in-process → no escala con gunicorn multi-worker (fix: Redis + decisión de arquitectura)
