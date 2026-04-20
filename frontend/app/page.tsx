@@ -107,7 +107,8 @@ import { AdminZonesSection } from "../components/AdminZonesSection";
 import { AdminCustomersSection } from "../components/AdminCustomersSection";
 import { OpsMapDashboard } from "../components/OpsMapDashboard";
 import { DriverMobileView } from "../components/DriverMobileView";
-type ViewMode = "ops" | "admin";
+import { RoutePlannerCalendar } from "../components/RoutePlannerCalendar";
+type ViewMode = "ops" | "admin" | "planner";
 type AdminSection = "zones" | "customers" | "users" | "tenant" | "products";
 type OrdersOperationalStateFilter = "all" | "eligible" | "restricted";
 
@@ -1363,6 +1364,27 @@ export default function HomePage() {
     }
   }
 
+  // ── RoutePlannerCalendar — full-screen planificador semanal ─────────────────
+  if (isAuthenticated && !isDriver && viewMode === "planner") {
+    return (
+      <div style={{ height: "100vh", display: "flex", flexDirection: "column", padding: "18px", boxSizing: "border-box", gap: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+          <button
+            className="secondary"
+            style={{ fontSize: "13px", padding: "4px 12px" }}
+            onClick={() => setViewMode("ops")}
+          >
+            ← Operación
+          </button>
+          <span style={{ fontSize: "16px", fontWeight: 700, color: "var(--ink-strong)" }}>Planificador semanal</span>
+        </div>
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <RoutePlannerCalendar token={token} />
+        </div>
+      </div>
+    );
+  }
+
   // ── OpsMapDashboard — renderizado full-screen antes del AppShell ─────────────
   if (isAuthenticated && !isDriver && viewMode === "ops") {
     return (
@@ -1377,6 +1399,7 @@ export default function HomePage() {
               }
             : undefined
         }
+        onSwitchToPlanner={canManageRouting ? () => setViewMode("planner") : undefined}
         isAdmin={isAdmin}
         token={token || undefined}
         error={error}

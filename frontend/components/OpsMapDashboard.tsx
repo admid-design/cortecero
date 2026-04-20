@@ -28,6 +28,7 @@ type OpsMapDashboardProps = {
   role: UserRole | null;
   onLogout: () => void;
   onSwitchToAdmin?: () => void;
+  onSwitchToPlanner?: () => void;
   isAdmin: boolean;
   token?: string;
   error: string;
@@ -284,6 +285,7 @@ export function OpsMapDashboard({
   role,
   onLogout,
   onSwitchToAdmin,
+  onSwitchToPlanner,
   isAdmin,
   token,
   error,
@@ -459,6 +461,16 @@ export function OpsMapDashboard({
             )}
           </button>
         </div>
+
+        {onSwitchToPlanner && (
+          <div className="mf-sidebar-section">
+            <div className="mf-sidebar-section-label">Planificación</div>
+            <button className="mf-nav-item" onClick={onSwitchToPlanner}>
+              <span className="mf-nav-icon">📅</span>
+              Planificador
+            </button>
+          </div>
+        )}
 
         {isAdmin && (
           <div className="mf-sidebar-section">
