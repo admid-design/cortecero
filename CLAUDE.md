@@ -415,14 +415,25 @@ Ver detalle completo en `docs/R10_BACKLOG.md`.
 - ROUTE-PLANNER-TW-001: `PATCH /stops/{stop_id}/scheduled-arrival` + schema + OpenAPI + api.ts — PROMULGADO (commit `7cf26e3`, 2026-04-20)
 - ROUTE-PLANNER-CAL-001 v2: `RoutePlannerCalendar` — KPI strip, toggle semana/día, búsqueda sidebar, gantt timeline con bubbles, drawer slide-in con tabla de paradas + edición inline ETA (`patchStopScheduledArrival`) — PROMULGADO (commit `6d505ac`, 2026-04-20)
 - TW-001-UI: input inline `type="time"` en drawer del planificador — incluido en CAL-001 v2 — PROMULGADO
-
 - R9-MONITOR-UX-001: chip delay badge persiste tras cerrar drawer — PROMULGADO (commit `b9e9374`, 2026-04-20)
 - PLANNER-AS-HOME-001: Planificador como pantalla inicial; login/logout → viewMode `planner` — PROMULGADO (commit `1516307`, 2026-04-20)
 - UX-SHELL-002: Rutas defaulta a Gestión Operativa (sin mapa, sin panel derecho); search en Pedidos/Conductores; DataTable rows clickables; header Planificador full-width — PROMULGADO (commit `815ba0a`, 2026-04-20)
+- UX-CLEANUP-001: eliminado nav "Rutas" interno + pills de estado azules en `OpsMapDashboard` — CERRADO_LOCAL (commit `442be46`, 2026-04-20)
+- ROUTIFIC-ANALYSIS-001: análisis quirúrgico Routific Beta + tabla comparativa + diseño XLSX import (Tipo A pedidos + Tipo B plantillas estacionales) — CERRADO, entregable en `docs/routific-analysis-and-xlsx-import.md` (2026-04-20)
 
-### Pendiente en R10
+### Pendiente en R10 — XLSX Import (prioridad por orden)
+- ROUTE-TEMPLATE-MODEL-001 — Migration + models `RouteTemplate` + `RouteTemplateStop` (sin dependencias)
+- XLSX-PARSE-001 — Parser `openpyxl` reutilizable en `backend/app/utils/xlsx_parser.py` (sin dependencias)
+- XLSX-TEMPLATES-001 — `POST /route-templates/import-xlsx` — importación rutas estacionales Tipo B (depende de los dos anteriores)
+- ROUTE-FROM-TEMPLATE-001 — `POST /routes/from-template` — genera ruta operativa desde plantilla
+- XLSX-UI-TEMPLATES-001 — Frontend: modal importación temporada + preview plantillas detectadas
+- XLSX-ORDERS-001 — `POST /orders/import-xlsx` — importación pedidos Tipo A
+- XLSX-UI-ORDERS-001 — Frontend: modal pedidos con mapper visual + vista previa
+- DATE-FORMAT-CONFIG-001 — Setting `xlsx_date_format` en tenant + PATCH endpoint + UI
+
+### Pendiente en R10 — otros
 - R9-CONTRACT-001 — OpenAPI ↔ runtime alineados + catálogo de errores cerrado
-- MONITOR-MODE-002 conductor — Chat en DriverRoutingCard móvil
+- MONITOR-MODE-002 conductor — Chat en `DriverRoutingCard` móvil
 
 ### Huecos conocidos
 - SSE backend usa asyncio.Queue in-process → no escala con gunicorn multi-worker (fix: Redis + decisión de arquitectura)
