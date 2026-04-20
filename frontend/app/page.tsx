@@ -108,7 +108,15 @@ import { AdminCustomersSection } from "../components/AdminCustomersSection";
 import { OpsMapDashboard } from "../components/OpsMapDashboard";
 import { DriverMobileView } from "../components/DriverMobileView";
 import { RoutePlannerCalendar } from "../components/RoutePlannerCalendar";
-type ViewMode = "ops" | "admin" | "planner";
+import {
+  GlobalShell,
+  OrdersSection,
+  CustomersSection,
+  DriversSection,
+  InsightsSection,
+} from "../components/GlobalShell";
+import type { SidebarSection } from "../components/GlobalShell";
+type ViewMode = "ops" | "admin" | "planner" | "orders" | "customers" | "drivers" | "insights";
 type AdminSection = "zones" | "customers" | "users" | "tenant" | "products";
 type OrdersOperationalStateFilter = "all" | "eligible" | "restricted";
 
@@ -1364,77 +1372,116 @@ export default function HomePage() {
     }
   }
 
-  // ── RoutePlannerCalendar — full-screen planificador semanal ─────────────────
-  if (isAuthenticated && !isDriver && viewMode === "planner") {
-    return (
-      <RoutePlannerCalendar token={token} onBack={() => setViewMode("ops")} />
-    );
-  }
+  // ── GlobalShell — vistas de dispatcher (excepto admin que usa AppShell) ─────
+  if (isAuthenticated && !isDriver && viewMode !== "admin") {
+    const sectionMap: Record<ViewMode, SidebarSection> = {
+      ops:       "routes",
+      planner:   "planner",
+      orders:    "orders",
+      customers: "customers",
+      drivers:   "drivers",
+      insights:  "insights",
+      admin:     "settings",
+    };
+    const activeSection = sectionMap[viewMode] ?? "routes";
 
-  // ── OpsMapDashboard — renderizado full-screen antes del AppShell ─────────────
-  if (isAuthenticated && !isDriver && viewMode === "ops") {
+    const handleNavigate = (s: SidebarSection) => {
+      const vmMap: Record<SidebarSection, ViewMode> = {
+        routes:    "ops",
+        planner:   "planner",
+        orders:    "orders",
+        customers: "customers",
+        drivers:   "drivers",
+        insights:  "insights",
+        settings:  "admin",
+      };
+      const next = vmMap[s];
+      if (next === "admin") void refreshZones();
+      setViewMode(next);
+    };
+
     return (
-      <OpsMapDashboard
-        role={role}
-        onLogout={onLogout}
-        onSwitchToAdmin={
-          isAdmin
-            ? () => {
-                setViewMode("admin");
-                void refreshZones();
-              }
-            : undefined
-        }
-        onSwitchToPlanner={canManageRouting ? () => setViewMode("planner") : undefined}
+      <GlobalShell
+        activeSection={activeSection}
+        onNavigate={handleNavigate}
+        canManageRouting={canManageRouting}
         isAdmin={isAdmin}
-        token={token || undefined}
-        error={error}
-        summary={summary}
-        serviceDate={serviceDate}
-        onServiceDateChange={setServiceDate}
-        routeStatus={dispatcherRouteStatus}
-        onRouteStatusChange={setDispatcherRouteStatus}
-        loading={dispatcherLoading}
-        routes={dispatcherRoutes}
-        selectedRouteId={selectedDispatcherRouteId}
-        onSelectedRouteIdChange={onSelectDispatcherRoute}
-        selectedRoute={selectedDispatcherRoute}
-        routeEvents={selectedDispatcherRouteEvents}
-        delayAlerts={selectedDispatcherRouteDelayAlerts}
-        routeDetailLoading={dispatcherRouteDetailLoading}
-        canManage={canManageRouting}
-        driverPosition={dispatcherDriverPosition}
-        activePositions={activePositions}
-        optimizingRouteId={dispatcherOptimizingRouteId}
-        dispatchingRouteId={dispatcherDispatchingRouteId}
-        recalculatingEtaRouteId={dispatcherRecalculatingEtaRouteId}
-        onOptimizeRoute={(id) => void onOptimizeDispatcherRoute(id)}
-        onDispatchRoute={(id) => void onDispatchDispatcherRoute(id)}
-        onRecalculateEta={(id) => void onRecalculateDispatcherEta(id)}
-        onRefresh={() => void refreshDispatcher()}
-        readyOrders={dispatcherReadyOrders}
-        availableVehicles={dispatcherVehicles}
-        availableDrivers={opsDrivers}
-        availablePlans={plans.filter((p) => p.service_date === serviceDate)}
-        planId={dispatcherPlanId}
-        onPlanIdChange={setDispatcherPlanId}
-        planVehicleId={dispatcherPlanVehicleId}
-        onPlanVehicleIdChange={setDispatcherPlanVehicleId}
-        planDriverId={dispatcherPlanDriverId}
-        onPlanDriverIdChange={setDispatcherPlanDriverId}
-        planOrderIds={dispatcherPlanOrderIds}
-        onPlanOrderIdsChange={setDispatcherPlanOrderIds}
-        creatingPlan={dispatcherPlanCreating}
-        onCreatePlan={() => void onCreateDispatcherRoutePlan()}
-        moveSourceRouteId={dispatcherMoveSourceRouteId}
-        onMoveSourceRouteIdChange={setDispatcherMoveSourceRouteId}
-        moveStopId={dispatcherMoveStopId}
-        onMoveStopIdChange={setDispatcherMoveStopId}
-        moveTargetRouteId={dispatcherMoveTargetRouteId}
-        onMoveTargetRouteIdChange={setDispatcherMoveTargetRouteId}
-        movingStop={dispatcherMovingStop}
-        onMoveStop={() => void onMoveDispatcherStop()}
-      />
+        onLogout={onLogout}
+      >
+        {/* ── Rutas (OpsMapDashboard) ── */}
+        {viewMode === "ops" && (
+          <OpsMapDashboard
+            role={role}
+            onLogout={onLogout}
+            onSwitchToAdmin={
+              isAdmin
+                ? () => { setViewMode("admin"); void refreshZones(); }
+                : undefined
+            }
+            onSwitchToPlanner={canManageRouting ? () => setViewMode("planner") : undefined}
+            isAdmin={isAdmin}
+            token={token || undefined}
+            error={error}
+            summary={summary}
+            serviceDate={serviceDate}
+            onServiceDateChange={setServiceDate}
+            routeStatus={dispatcherRouteStatus}
+            onRouteStatusChange={setDispatcherRouteStatus}
+            loading={dispatcherLoading}
+            routes={dispatcherRoutes}
+            selectedRouteId={selectedDispatcherRouteId}
+            onSelectedRouteIdChange={onSelectDispatcherRoute}
+            selectedRoute={selectedDispatcherRoute}
+            routeEvents={selectedDispatcherRouteEvents}
+            delayAlerts={selectedDispatcherRouteDelayAlerts}
+            routeDetailLoading={dispatcherRouteDetailLoading}
+            canManage={canManageRouting}
+            driverPosition={dispatcherDriverPosition}
+            activePositions={activePositions}
+            optimizingRouteId={dispatcherOptimizingRouteId}
+            dispatchingRouteId={dispatcherDispatchingRouteId}
+            recalculatingEtaRouteId={dispatcherRecalculatingEtaRouteId}
+            onOptimizeRoute={(id) => void onOptimizeDispatcherRoute(id)}
+            onDispatchRoute={(id) => void onDispatchDispatcherRoute(id)}
+            onRecalculateEta={(id) => void onRecalculateDispatcherEta(id)}
+            onRefresh={() => void refreshDispatcher()}
+            readyOrders={dispatcherReadyOrders}
+            availableVehicles={dispatcherVehicles}
+            availableDrivers={opsDrivers}
+            availablePlans={plans.filter((p) => p.service_date === serviceDate)}
+            planId={dispatcherPlanId}
+            onPlanIdChange={setDispatcherPlanId}
+            planVehicleId={dispatcherPlanVehicleId}
+            onPlanVehicleIdChange={setDispatcherPlanVehicleId}
+            planDriverId={dispatcherPlanDriverId}
+            onPlanDriverIdChange={setDispatcherPlanDriverId}
+            planOrderIds={dispatcherPlanOrderIds}
+            onPlanOrderIdsChange={setDispatcherPlanOrderIds}
+            creatingPlan={dispatcherPlanCreating}
+            onCreatePlan={() => void onCreateDispatcherRoutePlan()}
+            moveSourceRouteId={dispatcherMoveSourceRouteId}
+            onMoveSourceRouteIdChange={setDispatcherMoveSourceRouteId}
+            moveStopId={dispatcherMoveStopId}
+            onMoveStopIdChange={setDispatcherMoveStopId}
+            moveTargetRouteId={dispatcherMoveTargetRouteId}
+            onMoveTargetRouteIdChange={setDispatcherMoveTargetRouteId}
+            movingStop={dispatcherMovingStop}
+            onMoveStop={() => void onMoveDispatcherStop()}
+          />
+        )}
+
+        {/* ── Planificador ── */}
+        {viewMode === "planner" && (
+          <RoutePlannerCalendar token={token} onBack={() => setViewMode("ops")} />
+        )}
+
+        {/* ── Nuevas secciones ── */}
+        {viewMode === "orders"    && <OrdersSection    token={token} />}
+        {viewMode === "customers" && <CustomersSection token={token} />}
+        {viewMode === "drivers"   && <DriversSection   token={token} />}
+        {viewMode === "insights"  && <InsightsSection  token={token} />}
+
+      </GlobalShell>
     );
   }
 
