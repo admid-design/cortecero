@@ -1127,6 +1127,19 @@ export async function confirmProofPhoto(
   });
 }
 
+// ROUTE-PLANNER-TW-001 — Editar hora de llegada planificada de una parada
+export async function patchStopScheduledArrival(
+  token: string,
+  stopId: string,
+  scheduledArrivalAt: string, // ISO 8601 con timezone
+): Promise<RoutingRouteStop> {
+  return request<RoutingRouteStop>(`/stops/${stopId}/scheduled-arrival`, {
+    token,
+    method: "PATCH",
+    body: { scheduled_arrival_at: scheduledArrivalAt },
+  });
+}
+
 // ── Driver Position — A3 (GPS-001) ───────────────────────────────────────────
 
 export type DriverPositionOut = {

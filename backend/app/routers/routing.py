@@ -91,6 +91,7 @@ from app.schemas import (
     RouteStopCompleteRequest,
     RouteStopFailRequest,
     RouteStopSkipRequest,
+    RouteStopScheduledArrivalRequest,
     RouteStopOut,
     RoutesListResponse,
     StopProofCreateRequest,
@@ -2341,6 +2342,40 @@ def confirm_proof_photo(
     db.commit()
     db.refresh(proof)
     return proof
+
+
+# ============================================================================
+# ROUTE-PLANNER-TW-001 — Editar hora de llegada planificada de una parada
+# ============================================================================
+
+
+@router.patch("/stops/{stop_id}/scheduled-arrival", response_model=RouteStopOut)
+def update_stop_scheduled_arrival(
+    stop_id: uuid.UUID,
+    payload: RouteStopScheduledArrivalRequest,
+    db: Session = Depends(get_db),
+    current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
+) -> RouteStopOut:
+    """
+    Editar la hora de llegada planificada (estimated_arrival_at) de una parada.
+
+    Solo disponible para dispatchers (logistics, admin).
+    Rechaza paradas en estado terminal (completed, failed, skipped).
+    No emite RouteEvent — es un ajuste de planificación, no un cambio de estado operativo.
+    """
+    stop = _get_stop_guarded(db, current.tenant_id, stop_id)
+
+    terminal = {RouteStopStatus.completed, RouteStopStatus.failed, RouteStopStatus.skipped}
+    if stop.status in terminal:
+        raise unprocessable(
+            "STOP_TERMINAL",
+            f"No se puede modificar una parada en estado '{stop.status.value}'",
+        )
+
+    stop.estimated_arrival_at = payload.scheduled_arrival_at
+    db.commit()
+    db.refresh(stop)
+    return RouteStopOut.model_validate(stop)
 
 
 # ============================================================================

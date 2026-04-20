@@ -703,6 +703,10 @@ class RouteStopSkipRequest(BaseModel):
     idempotency_key: str | None = None
 
 
+class RouteStopScheduledArrivalRequest(BaseModel):
+    scheduled_arrival_at: datetime
+
+
 class RouteNextStopResponse(BaseModel):
     route_id: uuid.UUID
     next_stop: RouteStopOut | None = None

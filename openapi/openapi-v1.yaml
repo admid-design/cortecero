@@ -2537,6 +2537,43 @@ paths:
         "422":
           description: INVALID_OBJECT_KEY — object_key no pertenece al tenant
 
+  /stops/{stop_id}/scheduled-arrival:
+    patch:
+      tags: [Routing]
+      summary: Editar hora de llegada planificada de una parada (ROUTE-PLANNER-TW-001)
+      description: >
+        Actualiza `estimated_arrival_at` de una parada sin cambiar su estado operativo.
+        Solo disponible para dispatchers (logistics, admin).
+        Rechaza paradas en estado terminal (completed, failed, skipped).
+      parameters:
+        - in: path
+          name: stop_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteStopScheduledArrivalRequest'
+      responses:
+        "200":
+          description: Parada con estimated_arrival_at actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteStopOut'
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol insuficiente (solo logistics/admin)
+        "404":
+          description: Parada no encontrada
+        "422":
+          description: STOP_TERMINAL — La parada está en estado terminal
+
   /driver/location:
     post:
       tags: [Routing]
@@ -4440,6 +4477,15 @@ components:
           nullable: true
           description: >
             Clave de idempotencia. Si coincide con stop.skipped previo → 200.
+
+    RouteStopScheduledArrivalRequest:
+      type: object
+      required: [scheduled_arrival_at]
+      properties:
+        scheduled_arrival_at:
+          type: string
+          format: date-time
+          description: Nueva hora de llegada planificada (ISO 8601 con timezone)
 
     RouteNextStopResponse:
       type: object
