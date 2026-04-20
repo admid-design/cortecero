@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import type { Order, Customer, DriverOut, DashboardSummary, RoutingRoute } from "../lib/api";
+import type { Order, Customer, DriverOut, DashboardSummary, RoutingRoute, OrderImportResult } from "../lib/api";
 import {
   listOrders,
   listAdminCustomers,
   listDrivers,
   getDailySummary,
   listRoutes,
+  importOrdersXlsx,
 } from "../lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -557,6 +558,246 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
+// ── OrderImportModal ──────────────────────────────────────────────────────────
+
+function OrderImportModal({
+  token,
+  onClose,
+  onSuccess,
+}: {
+  token: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [file, setFile] = useState<File | null>(null);
+  const [serviceDate, setServiceDate] = useState(today);
+  const [phase, setPhase] = useState<"idle" | "loading" | "result">("idle");
+  const [result, setResult] = useState<OrderImportResult | null>(null);
+  const [importError, setImportError] = useState("");
+
+  const handleImport = async () => {
+    if (!file) return;
+    setPhase("loading");
+    setImportError("");
+    try {
+      const res = await importOrdersXlsx(token, file, serviceDate);
+      setResult(res);
+      setPhase("result");
+      if (res.imported > 0) onSuccess();
+    } catch (e) {
+      setImportError(String(e));
+      setPhase("idle");
+    }
+  };
+
+  const overlayStyle: React.CSSProperties = {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.45)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1000,
+  };
+
+  const boxStyle: React.CSSProperties = {
+    background: C.surface,
+    borderRadius: 14,
+    padding: "28px 28px 24px",
+    width: 440,
+    maxWidth: "92vw",
+    boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 20,
+  };
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 600,
+    color: C.muted,
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+    marginBottom: 6,
+    display: "block",
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "9px 12px",
+    borderRadius: 8,
+    border: `1px solid ${C.border}`,
+    fontSize: 13,
+    color: C.text,
+    background: C.bg,
+    outline: "none",
+    boxSizing: "border-box",
+  };
+
+  return (
+    <div style={overlayStyle} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={boxStyle}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Importar pedidos</div>
+          <button
+            onClick={onClose}
+            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: C.muted, lineHeight: 1 }}
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+
+        {phase !== "result" && (
+          <>
+            {/* File picker */}
+            <div>
+              <label style={labelStyle}>Fichero (.xlsx o .csv)</label>
+              <input
+                type="file"
+                accept=".xlsx,.csv"
+                disabled={phase === "loading"}
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                style={{ ...inputStyle, cursor: "pointer" }}
+              />
+              {file && (
+                <div style={{ marginTop: 6, fontSize: 12, color: C.muted }}>
+                  {file.name} · {(file.size / 1024).toFixed(1)} KB
+                </div>
+              )}
+            </div>
+
+            {/* Date picker */}
+            <div>
+              <label style={labelStyle}>Fecha de servicio</label>
+              <input
+                type="date"
+                value={serviceDate}
+                disabled={phase === "loading"}
+                onChange={(e) => setServiceDate(e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+
+            {/* Error */}
+            {importError && (
+              <div style={{ padding: "10px 14px", background: "#fee2e2", borderRadius: 8, color: C.danger, fontSize: 13 }}>
+                {importError}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={onClose}
+                disabled={phase === "loading"}
+                style={{
+                  padding: "9px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
+                  background: C.surface, fontSize: 13, cursor: "pointer", color: C.text,
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={!file || phase === "loading"}
+                style={{
+                  padding: "9px 18px", borderRadius: 8, border: "none",
+                  background: !file || phase === "loading" ? C.border : C.accent,
+                  color: "#fff", fontSize: 13, fontWeight: 600,
+                  cursor: !file || phase === "loading" ? "not-allowed" : "pointer",
+                  display: "flex", alignItems: "center", gap: 8,
+                }}
+              >
+                {phase === "loading" ? (
+                  <>
+                    <span style={{ display: "inline-block", width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+                    Importando…
+                  </>
+                ) : "Importar"}
+              </button>
+            </div>
+          </>
+        )}
+
+        {phase === "result" && result && (
+          <>
+            {/* Summary */}
+            <div style={{ display: "flex", gap: 12 }}>
+              <div style={{ flex: 1, background: result.imported > 0 ? "#f0fdf4" : C.bg, borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: result.imported > 0 ? C.success : C.muted }}>{result.imported}</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>importados</div>
+              </div>
+              <div style={{ flex: 1, background: result.skipped > 0 ? "#fffbeb" : C.bg, borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: result.skipped > 0 ? C.warning : C.muted }}>{result.skipped}</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>saltados</div>
+              </div>
+            </div>
+
+            {/* Update notice */}
+            {result.imported > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#f0fdf4", borderRadius: 8, fontSize: 13, color: C.success }}>
+                <span>✓</span>
+                <span>La lista de pedidos se ha actualizado</span>
+              </div>
+            )}
+
+            {/* Errors */}
+            {result.errors.length > 0 && (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.danger, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Errores ({result.errors.length})
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 140, overflowY: "auto" }}>
+                  {result.errors.map((e, i) => (
+                    <div key={i} style={{ fontSize: 12, padding: "6px 10px", background: "#fee2e2", borderRadius: 6, color: C.danger }}>
+                      Fila {e.row}: {e.reason}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Warnings */}
+            {result.warnings.length > 0 && (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.warning, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Avisos ({result.warnings.length})
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 140, overflowY: "auto" }}>
+                  {result.warnings.map((w, i) => (
+                    <div key={i} style={{ fontSize: 12, padding: "6px 10px", background: "#fffbeb", borderRadius: 6, color: C.warning }}>
+                      Fila {w.row}: {w.reason}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Close */}
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={onClose}
+                style={{
+                  padding: "9px 18px", borderRadius: 8, border: "none",
+                  background: C.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Keyframe for spinner */}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
 // ── OrdersSection ─────────────────────────────────────────────────────────────
 
 export function OrdersSection({ token }: { token: string }) {
@@ -565,6 +806,7 @@ export function OrdersSection({ token }: { token: string }) {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
   const toast = useToast();
 
   const today = new Date().toISOString().slice(0, 10);
@@ -606,9 +848,38 @@ export function OrdersSection({ token }: { token: string }) {
     <SectionPage
       title="Pedidos"
       subtitle={`${orders.length} pedido${orders.length !== 1 ? "s" : ""} · ${today}`}
-      action={<PrimaryBtn onClick={() => toast.show("Creación de pedidos disponible en la próxima versión")}>+ Nuevo pedido</PrimaryBtn>}
+      action={
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => setShowImportModal(true)}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: `1px solid ${C.border}`,
+              background: C.surface,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              color: C.text,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            ↑ Importar XLSX
+          </button>
+          <PrimaryBtn onClick={() => toast.show("Creación de pedidos disponible en la próxima versión")}>+ Nuevo pedido</PrimaryBtn>
+        </div>
+      }
     >
       {toast.el}
+      {showImportModal && (
+        <OrderImportModal
+          token={token}
+          onClose={() => setShowImportModal(false)}
+          onSuccess={() => { void load(); }}
+        />
+      )}
       {error && (
         <div style={{ padding: "12px 16px", background: "#fee2e2", borderRadius: 8, color: C.danger, marginBottom: 16, fontSize: 13 }}>
           {error}
