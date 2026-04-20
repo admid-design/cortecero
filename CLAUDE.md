@@ -416,9 +416,12 @@ Ver detalle completo en `docs/R10_BACKLOG.md`.
 - ROUTE-PLANNER-CAL-001 v2: `RoutePlannerCalendar` — KPI strip, toggle semana/día, búsqueda sidebar, gantt timeline con bubbles, drawer slide-in con tabla de paradas + edición inline ETA (`patchStopScheduledArrival`) — PROMULGADO (commit `6d505ac`, 2026-04-20)
 - TW-001-UI: input inline `type="time"` en drawer del planificador — incluido en CAL-001 v2 — PROMULGADO
 
+- R9-MONITOR-UX-001: chip delay badge persiste tras cerrar drawer — PROMULGADO (commit `b9e9374`, 2026-04-20)
+- PLANNER-AS-HOME-001: Planificador como pantalla inicial; login/logout → viewMode `planner` — PROMULGADO (commit `1516307`, 2026-04-20)
+- UX-SHELL-002: Rutas defaulta a Gestión Operativa (sin mapa, sin panel derecho); search en Pedidos/Conductores; DataTable rows clickables; header Planificador full-width — PROMULGADO (commit `815ba0a`, 2026-04-20)
+
 ### Pendiente en R10
 - R9-CONTRACT-001 — OpenAPI ↔ runtime alineados + catálogo de errores cerrado
-- R9-MONITOR-UX-001 — Delay alerts visibles en panel/drawer + fixes monitor mode
 - MONITOR-MODE-002 conductor — Chat en DriverRoutingCard móvil
 
 ### Huecos conocidos

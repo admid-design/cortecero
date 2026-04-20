@@ -439,19 +439,6 @@ export function OpsMapDashboard({
         <div className="mf-sidebar-section">
           <div className="mf-sidebar-section-label">Operación</div>
           <button
-            className={`mf-nav-item${sidebarView === "rutas" ? " active" : ""}`}
-            onClick={() => setSidebarView("rutas")}
-          >
-            <span className="mf-nav-icon">🗺</span>
-            <span className="mf-nav-item-text">
-              <span className="mf-nav-item-label">Rutas</span>
-              <span className="mf-nav-item-sub">Ver mapa · optimizar · despachar</span>
-            </span>
-            {activeRoutes > 0 && (
-              <span className="mf-badge-dot">{activeRoutes}</span>
-            )}
-          </button>
-          <button
             className={`mf-nav-item${sidebarView === "gestion" ? " active" : ""}`}
             onClick={() => setSidebarView("gestion")}
           >
@@ -734,28 +721,6 @@ export function OpsMapDashboard({
       {sidebarView === "rutas" && <div className="mf-map-area">
         {/* Filter bar */}
         <div className="mf-map-filter-bar">
-          <div className="mf-status-pills">
-            {(
-              [
-                { value: "all", label: "Todas" },
-                { value: "in_progress", label: "En curso" },
-                { value: "dispatched", label: "Despachada" },
-                { value: "planned", label: "Planificada" },
-                { value: "completed", label: "Completada" },
-                { value: "draft", label: "Borrador" },
-                { value: "cancelled", label: "Cancelada" },
-              ] as { value: "all" | RoutingRouteStatus; label: string }[]
-            ).map((opt) => (
-              <button
-                key={opt.value}
-                className={`mf-status-pill${routeStatus === opt.value ? " active" : ""}`}
-                onClick={() => onRouteStatusChange(opt.value)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
           <div className="mf-filter-right">
             {activeRoutesList.length > 0 && (
               <button

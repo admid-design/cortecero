@@ -2,7 +2,7 @@
 
 > Fase: R10 — PLANIFICADOR + CONTRATOS + UX MONITOR
 > Principio rector: completar el planificador semanal, cerrar contratos API y finalizar monitor mode.
-> Última actualización: 2026-04-20
+> Última actualización: 2026-04-20 (rev 2)
 
 ---
 
@@ -13,13 +13,33 @@
 | 1 | ROUTE-PLANNER-TW-001 | `PATCH /stops/{stop_id}/scheduled-arrival` — backend + OpenAPI + api.ts | **PROMULGADO** |
 | 2 | ROUTE-PLANNER-CAL-001 | Calendario semanal `RoutePlannerCalendar` v2 — KPI strip, gantt, drawer, TW-001-UI | **PROMULGADO** |
 | 3 | TW-001-UI | Input inline `type="time"` en drawer del planificador (incluido en CAL-001 v2) | **PROMULGADO** |
-| 4 | R9-CONTRACT-001 | OpenAPI ↔ runtime alineados + catálogo de errores cerrado | PENDIENTE |
-| 5 | R9-MONITOR-UX-001 | Delay alerts visibles en panel/drawer + fixes monitor mode | **CERRADO_LOCAL** |
-| 6 | MONITOR-MODE-002 | Chat flotante conductor en `DriverRoutingCard` (completa MONITOR-MODE-002) | PENDIENTE |
+| 4 | UX-CLEANUP-001 | Eliminar nav "Rutas" interno + pills de estado azules en `OpsMapDashboard` | **CERRADO_LOCAL** |
+| 5 | R9-CONTRACT-001 | OpenAPI ↔ runtime alineados + catálogo de errores cerrado | PENDIENTE |
+| 6 | R9-MONITOR-UX-001 | Delay alerts visibles en panel/drawer + fixes monitor mode | **CERRADO_LOCAL** |
+| 7 | MONITOR-MODE-002 | Chat flotante conductor en `DriverRoutingCard` (completa MONITOR-MODE-002) | PENDIENTE |
 
 ---
 
 ## Bloques cerrados en R10
+
+### UX-CLEANUP-001 — Eliminación de ruido UI en OpsMapDashboard
+
+**Tipo:** IMPLEMENTATION
+**Estado:** CERRADO_LOCAL — 2026-04-20
+**Objetivo:** Eliminar el botón de nav interno "Rutas" y las pills de filtro de estado azules que aparecían al hacer clic en "Rutas" desde el sidebar, ya que pertenecen al dashboard antiguo y crean confusión con el nuevo flujo.
+
+**Cerrado:**
+- ✅ Eliminado bloque `<button mf-nav-item onClick={() => setSidebarView("rutas")}>` (nav interno "Rutas") en `OpsMapDashboard.tsx`
+- ✅ Eliminado bloque `<div className="mf-status-pills">` con los 7 botones de filtro (Todas/En curso/Despachada/Planificada/Completada/Borrador/Cancelada)
+- ✅ Conservada barra `mf-filter-right` (toggle Monitoreo/Panel + date picker + refresh)
+- ✅ Conservada lógica monitor mode (`sidebarView === "rutas"` sigue siendo válido internamente para KPI cards)
+- ✅ `tsc --noEmit` pendiente de ejecutar (sandbox sin Docker)
+
+**Huecos declarados:**
+- `sidebarView` puede quedar en `"rutas"` si había rutas activas al cambiar de vista — comportamiento inocuo (solo afecta modo monitor)
+- Vercel pendiente de confirmar con push del usuario
+
+---
 
 ### ROUTE-PLANNER-TW-001 — Edición hora prevista por parada
 
