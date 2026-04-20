@@ -196,7 +196,7 @@ export default function HomePage() {
   const [password, setPassword] = useState("");
   const [token, setToken] = useState("");
   const [role, setRole] = useState<UserRole | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("ops");
+  const [viewMode, setViewMode] = useState<ViewMode>("planner");
   const [adminSection, setAdminSection] = useState<AdminSection>("zones");
 
   const [serviceDate, setServiceDate] = useState(() => new Date().toISOString().slice(0, 10));

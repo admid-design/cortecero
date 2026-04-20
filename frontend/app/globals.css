@@ -1421,6 +1421,40 @@ body.map-first-mode {
   overflow: hidden;
   background: #c8dff0;
 }
+/* RouteMapCard integrado en el planificador — sin card chrome, mapa limpio */
+.rpc-map-section .route-map-card {
+  height: 100%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  gap: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rpc-map-section .route-map-card > h4,
+.rpc-map-section .route-map-card > .route-map-meta,
+.rpc-map-section .route-map-card > .route-map-legend { display: none; }
+.rpc-map-section .route-map-canvas {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+/* Hint cuando no hay ruta seleccionada */
+.rpc-map-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,.55);
+  color: #fff;
+  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  pointer-events: none;
+  white-space: nowrap;
+}
 .rpc-map-svg { width: 100%; height: 100%; }
 .rpc-live-badge {
   position: absolute;

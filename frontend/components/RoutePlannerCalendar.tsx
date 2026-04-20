@@ -22,6 +22,7 @@ import {
   type RoutingRouteStop,
   type ReadyToDispatchItem,
 } from "../lib/api";
+import { RouteMapCard } from "./RouteMapCard";
 
 // ── constants ────────────────────────────────────────────────────────────────
 
@@ -253,14 +254,7 @@ export function RoutePlannerCalendar({ token, onBack }: Props) {
 
       {/* ── HEADER ── */}
       <div className="rpc-hdr">
-        <div className="rpc-logo">CorteCero</div>
-        <div className="rpc-tabs">
-          <div className="rpc-tab" onClick={onBack} style={{ cursor: onBack ? "pointer" : "default" }}>Gestión</div>
-          <div className="rpc-tab rpc-tab-active">Planificador</div>
-          <div className="rpc-tab" onClick={onBack} style={{ cursor: onBack ? "pointer" : "default" }}>Seguimiento</div>
-          <div className="rpc-tab" onClick={onBack} style={{ cursor: onBack ? "pointer" : "default" }}>Monitor</div>
-        </div>
-        <div className="rpc-hdr-right">
+        <div className="rpc-hdr-right" style={{ marginLeft: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <button className="rpc-wbtn" onClick={prevWeek}>‹</button>
             <span className="rpc-wlabel">{weekLabel}</span>
@@ -380,40 +374,8 @@ export function RoutePlannerCalendar({ token, onBack }: Props) {
           {/* ── MAP SECTION (día) / CALENDAR (semana) ── */}
           {viewType === "dia" ? (
             <div className="rpc-map-section">
-              <svg className="rpc-map-svg" viewBox="0 0 900 300" preserveAspectRatio="xMidYMid slice">
-                <rect width="900" height="300" fill="#c8dff0"/>
-                <path
-                  d="M 120,215 C 105,202 85,194 72,178 66,160 70,142 80,128 C 95,110 115,100 138,95 162,90 192,86 222,79 C 255,72 288,66 320,64 355,63 388,68 418,79 C 446,89 470,105 488,125 502,142 510,163 514,185 C 518,208 517,232 512,254 507,274 497,292 485,300"
-                  fill="#d8e8c0" stroke="#b0c890" strokeWidth="1.2"
-                />
-                <path
-                  d="M 500,300 Q 470,295 438,288 C 420,283 400,276 382,268 C 362,259 343,247 327,234 C 311,221 297,205 287,188 C 277,171 270,152 267,133 C 264,118 265,105 267,95"
-                  fill="#d8e8c0" stroke="#b0c890" strokeWidth="1.2"
-                />
-                <path d="M 265,175 Q 335,167 405,172 Q 462,177 500,205" stroke="#ddd8c0" strokeWidth="2.5" fill="none" opacity=".7"/>
-                <path d="M 265,175 Q 250,212 254,248 Q 260,272 280,290" stroke="#ddd8c0" strokeWidth="1.8" fill="none" opacity=".6"/>
-                <path d="M 405,172 Q 415,140 428,110 Q 444,82 472,68" stroke="#ddd8c0" strokeWidth="1.8" fill="none" opacity=".5"/>
-                <path d="M 500,205 Q 525,238 530,268 Q 532,284 514,295" stroke="#ddd8c0" strokeWidth="1.8" fill="none" opacity=".5"/>
-                <path d="M 180,195 Q 220,188 265,175" stroke="#ddd8c0" strokeWidth="1.5" fill="none" opacity=".5"/>
-                {/* Route color lines (decorative, based on active routes) */}
-                {activeDayRoutes.map((r, i) => {
-                  const c = ROUTE_COLORS[i % ROUTE_COLORS.length]!;
-                  const offsets = [0, 15, -15, 25, -25, 10, -10, 20];
-                  const off = offsets[i % offsets.length] ?? 0;
-                  return (
-                    <line
-                      key={r.id}
-                      x1={180 + i * 20} y1={195 + off}
-                      x2={480 + i * 10} y2={130 + off}
-                      stroke={c} strokeWidth="2.5" opacity=".75"
-                      strokeDasharray={r.status === "dispatched" ? "6,4" : "none"}
-                    />
-                  );
-                })}
-                {/* Depot */}
-                <rect x="268" y="168" width="14" height="14" rx="3" fill="#374151" stroke="#fff" strokeWidth="2"/>
-                <text x="275" y="177" textAnchor="middle" dominantBaseline="middle" fontSize="8" fill="#fff" fontWeight="800">D</text>
-              </svg>
+              {/* Mapa Google Maps real — muestra la ruta seleccionada en el gantt */}
+              <RouteMapCard route={drawerRoute} />
 
               <div className="rpc-live-badge">
                 <div className="rpc-live-dot" />
@@ -426,27 +388,11 @@ export function RoutePlannerCalendar({ token, onBack }: Props) {
                 </div>
               )}
 
-              <div className="rpc-map-ctrl">
-                <div className="rpc-map-btn">+</div>
-                <div className="rpc-map-btn">−</div>
-                <div className="rpc-map-btn" style={{ fontSize: 11 }}>⊙</div>
-              </div>
-
-              <div className="rpc-map-legend">
-                <div className="rpc-leg-title">Rutas activas</div>
-                {activeDayRoutes
-                  .filter((r) => r.status !== "completed" && r.status !== "cancelled")
-                  .map((r, i) => (
-                    <div key={r.id} className="rpc-leg-row">
-                      <div className="rpc-leg-line" style={{ background: ROUTE_COLORS[i % ROUTE_COLORS.length] }} />
-                      <span>{r.id.slice(0, 8)}</span>
-                      {r.status === "in_progress" && <span style={{ color: "#059669" }}>⚡</span>}
-                    </div>
-                  ))}
-                {activeDayRoutes.length === 0 && (
-                  <div style={{ fontSize: 10, color: "#6b7280" }}>Sin rutas</div>
-                )}
-              </div>
+              {!drawerRoute && (
+                <div className="rpc-map-hint">
+                  Haz click en una ruta del gantt para verla en el mapa
+                </div>
+              )}
             </div>
           ) : (
             /* ── WEEK CALENDAR ── */
