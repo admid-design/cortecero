@@ -202,6 +202,13 @@ export default function HomePage() {
 
   const [serviceDate, setServiceDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [error, setError] = useState("");
+  const [toastMsg, setToastMsg] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function showToast(text: string, kind: "ok" | "err" = "ok") {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToastMsg({ text, kind });
+    toastTimerRef.current = setTimeout(() => setToastMsg(null), 3500);
+  }
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [sourceMetrics, setSourceMetrics] = useState<DashboardSourceMetricsItem[]>([]);
@@ -1156,8 +1163,11 @@ export default function HomePage() {
       await optimizeRoute(token, routeId);
       await refreshDispatcher();
       await refreshOps();
+      showToast("✓ Ruta optimizada — orden de paradas actualizada");
     } catch (e) {
-      setError(formatError(e));
+      const msg = formatError(e);
+      setError(msg);
+      showToast(`Error al optimizar: ${msg}`, "err");
     } finally {
       setDispatcherOptimizingRouteId(null);
     }
@@ -1171,8 +1181,11 @@ export default function HomePage() {
       await dispatchRoute(token, routeId);
       await refreshDispatcher();
       await refreshOps();
+      showToast("✓ Ruta despachada — el conductor ya puede verla");
     } catch (e) {
-      setError(formatError(e));
+      const msg = formatError(e);
+      setError(msg);
+      showToast(`Error al despachar: ${msg}`, "err");
     } finally {
       setDispatcherDispatchingRouteId(null);
     }
@@ -1185,8 +1198,11 @@ export default function HomePage() {
     try {
       await recalculateEta(token, routeId);
       await onSelectDispatcherRoute(routeId);
+      showToast("✓ ETA recalculada");
     } catch (e) {
-      setError(formatError(e));
+      const msg = formatError(e);
+      setError(msg);
+      showToast(`Error al recalcular ETA: ${msg}`, "err");
     } finally {
       setDispatcherRecalculatingEtaRouteId(null);
     }
@@ -2134,6 +2150,28 @@ export default function HomePage() {
             </>
           )}
         </>
+      )}
+      {toastMsg && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 28,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: toastMsg.kind === "ok" ? "#166534" : "#991b1b",
+            color: "#fff",
+            padding: "10px 22px",
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 500,
+            zIndex: 9999,
+            pointerEvents: "none",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.20)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {toastMsg.text}
+        </div>
       )}
     </AppShell>
   );
