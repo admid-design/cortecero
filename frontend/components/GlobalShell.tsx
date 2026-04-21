@@ -1,16 +1,18 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import type { Order, Customer, DriverOut, DashboardSummary, RoutingRoute, OrderImportResult, RouteTemplateListItem, RouteTemplateImportResult } from "../lib/api";
+import type { Order, Customer, DriverOut, AvailableVehicleItem, DashboardSummary, RoutingRoute, OrderImportResult, RouteTemplateListItem, RouteTemplateImportResult } from "../lib/api";
 import {
   listOrders,
   listAdminCustomers,
   listDrivers,
+  listAvailableVehicles,
   getDailySummary,
   listRoutes,
   importOrdersXlsx,
   listRouteTemplates,
   importTemplatesXlsx,
+  createRouteFromTemplate,
 } from "../lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1458,6 +1460,178 @@ function TemplateImportModal({
   );
 }
 
+// ── RouteFromTemplateModal ────────────────────────────────────────────────────
+
+function RouteFromTemplateModal({
+  token,
+  template,
+  onClose,
+  onSuccess,
+}: {
+  token: string;
+  template: RouteTemplateListItem;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const today = new Date().toISOString().split("T")[0];
+  const [serviceDate, setServiceDate] = useState(today);
+  const [vehicleId, setVehicleId] = useState("");
+  const [driverId, setDriverId] = useState("");
+  const [vehicles, setVehicles] = useState<AvailableVehicleItem[]>([]);
+  const [drivers, setDrivers] = useState<DriverOut[]>([]);
+  const [loadingVehicles, setLoadingVehicles] = useState(false);
+  const [loadingDrivers, setLoadingDrivers] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [validationError, setValidationError] = useState("");
+  const toast = useToast();
+
+  const needsVehicle = template.vehicle_id == null;
+
+  // Load vehicles when date changes (only if template has no fixed vehicle)
+  useEffect(() => {
+    if (!needsVehicle) return;
+    setLoadingVehicles(true);
+    setVehicleId("");
+    listAvailableVehicles(token, { service_date: serviceDate })
+      .then((res) => setVehicles(res.items))
+      .catch(() => setVehicles([]))
+      .finally(() => setLoadingVehicles(false));
+  }, [token, serviceDate, needsVehicle]);
+
+  // Load drivers once on mount
+  useEffect(() => {
+    setLoadingDrivers(true);
+    listDrivers(token, { active: true })
+      .then((res) => setDrivers(res.items))
+      .catch(() => setDrivers([]))
+      .finally(() => setLoadingDrivers(false));
+  }, [token]);
+
+  const handleSubmit = async () => {
+    if (needsVehicle && vehicleId === "") {
+      setValidationError("Selecciona un vehículo para continuar.");
+      return;
+    }
+    setValidationError("");
+    setSubmitting(true);
+    try {
+      await createRouteFromTemplate(token, {
+        template_id: template.id,
+        service_date: serviceDate,
+        vehicle_id: vehicleId || undefined,
+        driver_id: driverId || undefined,
+      });
+      toast.show("✓ Ruta creada — ve a Rutas para verla");
+      onSuccess();
+      onClose();
+    } catch (e) {
+      toast.show(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const overlayStyle: React.CSSProperties = {
+    position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+  };
+  const boxStyle: React.CSSProperties = {
+    background: C.surface, borderRadius: 14, padding: "28px 28px 24px",
+    width: 440, maxWidth: "92vw", boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+    display: "flex", flexDirection: "column", gap: 20,
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: 12, fontWeight: 600, color: C.muted, textTransform: "uppercase",
+    letterSpacing: "0.05em", marginBottom: 6, display: "block",
+  };
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "9px 12px", borderRadius: 8,
+    border: `1px solid ${C.border}`, fontSize: 13, color: C.text,
+    background: C.bg, outline: "none", boxSizing: "border-box",
+  };
+
+  return (
+    <div style={overlayStyle} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      {toast.el}
+      <div style={boxStyle}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Crear ruta desde plantilla</div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{template.name}</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: C.muted, lineHeight: 1 }} aria-label="Cerrar">×</button>
+        </div>
+
+        {/* Fecha de servicio */}
+        <div>
+          <label style={labelStyle}>Fecha de servicio</label>
+          <input
+            type="date"
+            value={serviceDate}
+            onChange={(e) => setServiceDate(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+
+        {/* Vehículo — solo si la plantilla no tiene vehículo fijo */}
+        {needsVehicle && (
+          <div>
+            <label style={labelStyle}>Vehículo <span style={{ color: C.danger }}>*</span></label>
+            <select
+              value={vehicleId}
+              onChange={(e) => { setVehicleId(e.target.value); setValidationError(""); }}
+              disabled={loadingVehicles}
+              style={{ ...inputStyle, appearance: "none" as React.CSSProperties["appearance"] }}
+            >
+              <option value="">{loadingVehicles ? "Cargando…" : "— Seleccionar —"}</option>
+              {vehicles.map((v) => (
+                <option key={v.id} value={v.id}>{v.name} ({v.code})</option>
+              ))}
+            </select>
+            {validationError && (
+              <div style={{ fontSize: 12, color: C.danger, marginTop: 6 }}>{validationError}</div>
+            )}
+          </div>
+        )}
+
+        {/* Conductor — siempre opcional */}
+        <div>
+          <label style={labelStyle}>Conductor <span style={{ color: C.muted, fontWeight: 400, textTransform: "none" }}>(opcional)</span></label>
+          <select
+            value={driverId}
+            onChange={(e) => setDriverId(e.target.value)}
+            disabled={loadingDrivers}
+            style={{ ...inputStyle, appearance: "none" as React.CSSProperties["appearance"] }}
+          >
+            <option value="">{loadingDrivers ? "Cargando…" : "— Sin asignar —"}</option>
+            {drivers.map((d) => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, paddingTop: 4 }}>
+          <button
+            onClick={onClose}
+            style={{ padding: "9px 18px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, fontSize: 13, fontWeight: 600, cursor: "pointer", color: C.text }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => { void handleSubmit(); }}
+            disabled={submitting}
+            style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: submitting ? C.muted : C.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer" }}
+          >
+            {submitting ? "Creando…" : "Crear ruta"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── RouteTemplatesSection ─────────────────────────────────────────────────────
 
 const DAY_LABELS: Record<number, string> = {
@@ -1469,6 +1643,7 @@ export function RouteTemplatesSection({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showImportModal, setShowImportModal] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<RouteTemplateListItem | null>(null);
   const toast = useToast();
 
   const load = useCallback(async () => {
@@ -1522,6 +1697,14 @@ export function RouteTemplatesSection({ token }: { token: string }) {
           onSuccess={() => { void load(); }}
         />
       )}
+      {selectedTemplate && (
+        <RouteFromTemplateModal
+          token={token}
+          template={selectedTemplate}
+          onClose={() => setSelectedTemplate(null)}
+          onSuccess={() => { void load(); }}
+        />
+      )}
       {error && (
         <div style={{ padding: "12px 16px", background: "#fee2e2", borderRadius: 8, color: C.danger, marginBottom: 16, fontSize: 13 }}>
           {error}
@@ -1534,7 +1717,7 @@ export function RouteTemplatesSection({ token }: { token: string }) {
           Sin plantillas. Importa un fichero XLSX para empezar.
         </div>
       ) : (
-        <DataTable columns={cols} rows={rows} />
+        <DataTable columns={cols} rows={rows} onRowClick={(i) => setSelectedTemplate(templates[i])} />
       )}
     </SectionPage>
   );
