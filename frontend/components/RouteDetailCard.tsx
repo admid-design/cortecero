@@ -81,7 +81,7 @@ export function RouteDetailCard({
                 <tr key={stop.id}>
                   <td>{stop.sequence_number}</td>
                   <td>{shortId(stop.id)}</td>
-                  <td>{shortId(stop.order_id)}</td>
+                  <td>{stop.order_id ? shortId(stop.order_id) : "—"}</td>
                   <td>{stop.status}</td>
                   <td>{stop.estimated_arrival_at ? new Date(stop.estimated_arrival_at).toLocaleString("es-ES") : "—"}</td>
                 </tr>

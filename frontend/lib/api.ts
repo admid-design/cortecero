@@ -1349,14 +1349,14 @@ export async function listRouteTemplates(
   if (filters?.vehicle_id) params["vehicle_id"] = filters.vehicle_id;
   if (filters?.day_of_week != null) params["day_of_week"] = filters.day_of_week;
   if (filters?.season) params["season"] = filters.season;
-  return request<RouteTemplateListItem[]>(token, "GET", "/route-templates", undefined, params);
+  return request<RouteTemplateListItem[]>(`/route-templates${buildQuery(params)}`, { token });
 }
 
 export async function createRouteFromTemplate(
   token: string,
   input: CreateRouteFromTemplateInput,
 ): Promise<RoutingRoute> {
-  return request<RoutingRoute>(token, "POST", "/routes/from-template", input);
+  return request<RoutingRoute>("/routes/from-template", { token, method: "POST", body: input });
 }
 
 /**

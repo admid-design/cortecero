@@ -718,7 +718,7 @@ export function OpsMapDashboard({
                   <select className="mf-input" value={moveStopId} onChange={(e) => onMoveStopIdChange(e.target.value)}>
                     <option value="">— Selecciona parada —</option>
                     {selectedRoute.stops.map((s) => (
-                      <option key={s.id} value={s.id}>#{s.sequence_number} {shortId(s.order_id)}</option>
+                      <option key={s.id} value={s.id}>#{s.sequence_number} {s.order_id ? shortId(s.order_id) : "—"}</option>
                     ))}
                   </select>
                 </div>
@@ -1046,7 +1046,7 @@ export function OpsMapDashboard({
                         <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                           <div className={stopSeqClass(stop.status)}>{stop.sequence_number}</div>
                           <div className="mf-stop-body">
-                            <div className="mf-stop-name">Pedido {shortId(stop.order_id)}</div>
+                            <div className="mf-stop-name">Pedido {stop.order_id ? shortId(stop.order_id) : "—"}</div>
                             <div className="mf-stop-meta">
                               {stop.status === "completed" && "✓ Entregado"}
                               {stop.status === "failed" && "✗ Fallo"}
@@ -1331,7 +1331,7 @@ export function OpsMapDashboard({
                           </div>
                           <div className="mf-stop-body">
                             <div className="mf-stop-name">
-                              Pedido {shortId(stop.order_id)}
+                              Pedido {stop.order_id ? shortId(stop.order_id) : "—"}
                             </div>
                             <div className="mf-stop-meta">
                               {stop.status === "completed" && "✓ Entregado"}
@@ -1425,7 +1425,7 @@ export function OpsMapDashboard({
                         {selectedRoute.stops.map((s) => (
                           <option key={s.id} value={s.id}>
                             #{s.sequence_number}{" "}
-                            {shortId(s.order_id)}
+                            {s.order_id ? shortId(s.order_id) : "—"}
                           </option>
                         ))}
                       </select>
