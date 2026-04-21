@@ -198,6 +198,7 @@ export default function HomePage() {
   const [token, setToken] = useState("");
   const [role, setRole] = useState<UserRole | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("planner");
+  const [plannerRefreshKey, setPlannerRefreshKey] = useState(0);
   const [adminSection, setAdminSection] = useState<AdminSection>("zones");
 
   const [serviceDate, setServiceDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -1416,6 +1417,7 @@ export default function HomePage() {
       };
       const next = vmMap[s];
       if (next === "admin") void refreshZones();
+      if (next === "planner") setPlannerRefreshKey((k) => k + 1);
       setViewMode(next);
     };
 
@@ -1439,7 +1441,7 @@ export default function HomePage() {
                 ? () => { setViewMode("admin"); void refreshZones(); }
                 : undefined
             }
-            onSwitchToPlanner={canManageRouting ? () => setViewMode("planner") : undefined}
+            onSwitchToPlanner={canManageRouting ? () => { setPlannerRefreshKey((k) => k + 1); setViewMode("planner"); } : undefined}
             isAdmin={isAdmin}
             token={token || undefined}
             error={error}
@@ -1494,6 +1496,7 @@ export default function HomePage() {
         {/* ── Planificador ── */}
         {viewMode === "planner" && (
           <RoutePlannerCalendar
+            key={plannerRefreshKey}
             token={token}
             onBack={() => setViewMode("ops")}
             onNewRoute={() => setViewMode("ops")}

@@ -1294,6 +1294,7 @@ body.map-first-mode {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 .rpc-sb-hdr {
   padding: 10px 12px 8px;

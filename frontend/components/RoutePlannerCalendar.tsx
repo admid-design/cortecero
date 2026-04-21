@@ -201,6 +201,8 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
     : readyOrders;
 
   const selectedOrder = readyOrders.find((o) => o.id === selectedOrderId);
+  // mapRoute persiste en el mapa aunque el drawer se cierre (MAP-SELECTION-PERSISTENCE-001)
+  const mapRoute = routes.find((r) => r.id === activeRouteId) ?? null;
 
   const activeDayDate  = weekDays.find((d) => toIso(d) === activeDayIso) ?? new Date(activeDayIso);
   const activeDayLabel = activeDayDate.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
@@ -242,7 +244,8 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
   }
 
   function openDrawer(r: RoutingRoute) { setActiveRouteId(r.id); setDrawerRoute(r); }
-  function closeDrawer() { setDrawerRoute(null); setActiveRouteId(null); setEditingStopId(null); }
+  // closeDrawer sólo cierra el panel — activeRouteId persiste para mantener la ruta en el mapa
+  function closeDrawer() { setDrawerRoute(null); setEditingStopId(null); }
 
   function prevWeek() { setWeekAnchor((d) => { const n = new Date(d); n.setDate(d.getDate() - 7); return n; }); }
   function nextWeek() { setWeekAnchor((d) => { const n = new Date(d); n.setDate(d.getDate() + 7); return n; }); }
@@ -378,7 +381,7 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
           {viewType === "dia" ? (
             <div className="rpc-map-section">
               {/* Mapa Google Maps real — muestra la ruta seleccionada en el gantt */}
-              <RouteMapCard route={drawerRoute} />
+              <RouteMapCard route={mapRoute} />
 
               <div className="rpc-live-badge">
                 <div className="rpc-live-dot" />
@@ -391,7 +394,7 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
                 </div>
               )}
 
-              {!drawerRoute && (
+              {!activeRouteId && (
                 <div className="rpc-map-hint">
                   Haz click en una ruta del gantt para verla en el mapa
                 </div>
