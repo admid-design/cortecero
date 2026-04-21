@@ -196,11 +196,13 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
   const totalStops    = weekRoutes.reduce((n, r) => n + r.stops.length, 0);
   const activeDayRoutes = routes.filter((r) => r.service_date === activeDayIso);
 
+  // Only show orders for the active day — prevents assigning a 2026-04-18 order to a 2026-04-22 plan
+  const dayOrders = readyOrders.filter((o) => o.service_date === activeDayIso);
   const filteredOrders = search.trim()
-    ? readyOrders.filter(
+    ? dayOrders.filter(
         (o) => o.id.toLowerCase().includes(search.toLowerCase()) || o.service_date.includes(search),
       )
-    : readyOrders;
+    : dayOrders;
 
   const selectedOrder = readyOrders.find((o) => o.id === selectedOrderId);
   // mapRoute persiste en el mapa aunque el drawer se cierre (MAP-SELECTION-PERSISTENCE-001)
@@ -369,8 +371,8 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
             </div>
             <div className="rpc-kpi">
               <div className="rpc-kpi-lbl">Sin asignar</div>
-              <div className="rpc-kpi-val" style={{ color: "#d97706" }}>{readyOrders.length}</div>
-              <div className="rpc-kpi-sub">pedidos</div>
+              <div className="rpc-kpi-val" style={{ color: "#d97706" }}>{dayOrders.length}</div>
+              <div className="rpc-kpi-sub">pedidos hoy</div>
             </div>
             {toast && (
               <div
