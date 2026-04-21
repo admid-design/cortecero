@@ -34,6 +34,8 @@ tags:
     description: >
       Planificación y despacho de rutas (Bloque B) y ejecución por conductor
       (Bloques D + C). Auth real de conductor habilitada en D.2.
+  - name: Route Templates
+    description: Plantillas de ruta estacionales (importación XLSX y creación de rutas desde plantilla)
   - name: Incidents
     description: Registro y consulta de incidencias en ruta (Routing POC)
 
@@ -559,6 +561,62 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
         "422":
           description: Fichero con extensión no permitida, fichero corrupto o service_date ausente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+      security:
+        - bearerAuth: []
+
+  /route-templates/import-xlsx:
+    post:
+      tags: [Route Templates]
+      summary: Importar plantillas de ruta desde fichero XLSX o CSV
+      description: >
+        Importación de plantillas de ruta estacionales a partir de un fichero .xlsx o .csv.
+        Una fila por parada; filas agrupadas por vehicle_plate + day_of_week.
+        El vehículo se resuelve por exact match en Vehicle.code (case-insensitive); si no se
+        encuentra, vehicle_id queda null con warning.
+        El cliente se resuelve por exact match CI → partial único → null con warning (sin creación automática).
+        Idempotente: grupos con plantilla ya existente se saltan con warning.
+        Roles permitidos: office, logistics, admin.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Fichero .xlsx o .csv con las columnas de plantilla
+                season:
+                  type: string
+                  description: Temporada opcional (ej. "verano", "invierno"). Forma parte de la clave anti-duplicado.
+                  nullable: true
+      responses:
+        "200":
+          description: Importación completada (parcialmente o totalmente)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteTemplateImportResult'
+        "401":
+          description: Token inválido o ausente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "403":
+          description: Rol sin permiso para importar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "422":
+          description: Fichero con extensión no permitida o fichero corrupto
           content:
             application/json:
               schema:
@@ -2923,6 +2981,27 @@ components:
         reason:
           type: string
           description: Motivo del error o warning
+
+    RouteTemplateImportResult:
+      type: object
+      required: [templates_created, stops_total, errors, warnings]
+      properties:
+        templates_created:
+          type: integer
+          description: Número de plantillas creadas correctamente
+        stops_total:
+          type: integer
+          description: Número total de paradas creadas en todas las plantillas
+        errors:
+          type: array
+          items:
+            type: string
+          description: Errores bloqueantes (actualmente vacío — errores se tratan como warnings)
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Avisos no bloqueantes (vehículo no encontrado, cliente ambiguo, plantilla duplicada, etc.)
 
     OrderImportResult:
       type: object

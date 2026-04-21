@@ -1311,3 +1311,58 @@ export async function importOrdersXlsx(
 
   return (await response.json()) as OrderImportResult;
 }
+
+// ---------------------------------------------------------------------------
+// Route Templates
+// ---------------------------------------------------------------------------
+
+export type RouteTemplateImportResult = {
+  templates_created: number;
+  stops_total: number;
+  errors: string[];
+  warnings: string[];
+};
+
+/**
+ * Importa plantillas de ruta desde un fichero .xlsx o .csv.
+ * Usa fetch directo (no el helper request) porque requiere multipart/form-data.
+ */
+export async function importTemplatesXlsx(
+  token: string,
+  file: File,
+  season?: string, // "verano" | "invierno" | undefined
+): Promise<RouteTemplateImportResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (season) {
+    formData.append("season", season);
+  }
+
+  const response = await fetch(`${API_BASE}/route-templates/import-xlsx`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      // No se añade Content-Type — el browser lo pone automáticamente con el boundary
+    },
+    body: formData,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as
+      | { detail?: { code?: string; message?: string } | string }
+      | null;
+    const detail = payload?.detail;
+    const code = typeof detail === "object" && detail ? detail.code : undefined;
+    const detailMessage =
+      typeof detail === "object" && detail
+        ? detail.message || "Error API"
+        : typeof detail === "string"
+          ? detail
+          : `HTTP ${response.status}`;
+    const message = code ? `${code}: ${detailMessage}` : detailMessage;
+    throw new APIError(message, response.status, code);
+  }
+
+  return (await response.json()) as RouteTemplateImportResult;
+}

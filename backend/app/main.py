@@ -19,6 +19,7 @@ from app.routers import (
     exceptions,
     orders,
     plans,
+    route_templates,
     routing,
 )
 
@@ -69,4 +70,5 @@ app.include_router(admin_products.router)
 app.include_router(admin_users.router)
 app.include_router(admin_tenant_settings.router)
 app.include_router(drivers.router)
+app.include_router(route_templates.router)
 app.include_router(routing.router)
