@@ -3616,3 +3616,32 @@ body.map-first-mode {
   border-radius: 5px;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* ── Drawer skeleton (MONITOR-DRAWER-STATE-001) ───────────────────────────── */
+@keyframes mf-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.mf-skeleton-line {
+  height: 11px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #e2e8f0 25%, #f8fafc 50%, #e2e8f0 75%);
+  background-size: 800px 100%;
+  animation: mf-shimmer 1.4s ease-in-out infinite;
+}
+.mf-skeleton-circle {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #e2e8f0 25%, #f8fafc 50%, #e2e8f0 75%);
+  background-size: 800px 100%;
+  animation: mf-shimmer 1.4s ease-in-out infinite;
+}
+.mf-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid #f1f5f9;
+}

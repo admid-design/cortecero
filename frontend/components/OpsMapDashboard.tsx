@@ -172,6 +172,22 @@ function StopExpandContent({ stop }: { stop: { estimated_service_minutes: number
   );
 }
 
+function DrawerSkeleton() {
+  return (
+    <div style={{ padding: "4px 0" }}>
+      {([62, 78, 50, 68] as const).map((w, i) => (
+        <div key={i} className="mf-skeleton-row">
+          <div className="mf-skeleton-circle" />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+            <div className="mf-skeleton-line" style={{ width: `${w}%` }} />
+            <div className="mf-skeleton-line" style={{ width: "38%" }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const TruckSvg = () => (
   <svg width="20" height="16" viewBox="0 0 32 22" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "block" }}>
     <rect x="0" y="3" width="20" height="14" rx="2" fill="#2563eb"/>
@@ -910,11 +926,7 @@ export function OpsMapDashboard({
           </div>
 
           <div className="mf-drawer-body">
-            {routeDetailLoading && (
-              <div style={{ color: "var(--subtle)", fontSize: 13, padding: "20px 0" }}>
-                Cargando ruta...
-              </div>
-            )}
+            {routeDetailLoading && <DrawerSkeleton />}
             {!routeDetailLoading && drawerRoute && (
               <>
                 {/* Conductor */}
@@ -1070,11 +1082,7 @@ export function OpsMapDashboard({
                   })}
               </>
             )}
-            {!routeDetailLoading && !drawerRoute && drawerRouteId && (
-              <div style={{ color: "var(--subtle)", fontSize: 13 }}>
-                Cargando detalle de ruta...
-              </div>
-            )}
+            {!routeDetailLoading && !drawerRoute && drawerRouteId && <DrawerSkeleton />}
           </div>
         </div>
       )}
@@ -1309,7 +1317,7 @@ export function OpsMapDashboard({
 
             {/* Stops list */}
             {routeDetailLoading ? (
-              <div style={{ color: "var(--subtle)", fontSize: 13 }}>Cargando paradas...</div>
+              <DrawerSkeleton />
             ) : (
               <div>
                 {selectedRoute.stops
