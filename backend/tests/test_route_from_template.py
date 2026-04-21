@@ -426,7 +426,6 @@ class TestCreateRouteFromTemplateErrors:
             code=f"OV-{uuid.uuid4().hex[:4]}",
             name="Other Vehicle",
             created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC),
         )
         db_session.add(other_vehicle)
         db_session.flush()
