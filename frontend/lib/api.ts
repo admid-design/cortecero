@@ -323,7 +323,9 @@ export type RoutingRoute = {
   id: string;
   plan_id: string | null;  // null para rutas creadas desde plantilla (migration 029)
   vehicle_id: string;
+  vehicle_code: string | null;
   driver_id: string | null;
+  driver_name: string | null;
   service_date: string;
   status: RoutingRouteStatus;
   version: number;

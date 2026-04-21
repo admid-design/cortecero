@@ -187,13 +187,19 @@ def _serialize_route(db: Session, tenant_id: uuid.UUID, route: Route) -> RouteOu
         )
         for stop in stops
     ]
+    # Hidratar vehicle_code y driver_name
+    vehicle = db.scalar(select(Vehicle).where(Vehicle.id == route.vehicle_id, Vehicle.tenant_id == tenant_id))
+    data.vehicle_code = vehicle.code if vehicle else None
+    if route.driver_id:
+        driver = db.scalar(select(Driver).where(Driver.id == route.driver_id, Driver.tenant_id == tenant_id))
+        data.driver_name = driver.name if driver else None
     data.route_geometry = _extract_route_geometry(route.optimization_response_json)
     return data
 
 
 def _serialize_routes_batch(db: Session, tenant_id: uuid.UUID, routes: list[Route]) -> list[RouteOut]:
     """
-    Serializa N rutas en exactamente 2 queries planas (stops IN + geo JOIN IN).
+    Serializa N rutas en 4 queries planas (stops IN + geo JOIN IN + vehicles IN + drivers IN).
     Reemplaza el loop N × _serialize_route (2N queries) en list_routes.
     """
     if not routes:
@@ -201,7 +207,7 @@ def _serialize_routes_batch(db: Session, tenant_id: uuid.UUID, routes: list[Rout
 
     route_ids = [r.id for r in routes]
 
-    # 1 query: todos los stops de todas las rutas de golpe
+    # 1: todos los stops de todas las rutas de golpe
     all_stops = list(
         db.scalars(
             select(RouteStop)
@@ -215,14 +221,30 @@ def _serialize_routes_batch(db: Session, tenant_id: uuid.UUID, routes: list[Rout
     for stop in all_stops:
         stops_by_route[stop.route_id].append(stop)
 
-    # 1 query: geo de todos los pedidos de todos los stops
+    # 2: geo de todos los pedidos de todos los stops
     all_order_ids = [stop.order_id for stop in all_stops]
     geo_by_order_id = _load_customer_geo_by_order_id(db, tenant_id=tenant_id, order_ids=all_order_ids)
+
+    # 3: nombres de vehículos y conductores para toda la lista
+    vehicle_ids = list({r.vehicle_id for r in routes})
+    driver_ids  = list({r.driver_id  for r in routes if r.driver_id is not None})
+
+    vehicles = list(db.scalars(
+        select(Vehicle).where(Vehicle.tenant_id == tenant_id, Vehicle.id.in_(vehicle_ids))
+    )) if vehicle_ids else []
+    drivers = list(db.scalars(
+        select(Driver).where(Driver.tenant_id == tenant_id, Driver.id.in_(driver_ids))
+    )) if driver_ids else []
+
+    vehicle_code_by_id: dict[uuid.UUID, str] = {v.id: v.code for v in vehicles}
+    driver_name_by_id:  dict[uuid.UUID, str] = {d.id: d.name for d in drivers}
 
     results: list[RouteOut] = []
     for route in routes:
         stops = stops_by_route.get(route.id, [])
         data = RouteOut.model_validate(route)
+        data.vehicle_code = vehicle_code_by_id.get(route.vehicle_id)
+        data.driver_name  = driver_name_by_id.get(route.driver_id) if route.driver_id else None
         data.stops = [
             _serialize_stop_with_customer_geo(
                 stop,

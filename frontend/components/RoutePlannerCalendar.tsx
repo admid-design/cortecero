@@ -537,11 +537,18 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
                     <div className="rpc-driver-cell">
                       <div className="rpc-driver-name">
                         <div className="rpc-rdot" style={{ background: color }} />
-                        <span>{r.id.slice(0, 8)}</span>
+                        <span style={{ fontWeight: 600 }}>
+                          {r.vehicle_code ?? r.id.slice(0, 8)}
+                        </span>
                         {r.status === "in_progress" && (
                           <span style={{ color: "#dc2626", fontSize: 10, marginLeft: 2 }}>⚡</span>
                         )}
                       </div>
+                      {r.driver_name && (
+                        <div style={{ fontSize: 10, color: "var(--text-3)", marginLeft: 14, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {r.driver_name}
+                        </div>
+                      )}
                       <div className="rpc-driver-meta">
                         <span>{done}/{total} paradas</span>
                       </div>

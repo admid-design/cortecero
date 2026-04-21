@@ -683,7 +683,9 @@ class RouteOut(APIModel):
     id: uuid.UUID
     plan_id: uuid.UUID | None  # null para rutas creadas desde plantilla
     vehicle_id: uuid.UUID
+    vehicle_code: str | None = None   # código legible del vehículo (e.g. VH-001)
     driver_id: uuid.UUID | None
+    driver_name: str | None = None    # nombre del conductor asignado
     service_date: date
     status: Literal["draft", "planned", "dispatched", "in_progress", "completed", "cancelled"]
     version: int

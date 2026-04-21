@@ -4521,10 +4521,18 @@ components:
         vehicle_id:
           type: string
           format: uuid
+        vehicle_code:
+          type: string
+          nullable: true
+          description: Código legible del vehículo (e.g. VH-001)
         driver_id:
           type: string
           format: uuid
           nullable: true
+        driver_name:
+          type: string
+          nullable: true
+          description: Nombre del conductor asignado a la ruta
         service_date:
           type: string
           format: date
