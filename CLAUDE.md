@@ -455,8 +455,8 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
 
 ## Fase activa actual — R10
 
-> Última actualización: 2026-04-20
-> Ver detalle completo en `docs/R10_BACKLOG.md` y `TASKS.md`.
+> Última actualización: 2026-04-21
+> Ver detalle completo en `docs/R10_BACKLOG.md`.
 
 ### Bloques R10 completados (PROMULGADO)
 - ROUTE-PLANNER-TW-001: `PATCH /stops/{stop_id}/scheduled-arrival` + schema + OpenAPI + api.ts — commit `7cf26e3`
@@ -469,43 +469,42 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
 - FIX-DEPLOY-001: eliminado `"functions"` de `backend/vercel.json` (causa raíz de silent failures Vercel) — commit `7a5e159`
 - VISUAL-POLISH-001: token set `:root` expandido (17→45 vars), 50+ inline styles → CSS vars en 19 componentes — commit `09b3f03`
 - ROUTIFIC-ANALYSIS-001: análisis Routific Beta + comparativa + diseño XLSX import — `docs/routific-analysis-and-xlsx-import.md`
+- UX-FIXES-001: `hideSidebar` OpsMapDashboard, `<select>` inline vehículo/conductor en Gestión, `DetailPanel` Pedidos/Clientes/Conductores, `useToast`, Insights 6 KPIs, "+ Nueva ruta" → Gestión — commit `f6aa23f`
+- ROUTE-TEMPLATE-MODEL-001 + XLSX-PARSE-001: migration + models `RouteTemplate`/`RouteTemplateStop` + `xlsx_parser.py` — commit `f2cc690`
+- XLSX-ORDERS-001: `POST /orders/import-xlsx` — commit `79e5c93`
+- XLSX-UI-ORDERS-001: modal importación pedidos XLSX/CSV — commit `a362568`
+- XLSX-TEMPLATES-001: `POST /route-templates/import-xlsx` — commit `2a9888c`
+- ROUTE-FROM-TEMPLATE-001: `GET /route-templates` + `POST /routes/from-template` — commits `bd7db90`, `dba1cc8`, `048cc35`, `62f9385`
+- XLSX-UI-TEMPLATES-001: sección Plantillas con lista e importación XLSX — commit `b081ff6`
+- XLSX-UI-TEMPLATES-002: crear ruta desde plantilla en UI — commit `4faa590`
+- FIX-READY-DISPATCH: `ready-to-dispatch` filtra `ready_for_planning`, no `planned` — commit `307b66a`
 
-### Bloque en CI (commit lanzado, esperando verde)
-- **UX-FIXES-001** (2026-04-20): `hideSidebar` en OpsMapDashboard (elimina sidebar doble), `<select>` inline vehículo/conductor en Gestión form pasos 3+4, `DetailPanel` en Pedidos/Clientes/Conductores, `useToast` hook, Insights 6 KPIs (rutas + paradas + tasa), "+ Nueva ruta" en Planificador → navega a Gestión. Archivos: `OpsMapDashboard.tsx`, `RoutePlannerCalendar.tsx`, `page.tsx`, `GlobalShell.tsx`.
-
-### Siguiente bloque — EJECUTAR cuando UX-FIXES-001 esté en verde
-**XLSX-PARSE-001** — commit solo, sin mezclar con migraciones:
-- `backend/app/utils/xlsx_parser.py`: `parse_xlsx()`, `normalize_header()`, `auto_map_columns()`, soporte `.xlsx`+`.csv`
-- `backend/tests/test_xlsx_parser.py`: tests unitarios (happy path, columnas faltantes, CSV, headers con tildes)
-- Sin tocar DB, sin migración, sin modelos
-
-### Pipeline XLSX — orden de producto corregido (2026-04-20)
-> Prioridad: cerrar primero el gap visible frente a Routific (pedidos → ruta).
-> Plantillas estacionales son diferencial pero segundo paso.
-
+### Pipeline XLSX — COMPLETADO (2026-04-21)
 ```
-XLSX-PARSE-001
-    ↓
-XLSX-ORDERS-001 + DATE-FORMAT-CONFIG-001
-    ↓
-XLSX-UI-ORDERS-001
-    ↓
-ROUTE-TEMPLATE-MODEL-001
-    ↓
-XLSX-TEMPLATES-001 + ROUTE-FROM-TEMPLATE-001
-    ↓
-XLSX-UI-TEMPLATES-001
+XLSX-PARSE-001          ✓ f2cc690
+XLSX-ORDERS-001         ✓ 79e5c93
+XLSX-UI-ORDERS-001      ✓ a362568
+ROUTE-TEMPLATE-MODEL    ✓ f2cc690
+XLSX-TEMPLATES-001      ✓ 2a9888c
+ROUTE-FROM-TEMPLATE-001 ✓ bd7db90
+XLSX-UI-TEMPLATES-001   ✓ b081ff6
+XLSX-UI-TEMPLATES-002   ✓ 4faa590
 ```
 
-### Pendiente — otros (independientes, menor prioridad)
+### Siguiente bloque — MONITOR-MODE-002
+Chat en `DriverRoutingCard` (conductor móvil). Lado dispatcher ya operativo.
+- Polling `GET /routes/{id}/messages` cada 10–15 s durante `dispatched`/`in_progress`
+- Input texto + botón enviar → `POST /routes/{id}/messages`
+- Solo visible durante ruta activa
+
+### Pendiente — baja prioridad
+- DATE-FORMAT-CONFIG-001 — setting `xlsx_date_format` en tenant + PATCH endpoint + UI
 - R9-CONTRACT-001 — Auditoría OpenAPI ↔ runtime completa + catálogo errores 4xx
-- MONITOR-MODE-002-CONDUCTOR — Chat en `DriverRoutingCard` móvil (lado dispatcher ya operativo)
-- HARDENING-DB-001-NEON — Aplicar migration 027 en Neon (manual, solo SQL)
 
 ### Huecos conocidos (no en backlog activo)
 - SSE backend usa asyncio.Queue in-process → no escala multi-worker (fix: Redis + decisión arquitectura realtime)
 - POD foto: UI + backend listos; R2 bucket real no probado (pospuesto hasta decidir storage)
-- Migration 027: en repo, pendiente aplicar en Neon manualmente
+- Migration 027: aplicada en Neon prod (2026-04-19)
 - Notificaciones (D1): congeladas, pendiente proveedor email/SMS
 - GPS conductor: polling 30s — tiempo real requiere arquitectura persistente
 - Asistente IA: no existe en ninguna capa

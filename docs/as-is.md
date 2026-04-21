@@ -4,7 +4,7 @@
 > Todo lo que aquí se afirma debe tener evidencia: código existente, test verde o smoke ejecutado.
 > Si una capacidad no aparece aquí, no asumas que existe.
 
-Última actualización: R8 CERRADO — Fase A–C + F1–F6 + FLEET-VIEW-001 + UX-GESTION-001 + MONITOR-MODE-001 + R8-SSE-FE PROMULGADO + R8-POD-FOTO CERRADO_LOCAL + R8-POD-FOTO-R2-REAL PARCIAL/deferred (decisión operativa) + HARDENING-SEC-001 + HARDENING-DB-001 **PROMULGADO** + DEMO-DB-RESEED-001 CERRADO_CON_EVIDENCIA_LOCAL (292 tests backend en verde, migration 027 en Neon prod, 2026-04-19). Abril 2026.
+Última actualización: R10 — pipeline XLSX completo + UX-FIXES-001 PROMULGADOS. HEAD `4faa590`. 2026-04-21.
 
 ---
 
@@ -85,6 +85,14 @@
 | Routing: optimize con mock provider | VERIFICADO | tests + CI |
 | Routing: optimize con Google provider | VERIFICADO — smoke 200 con ETAs reales (DEMO-OPT-001, commit `59bd16d`). Evidence en `docs/evidence/DEMO-OPT-001.json` |
 | Routing: driver auth con user_id explícito | VERIFICADO | PILOT-HARDEN-001 + CI |
+| Importación XLSX pedidos (backend) | VERIFICADO — `POST /orders/import-xlsx`; crea pedidos `ready_for_planning`; resolución cliente por nombre | CI build — commit `79e5c93` |
+| Importación XLSX pedidos (UI) | VERIFICADO — modal upload, mapper columnas, preview 3 filas, toast ok/err | CI build — commit `a362568` |
+| Plantillas de ruta — modelo DB | VERIFICADO — tablas `route_templates` + `route_template_stops`; migration 028 | CI build — commit `f2cc690` |
+| Importación XLSX plantillas de ruta (backend) | VERIFICADO — `POST /route-templates/import-xlsx`; agrupa por `(vehicle_plate, day_of_week)`; warnings si vehículo desconocido | CI build — commit `2a9888c` |
+| Listado plantillas de ruta | VERIFICADO — `GET /route-templates` multi-tenant | CI build — commit `bd7db90` |
+| Crear ruta desde plantilla (backend) | VERIFICADO — `POST /routes/from-template`; copia secuencia stops; estado inicial `planned` | CI build — commit `bd7db90` |
+| Crear ruta desde plantilla (UI) | VERIFICADO — sección Plantillas en GlobalShell; botón "Crear ruta hoy" por plantilla | CI build — commit `4faa590` |
+| Parser XLSX/CSV reutilizable | VERIFICADO — `backend/app/utils/xlsx_parser.py`; `openpyxl`; normalización headers, auto-map columnas, robusto ante filas extra | tests + CI — commit `f2cc690` |
 | Frontend: panel dispatcher | VERIFICADO | tests + CI build |
 | Frontend: PWA conductor | VERIFICADO | tests + CI build |
 | Mapa de ruta (Google Maps JS API) | VERIFICADO LOCAL — `RouteMapCard.tsx` renderiza con marcadores por estado; evidence green en browser con `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` configurada (MAP-001) |
@@ -228,3 +236,5 @@ Service account montado en Docker: `~/.config/kelko/google/route-optimization-sa
 - R8: Visual UX — PROMULGADO (commit `c50b8fe`, 2026-04-19). Stops clickables con expand/collapse (service time, timestamps, motivo fallo, coords); avatares conductor con inicial coloreada; SVG truck en flota.
 - R8: R8-POD-FOTO-R2-REAL — PARCIAL / deferred por decisión operativa (2026-04-19). Backend y UI listos. Smoke con R2 bucket real no ejecutado. Sin bloqueante técnico; credenciales R2 no suministradas.
 - R8: CERRADO — DoD cumplido. R8-POD-FOTO-R2-REAL excluido por decisión consciente de prioridad (no falta de evidencia técnica): backend y UI listos, smoke con bucket R2 real pospuesto hasta que se decida proveedor de storage. 292 tests en verde. CI verde en `main`.
+- R9: CERRADO — R9-HARDENING-001, R9-PERF-001, FIX-DEPLOY-001, DRIVER-MOBILE-001, VISUAL-POLISH-001. R9-REALTIME-001 congelado por arquitectura.
+- R10: ACTIVO — pipeline XLSX completo PROMULGADO (commits `f2cc690`→`4faa590`, 2026-04-21). HEAD `4faa590`. Pendiente: MONITOR-MODE-002, DATE-FORMAT-CONFIG-001, R9-CONTRACT-001.

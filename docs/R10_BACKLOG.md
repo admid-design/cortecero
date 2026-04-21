@@ -2,7 +2,7 @@
 
 > Fase: R10 — PLANIFICADOR + CONTRATOS + UX MONITOR + IMPORTACIÓN XLSX
 > Principio rector: completar el planificador semanal, cerrar contratos API, finalizar monitor mode y habilitar importación de rutas estacionales desde XLSX.
-> Última actualización: 2026-04-20 (rev 3)
+> Última actualización: 2026-04-21 (rev 4 — pipeline XLSX completado)
 
 ---
 
@@ -10,21 +10,24 @@
 
 | Prioridad | ID | Bloque | Estado |
 |-----------|-----|--------|--------|
-| 1 | ROUTE-PLANNER-TW-001 | `PATCH /stops/{stop_id}/scheduled-arrival` — backend + OpenAPI + api.ts | **PROMULGADO** |
-| 2 | ROUTE-PLANNER-CAL-001 | Calendario semanal `RoutePlannerCalendar` v2 — KPI strip, gantt, drawer, TW-001-UI | **PROMULGADO** |
-| 3 | TW-001-UI | Input inline `type="time"` en drawer del planificador (incluido en CAL-001 v2) | **PROMULGADO** |
-| 4 | UX-CLEANUP-001 | Eliminar nav "Rutas" interno + pills de estado azules en `OpsMapDashboard` | **CERRADO_LOCAL** |
-| 5 | ROUTIFIC-ANALYSIS-001 | Análisis quirúrgico Routific Beta + comparativa + diseño XLSX import | **CERRADO** |
-| 6 | ROUTE-TEMPLATE-MODEL-001 | Migration + models `RouteTemplate` + `RouteTemplateStop` | PENDIENTE |
-| 7 | XLSX-PARSE-001 | Librería parsing XLSX en backend (`openpyxl`), auto-detect columnas, normalización | PENDIENTE |
-| 8 | XLSX-TEMPLATES-001 | `POST /route-templates/import-xlsx` — importación rutas estacionales | PENDIENTE |
-| 9 | ROUTE-FROM-TEMPLATE-001 | `POST /routes/from-template` — genera ruta del día desde plantilla | PENDIENTE |
-| 10 | XLSX-UI-TEMPLATES-001 | Frontend: modal importación temporada + preview plantillas detectadas | PENDIENTE |
-| 11 | XLSX-ORDERS-001 | `POST /orders/import-xlsx` — importación pedidos como Routific | PENDIENTE |
-| 12 | XLSX-UI-ORDERS-001 | Frontend: modal upload pedidos + mapper visual + vista previa | PENDIENTE |
+| 1 | ROUTE-PLANNER-TW-001 | `PATCH /stops/{stop_id}/scheduled-arrival` — backend + OpenAPI + api.ts | **PROMULGADO** — `7cf26e3` |
+| 2 | ROUTE-PLANNER-CAL-001 | Calendario semanal `RoutePlannerCalendar` v2 — KPI strip, gantt, drawer, TW-001-UI | **PROMULGADO** — `6d505ac` |
+| 3 | TW-001-UI | Input inline `type="time"` en drawer del planificador (incluido en CAL-001 v2) | **PROMULGADO** — incluido en `6d505ac` |
+| 4 | UX-CLEANUP-001 | Eliminar nav "Rutas" interno + pills de estado azules en `OpsMapDashboard` | **PROMULGADO** — `442be46` |
+| 5 | ROUTIFIC-ANALYSIS-001 | Análisis quirúrgico Routific Beta + comparativa + diseño XLSX import | **PROMULGADO** — `docs/routific-analysis-and-xlsx-import.md` |
+| — | UX-FIXES-001 | hideSidebar, dropdowns Gestión, DetailPanel, useToast, Insights 6 KPIs, Nueva ruta | **PROMULGADO** — `f6aa23f` |
+| 6 | ROUTE-TEMPLATE-MODEL-001 | Migration + models `RouteTemplate` + `RouteTemplateStop` | **PROMULGADO** — `f2cc690` |
+| 7 | XLSX-PARSE-001 | Librería parsing XLSX en backend (`openpyxl`), auto-detect columnas, normalización | **PROMULGADO** — `f2cc690` |
+| 8 | XLSX-TEMPLATES-001 | `POST /route-templates/import-xlsx` — importación rutas estacionales | **PROMULGADO** — `2a9888c` |
+| 9 | ROUTE-FROM-TEMPLATE-001 | `POST /routes/from-template` — genera ruta del día desde plantilla | **PROMULGADO** — `bd7db90` + fixes `dba1cc8`, `048cc35`, `62f9385` |
+| 10 | XLSX-UI-TEMPLATES-001 | Frontend: sección Plantillas con lista e importación XLSX | **PROMULGADO** — `b081ff6` |
+| — | XLSX-UI-TEMPLATES-002 | Frontend: crear ruta del día desde plantilla seleccionada | **PROMULGADO** — `4faa590` |
+| 11 | XLSX-ORDERS-001 | `POST /orders/import-xlsx` — importación pedidos como Routific | **PROMULGADO** — `79e5c93` |
+| 12 | XLSX-UI-ORDERS-001 | Frontend: modal upload pedidos + mapper visual + vista previa | **PROMULGADO** — `a362568` |
+| — | FIX-READY-DISPATCH | `ready-to-dispatch` filtra `ready_for_planning`, no `planned` | **PROMULGADO** — `307b66a` |
 | 13 | DATE-FORMAT-CONFIG-001 | Setting `xlsx_date_format` en tenant + PATCH endpoint + UI Settings | PENDIENTE |
 | 14 | R9-CONTRACT-001 | OpenAPI ↔ runtime alineados + catálogo de errores cerrado | PENDIENTE |
-| 15 | R9-MONITOR-UX-001 | Delay alerts visibles en panel/drawer + fixes monitor mode | **CERRADO_LOCAL** |
+| 15 | R9-MONITOR-UX-001 | Delay alerts visibles en panel/drawer + fixes monitor mode | **PROMULGADO** — `b9e9374` |
 | 16 | MONITOR-MODE-002 | Chat flotante conductor en `DriverRoutingCard` (completa MONITOR-MODE-002) | PENDIENTE |
 
 ---
@@ -121,132 +124,99 @@
 
 ---
 
-## Definición de bloques pendientes
+### UX-FIXES-001 — Pulido UX general
 
-### ROUTE-TEMPLATE-MODEL-001 — Modelos de plantilla de ruta
+**Tipo:** IMPLEMENTATION
+**Estado:** PROMULGADO — commit `f6aa23f` — 2026-04-21
+**Objetivo:** Cerrar deuda UX acumulada en R9 antes de abrir pipeline XLSX.
 
-**Tipo:** HARDENING (base de datos)
-**Objetivo:** Crear las entidades de datos que soportan las rutas estacionales importadas desde XLSX
-
-**Alcance:**
-- Migration `NNN_route_templates.sql`:
-  - Tabla `route_templates`: `id`, `tenant_id`, `name`, `season`, `vehicle_id`, `day_of_week`, `shift_start`, `shift_end`, `created_at`
-  - Tabla `route_template_stops`: `id`, `template_id`, `sequence_number`, `customer_id`, `lat`, `lng`, `address`, `duration_min`, `notes`
-  - FK constraints + índices `tenant_id`
-- `backend/app/models.py`: clases `RouteTemplate` + `RouteTemplateStop` con relationships
-- `backend/app/schemas.py`: schemas Pydantic para ambas entidades
-- `openapi-spec-validator` OK tras añadir schemas
-
-**Dependencias:** ninguna — puede implementarse en paralelo con XLSX-PARSE-001
+**Cerrado:**
+- ✅ `hideSidebar` en `OpsMapDashboard` — elimina sidebar doble cuando se accede desde GlobalShell
+- ✅ `<select>` inline vehículo/conductor en pasos 3+4 del formulario Gestión
+- ✅ `DetailPanel` en secciones Pedidos, Clientes, Conductores
+- ✅ Hook `useToast` centralizado
+- ✅ Insights con 6 KPIs (rutas + paradas + tasa de entrega)
+- ✅ Botón "+ Nueva ruta" en Planificador → navega a Gestión
 
 ---
 
-### XLSX-PARSE-001 — Parser XLSX backend
+### ROUTE-TEMPLATE-MODEL-001 + XLSX-PARSE-001 — Modelos y parser XLSX
 
 **Tipo:** IMPLEMENTATION
-**Objetivo:** Módulo reutilizable de parsing XLSX/CSV con auto-detección de columnas
+**Estado:** PROMULGADO — commit `f2cc690` — 2026-04-21
+**Objetivo:** Base de datos y utilidad de parsing para el pipeline XLSX completo.
 
-**Alcance:**
-- `backend/app/utils/xlsx_parser.py`:
-  - Parsing con `openpyxl` (no pandas)
-  - `parse_xlsx(file_bytes) → Generator[dict]`
-  - `normalize_header(name) → str` — elimina tildes, lowercase, strip
-  - `auto_map_columns(headers, field_aliases) → dict` — mapeo automático por alias
-  - Soporte `.xlsx` y `.csv`
-- Tabla de alias definidos en el módulo para campos de pedidos y de plantillas
-- Tests unitarios en `backend/tests/test_xlsx_parser.py`
-
-**Dependencias:** ninguna
-
----
-
-### XLSX-TEMPLATES-001 — Importación XLSX de plantillas de ruta
-
-**Tipo:** IMPLEMENTATION
-**Objetivo:** `POST /route-templates/import-xlsx` — permite importar las rutas de verano/invierno del usuario
-
-**Alcance:**
-- Endpoint `POST /route-templates/import-xlsx` (multipart/form-data)
-- Recibe `.xlsx`, aplica `xlsx_parser`, agrupa filas por `(vehicle_plate, day_of_week)`
-- Resolución de vehículo por matrícula → `vehicle_id`; si no existe → warning, no error fatal
-- Resolución de cliente por nombre → `customer_id` + coordenadas; si no existe → crear cliente nuevo
-- Crea `RouteTemplate` + `RouteTemplateStop` records (multi-tenant)
-- Respuesta: `{ templates_created: N, stops_total: N, errors: [...], warnings: [...] }`
-- OpenAPI + api.ts actualizados
-- Tests: happy path (XLSX válido), vehículo desconocido, cliente no encontrado
-
-**Dependencias:** ROUTE-TEMPLATE-MODEL-001 + XLSX-PARSE-001
-
----
-
-### ROUTE-FROM-TEMPLATE-001 — Generar ruta desde plantilla
-
-**Tipo:** IMPLEMENTATION
-**Objetivo:** `POST /routes/from-template` — crea una ruta operativa del día a partir de una plantilla
-
-**Alcance:**
-- Endpoint `POST /routes/from-template` con body `{ template_id, service_date, plan_id }`
-- Crea `Route` + `RouteStop`s copiando secuencia de `RouteTemplateStop`s
-- Estado inicial: `planned`; listo para dispatch u optimize
-- Guard multi-tenant: `template.tenant_id == current.tenant_id`
-- `GET /route-templates` — lista plantillas del tenant (para el selector de UI)
-- OpenAPI + api.ts actualizados
-
-**Dependencias:** ROUTE-TEMPLATE-MODEL-001
-
----
-
-### XLSX-UI-TEMPLATES-001 — Frontend: modal importación de temporada
-
-**Tipo:** IMPLEMENTATION
-**Objetivo:** UI para subir el XLSX de rutas estacionales y previsualizar las plantillas detectadas
-
-**Alcance:**
-- Modal en `OperationalQueueCard` o sección Settings: "📥 Importar temporada"
-- Step 1: drag & drop / file picker `.xlsx`
-- Step 2: mapper de columnas (dropdowns: Matrícula, Día, Orden, Cliente, Dirección, Duración, Notas)
-- Step 3: preview de plantillas detectadas (`vehicle_plate + day_of_week → N paradas`)
-- Nombre de temporada: input texto (ej. "Verano 2026")
-- Botón "Crear N plantillas" → llama `importRouteTemplatesXlsx()` en `api.ts` → toast ok/err
-- Lista de plantillas existentes con botón "Usar hoy" → `createRouteFromTemplate()`
-
-**Dependencias:** XLSX-TEMPLATES-001 + ROUTE-FROM-TEMPLATE-001
+**Cerrado:**
+- ✅ Migration `028_route_templates.sql` — tablas `route_templates` + `route_template_stops` con FK, índices, idempotente
+- ✅ `RouteTemplate` + `RouteTemplateStop` en `backend/app/models.py`
+- ✅ Schemas Pydantic en `backend/app/schemas.py`
+- ✅ `backend/app/utils/xlsx_parser.py` — `parse_xlsx()`, `parse_csv()`, `normalize_header()`, `auto_map_columns()`; robusto ante filas con más columnas que cabeceras (fix `a75ec68`)
+- ✅ Tests unitarios `test_xlsx_parser.py`
 
 ---
 
 ### XLSX-ORDERS-001 — Importación XLSX de pedidos
 
 **Tipo:** IMPLEMENTATION
-**Objetivo:** `POST /orders/import-xlsx` — importar lista de pedidos del día como Routific
+**Estado:** PROMULGADO — commit `79e5c93` — 2026-04-21
 
-**Alcance:**
-- Endpoint `POST /orders/import-xlsx` (multipart/form-data)
-- Campos mapeables: `customer_name`, `address`, `lat`, `lng`, `delivery_from`, `delivery_until`, `duration_min`, `load_kg`, `external_ref`, `notes`
-- Resolución cliente por nombre → usar `lat/lng` de la DB; si no existe → crear cliente nuevo
-- Crea `Order` records en estado `ready_for_planning`
-- Respuesta: `{ imported: N, errors: [...], warnings: [...] }`
-- OpenAPI + api.ts actualizados
-
-**Dependencias:** XLSX-PARSE-001
+**Cerrado:**
+- ✅ `POST /orders/import-xlsx` (multipart/form-data) — crea pedidos `ready_for_planning`
+- ✅ Resolución de cliente por nombre; crea cliente nuevo si no existe
+- ✅ OpenAPI + `api.ts` actualizados
 
 ---
 
-### XLSX-UI-ORDERS-001 — Frontend: modal importación de pedidos
+### XLSX-UI-ORDERS-001 — Modal importación pedidos
 
 **Tipo:** IMPLEMENTATION
-**Objetivo:** Modal de importación de pedidos con mapper visual y vista previa de 3 filas
+**Estado:** PROMULGADO — commit `a362568` — 2026-04-21
 
-**Alcance:**
-- Botón "📥 Importar pedidos" en `OperationalQueueCard` o sección Pedidos
-- Step 1: upload `.xlsx` / `.csv`
-- Step 2: mapper de columnas con dropdowns + detección automática
-- Step 3: vista previa 3 primeras filas + contador "N pedidos a importar"
-- Selector de formato de fecha si la config de tenant no está fijada
-- Botón "Importar N pedidos" → toast ok/err con detalle de errores
-
-**Dependencias:** XLSX-ORDERS-001
+**Cerrado:**
+- ✅ Modal con upload `.xlsx`/`.csv`, mapper visual de columnas, vista previa 3 filas
+- ✅ Toast ok/err con detalle de filas importadas y errores
 
 ---
+
+### XLSX-TEMPLATES-001 — Importación XLSX de plantillas de ruta
+
+**Tipo:** IMPLEMENTATION
+**Estado:** PROMULGADO — commit `2a9888c` — 2026-04-21
+
+**Cerrado:**
+- ✅ `POST /route-templates/import-xlsx` — agrupa filas por `(vehicle_plate, day_of_week)`, crea `RouteTemplate` + `RouteTemplateStop`
+- ✅ Resolución vehículo por matrícula; warning si no existe (no error fatal)
+- ✅ OpenAPI + `api.ts` actualizados
+
+---
+
+### ROUTE-FROM-TEMPLATE-001 — Generar ruta desde plantilla
+
+**Tipo:** IMPLEMENTATION
+**Estado:** PROMULGADO — commits `bd7db90`, `dba1cc8`, `048cc35`, `62f9385` — 2026-04-21
+
+**Cerrado:**
+- ✅ `GET /route-templates` — lista plantillas del tenant
+- ✅ `POST /routes/from-template` — crea `Route` + `RouteStop`s desde plantilla; estado inicial `planned`
+- ✅ `RoutingRoute.plan_id` y `RoutingRouteStop.order_id` son `string | null` en `api.ts`; null-guards en todos los componentes que usan esos campos
+
+**Lección aprendida (Lección 8):** cambio de nullability de un campo es impacto 4-vías — ver CLAUDE.md § Lección 8.
+
+---
+
+### XLSX-UI-TEMPLATES-001 + XLSX-UI-TEMPLATES-002 — Frontend plantillas
+
+**Tipo:** IMPLEMENTATION
+**Estado:** PROMULGADO — commits `b081ff6`, `4faa590` — 2026-04-21
+
+**Cerrado:**
+- ✅ Sección "Plantillas" en GlobalShell con lista de plantillas por temporada/día
+- ✅ Modal importación XLSX temporada — upload, mapper columnas, preview plantillas detectadas, nombre temporada
+- ✅ Botón "Crear ruta hoy" por plantilla → `createRouteFromTemplate()` → toast
+
+---
+
+## Definición de bloques pendientes
 
 ### DATE-FORMAT-CONFIG-001 — Configuración formato de fecha XLSX
 
