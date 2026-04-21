@@ -791,6 +791,7 @@ export function OpsMapDashboard({
 
         {/* Map — always visible; markers appear when a route is selected */}
         <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
+          {/* MAP-MODE-001: monitor siempre muestra todas las rutas activas */}
           <RouteMapCard
             route={selectedRoute}
             driverPosition={driverPosition}
@@ -798,6 +799,7 @@ export function OpsMapDashboard({
             selectedVehicleName={selectedFleetVehicleName}
             activePositions={activePositions}
             driverNameMap={driverNameMap}
+            allRoutes={activeRoutesList.length > 0 ? activeRoutesList : undefined}
           />
           {/* Monitor mode — chips de rutas activas flotando en la parte inferior */}
           {monitorMode && (

@@ -144,6 +144,8 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
   const [savingStopId, setSavingStopId]   = useState<string | null>(null);
 
   const [toast, setToast] = useState<Toast | null>(null);
+  // MAP-MODE-001: toggle "Ver todas las rutas" en el mapa del planificador
+  const [showAllRoutes, setShowAllRoutes] = useState(false);
 
   const weekDays  = getWeekDays(weekAnchor);
   const todayIso  = new Date().toISOString().slice(0, 10);
@@ -380,8 +382,23 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
           {/* ── MAP SECTION (día) / CALENDAR (semana) ── */}
           {viewType === "dia" ? (
             <div className="rpc-map-section">
-              {/* Mapa Google Maps real — muestra la ruta seleccionada en el gantt */}
-              <RouteMapCard route={mapRoute} />
+              {/* Toggle ver todas las rutas / solo activa (MAP-MODE-001) */}
+              <button
+                onClick={() => setShowAllRoutes((v) => !v)}
+                title={showAllRoutes ? "Ver solo ruta activa" : "Ver todas las rutas en el mapa"}
+                style={{
+                  position: "absolute", top: 8, right: 8, zIndex: 20,
+                  background: showAllRoutes ? "var(--brand)" : "rgba(255,255,255,0.92)",
+                  color: showAllRoutes ? "#fff" : "var(--text-2)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600,
+                  cursor: "pointer", backdropFilter: "blur(4px)",
+                }}
+              >
+                {showAllRoutes ? "🗺 Todas" : "🗺 Todas"}
+              </button>
+              {/* Mapa Google Maps real — muestra la ruta seleccionada o todas las rutas del día */}
+              <RouteMapCard route={mapRoute} allRoutes={showAllRoutes ? activeDayRoutes : undefined} />
 
               <div className="rpc-live-badge">
                 <div className="rpc-live-dot" />

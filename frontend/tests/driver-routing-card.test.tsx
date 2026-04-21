@@ -28,6 +28,7 @@ function makeStop(overrides: Partial<RoutingRouteStop> = {}): RoutingRouteStop {
     failure_reason: null,
     customer_lat: null,
     customer_lng: null,
+    customer_name: null,
     created_at: "2026-04-11T08:00:00Z",
     updated_at: "2026-04-11T08:00:00Z",
     ...overrides,

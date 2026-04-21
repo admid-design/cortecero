@@ -40,6 +40,14 @@ function emojiIconUrl(emoji: string, size = 36): string {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
+// Paleta de 8 colores estables para rutas en modo multi-route.
+// El color de cada ruta se asigna por índice en el array allRoutes — determinista entre renders.
+const ROUTE_COLORS = ["#2563eb","#dc2626","#16a34a","#d97706","#7c3aed","#0891b2","#c2410c","#059669"] as const;
+
+function routeColorForIndex(idx: number): string {
+  return ROUTE_COLORS[((idx % ROUTE_COLORS.length) + ROUTE_COLORS.length) % ROUTE_COLORS.length]!;
+}
+
 function stopStatusColor(status: RouteStopStatus): string {
   if (status === "completed") return "#16a34a";
   if (status === "arrived" || status === "en_route") return "#2563eb";
@@ -125,9 +133,16 @@ type RouteMapCardProps = {
   activePositions?: DriverPositionOut[] | null;
   /** Mapa driver_id → nombre completo del conductor — para etiquetar marcadores de flota. */
   driverNameMap?: Record<string, string>;
+  /**
+   * MAP-MODE-001: cuando se provee, pinta TODAS las rutas del array en el mapa.
+   * `route` sigue siendo la ruta activa (más gruesa, opacidad plena).
+   * Las demás se muestran con el color de su índice en el array, semitransparentes.
+   * Sin este prop el comportamiento es idéntico al modo single-route anterior.
+   */
+  allRoutes?: RoutingRoute[];
 };
 
-export function RouteMapCard({ route, driverPosition, selectedVehicleId, selectedVehicleName, activePositions, driverNameMap }: RouteMapCardProps) {
+export function RouteMapCard({ route, driverPosition, selectedVehicleId, selectedVehicleName, activePositions, driverNameMap, allRoutes }: RouteMapCardProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
   const [mapsLoaded, setMapsLoaded] = useState(false);
@@ -174,6 +189,10 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
   }, [route?.route_geometry]);
 
   const hasTransitionGeometry = transitionGeometryPaths.length > 0;
+
+  // MAP-MODE-001: color de la ruta activa según su índice en allRoutes (estable entre renders)
+  const activeRouteColorIndex = allRoutes ? allRoutes.findIndex((r) => r.id === route?.id) : -1;
+  const activeRouteStrokeColor = activeRouteColorIndex >= 0 ? routeColorForIndex(activeRouteColorIndex) : "#2563eb";
 
   useEffect(() => {
     let cancelled = false;
@@ -282,9 +301,9 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
             path,
             map,
             geodesic: true,
-            strokeColor: "#2563eb",
+            strokeColor: activeRouteStrokeColor,
             strokeOpacity: 0.9,
-            strokeWeight: 4,
+            strokeWeight: 5,
           }),
         );
       }
@@ -294,8 +313,8 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
           path: fallbackPath,
           map,
           geodesic: true,
-          strokeColor: "#64748b",
-          strokeOpacity: 0.75,
+          strokeColor: activeRouteStrokeColor,
+          strokeOpacity: 0.65,
           strokeWeight: 4,
         }),
       );
@@ -310,7 +329,97 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
       for (const marker of markers) marker.setMap(null);
       for (const polyline of polylines) polyline.setMap(null);
     };
-  }, [mapsLoaded, stopPoints, depotLat, depotLng, hasTransitionGeometry, transitionGeometryPaths, route]);
+  }, [mapsLoaded, stopPoints, depotLat, depotLng, hasTransitionGeometry, transitionGeometryPaths, route, activeRouteStrokeColor]);
+
+  // Refs para los overlays de rutas secundarias (multi-route mode)
+  const allRoutesMarkersRef = useRef<Array<{ setMap: (m: any) => void }>>([]);
+  const allRoutesPolylinesRef = useRef<Array<{ setMap: (m: any) => void }>>([]);
+
+  // MAP-MODE-001: efecto de rutas secundarias — pinta todas las rutas de allRoutes
+  // excepto la activa (route), que sigue siendo responsabilidad del efecto principal.
+  useEffect(() => {
+    // Limpiar overlays secundarios anteriores siempre
+    for (const m of allRoutesMarkersRef.current) m.setMap(null);
+    allRoutesMarkersRef.current = [];
+    for (const p of allRoutesPolylinesRef.current) p.setMap(null);
+    allRoutesPolylinesRef.current = [];
+
+    if (!mapsLoaded || !allRoutes || allRoutes.length === 0) return;
+    const mapsWindow = window as GoogleMapsWindow;
+    const maps = mapsWindow.google?.maps;
+    if (!maps) return;
+    const mapObj = mapInstanceRef.current;
+    if (!mapObj) return;
+
+    allRoutes.forEach((r, idx) => {
+      if (r.id === route?.id) return; // la ruta activa la pinta el efecto principal
+
+      const color = routeColorForIndex(idx);
+      const hasGeo =
+        r.route_geometry?.encoding === "google_encoded_polyline" &&
+        Array.isArray(r.route_geometry.transition_polylines) &&
+        r.route_geometry.transition_polylines.length > 0;
+
+      const stops = (r.stops ?? [])
+        .map((s) => {
+          const lat = parseCoordinate(s.customer_lat);
+          const lng = parseCoordinate(s.customer_lng);
+          if (lat == null || lng == null) return null;
+          return { lat, lng, seq: s.sequence_number };
+        })
+        .filter((s): s is { lat: number; lng: number; seq: number } => s != null)
+        .sort((a, b) => a.seq - b.seq);
+
+      // Polilíneas: si hay geometría real → opacidad media; si no → línea punteada más tenue
+      if (hasGeo) {
+        for (const encoded of r.route_geometry!.transition_polylines) {
+          if (!encoded || typeof encoded !== "string") continue;
+          try {
+            const path = decodeGoogleEncodedPolyline(encoded);
+            if (path.length < 2) continue;
+            allRoutesPolylinesRef.current.push(
+              new maps.Polyline({ path, map: mapObj, geodesic: true, strokeColor: color, strokeOpacity: 0.45, strokeWeight: 3 }),
+            );
+          } catch {}
+        }
+      } else if (stops.length >= 1) {
+        // Fallback: línea recta desde depósito, más tenue que la ruta activa
+        const fallback = [{ lat: FALLBACK_DEPOT_LAT, lng: FALLBACK_DEPOT_LNG }, ...stops];
+        allRoutesPolylinesRef.current.push(
+          new maps.Polyline({ path: fallback, map: mapObj, geodesic: true, strokeColor: color, strokeOpacity: 0.25, strokeWeight: 2 }),
+        );
+      }
+
+      // Marcadores de paradas secundarias: círculos pequeños del color de la ruta
+      for (const stop of stops) {
+        try {
+          allRoutesMarkersRef.current.push(
+            new maps.Marker({
+              map: mapObj,
+              position: { lat: stop.lat, lng: stop.lng },
+              icon: {
+                path: maps.SymbolPath.CIRCLE,
+                scale: 5,
+                fillColor: color,
+                fillOpacity: 0.55,
+                strokeColor: color,
+                strokeWeight: 1,
+                strokeOpacity: 0.7,
+              },
+              zIndex: 2,
+            }),
+          );
+        } catch {}
+      }
+    });
+
+    return () => {
+      for (const m of allRoutesMarkersRef.current) m.setMap(null);
+      allRoutesMarkersRef.current = [];
+      for (const p of allRoutesPolylinesRef.current) p.setMap(null);
+      allRoutesPolylinesRef.current = [];
+    };
+  }, [mapsLoaded, allRoutes, route?.id]);
 
   // Marcador de vehículo seleccionado — independiente del redibujado del mapa, sin cambio de zoom
   const selectedVehicleMarkerRef = useRef<{ setPosition: (pos: any) => void; setMap: (map: any) => void } | null>(null);
@@ -473,14 +582,28 @@ export function RouteMapCard({ route, driverPosition, selectedVehicleId, selecte
 
   return (
     <div className="card grid route-map-card">
-      <h4 style={{ margin: 0 }}>Mapa de Ruta</h4>
+      <h4 style={{ margin: 0 }}>
+        {allRoutes && allRoutes.length > 0 ? `Mapa de Flota — ${allRoutes.length} ruta${allRoutes.length !== 1 ? "s" : ""}` : "Mapa de Ruta"}
+      </h4>
       <div className="row route-map-meta" style={{ gap: 6 }}>
-        <span className="pill">paradas geo-ready: {stopPoints.length}</span>
-        {depotLat != null && depotLng != null && <span className="pill">depot: disponible</span>}
-        {hasTransitionGeometry
-          ? <span className="pill" style={{ color: "var(--success)" }}>✓ trayectoria vial real</span>
-          : <span className="pill" style={{ color: "var(--warn-text)" }}>⚠ trayectoria aproximada — pulse Optimizar para ver ruta real</span>
-        }
+        {allRoutes && allRoutes.length > 0 ? (
+          <>
+            {allRoutes.map((r, i) => (
+              <span key={r.id} className="pill" style={{ borderLeft: `3px solid ${routeColorForIndex(i)}`, paddingLeft: 6, fontWeight: r.id === route?.id ? 700 : 400 }}>
+                {r.id.slice(0, 6)} {r.id === route?.id ? "●" : ""}
+              </span>
+            ))}
+          </>
+        ) : (
+          <>
+            <span className="pill">paradas geo-ready: {stopPoints.length}</span>
+            {depotLat != null && depotLng != null && <span className="pill">depot: disponible</span>}
+            {hasTransitionGeometry
+              ? <span className="pill" style={{ color: "var(--success)" }}>✓ trayectoria vial real</span>
+              : <span className="pill" style={{ color: "var(--warn-text)" }}>⚠ trayectoria aproximada — pulse Optimizar para ver ruta real</span>
+            }
+          </>
+        )}
       </div>
       {route && (
         <div className="row route-map-legend" style={{ gap: 8 }}>
