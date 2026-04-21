@@ -114,6 +114,13 @@ function ganttPct(eta: string | null): number | null {
   return Math.max(0, Math.min(100, stopPctFromHHMM(hhmm)));
 }
 
+/** Posición estimada cuando no hay ETA: 08:00 + 30 min × índice */
+function estimatedStopPct(idx: number): number {
+  const startMin = 60; // 08:00 = 60 min después del origen 07:00
+  const perStop  = 30;
+  return Math.max(0, Math.min(100, (startMin + idx * perStop) / (9 * 60) * 100));
+}
+
 function canEditRoute(r: RoutingRoute): boolean {
   return ["draft", "planned", "dispatched"].includes(r.status);
 }
@@ -511,12 +518,15 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
                 const pct     = total > 0 ? Math.round((done / total) * 100) : 0;
                 const isActive = activeRouteId === r.id;
 
-                // stops line bounds
-                const pcts = r.stops
-                  .map((s) => ganttPct(s.estimated_arrival_at))
-                  .filter((p): p is number => p !== null);
+                // stops con posición real o estimada
+                const stopsData = r.stops.map((s, si) => {
+                  const real = ganttPct(s.estimated_arrival_at);
+                  return { s, p: real ?? estimatedStopPct(si), estimated: real === null };
+                });
+                const pcts      = stopsData.map((sd) => sd.p);
                 const lineLeft  = pcts.length > 0 ? Math.min(...pcts) : null;
                 const lineRight = pcts.length > 0 ? Math.max(...pcts) : null;
+                const allEst    = stopsData.length > 0 && stopsData.every((sd) => sd.estimated);
 
                 return (
                   <div
@@ -561,30 +571,32 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
                         {lineLeft !== null && lineRight !== null && lineRight > lineLeft && (
                           <div
                             className="rpc-stops-line"
-                            style={{ left: `${lineLeft}%`, width: `${lineRight - lineLeft}%` }}
+                            style={{
+                              left: `${lineLeft}%`,
+                              width: `${lineRight - lineLeft}%`,
+                              opacity: allEst ? 0.35 : 1,
+                            }}
                           />
                         )}
-                        {/* stop bubbles */}
-                        {r.stops.map((s, idx) => {
-                          const p = ganttPct(s.estimated_arrival_at);
-                          if (p === null) return null;
-                          return (
-                            <div
-                              key={s.id}
-                              className="rpc-sbubble"
-                              style={{
-                                left: `${p}%`,
-                                background: s.status === "completed" ? color
-                                          : s.status === "failed"    ? "#dc2626"
-                                          : "#9ca3af",
-                              }}
-                              title={`Parada ${idx + 1} · ${STOP_LABEL[s.status] ?? s.status} · ${isoToHHMM(s.estimated_arrival_at)}`}
-                              onClick={(e) => { e.stopPropagation(); openDrawer(r); }}
-                            >
-                              {idx + 1}
-                            </div>
-                          );
-                        })}
+                        {/* stop bubbles — con ETA real o posición estimada */}
+                        {stopsData.map(({ s, p, estimated }, idx) => (
+                          <div
+                            key={s.id}
+                            className={`rpc-sbubble${estimated ? " rpc-sbubble-est" : ""}`}
+                            style={{
+                              left: `${p}%`,
+                              background: estimated         ? "#e5e7eb"
+                                        : s.status === "completed" ? color
+                                        : s.status === "failed"    ? "#dc2626"
+                                        : color,
+                              color: estimated ? "#6b7280" : "#fff",
+                            }}
+                            title={`Parada ${s.sequence_number} · ${STOP_LABEL[s.status] ?? s.status}${estimated ? " · hora estimada (sin optimizar)" : " · " + isoToHHMM(s.estimated_arrival_at)}`}
+                            onClick={(e) => { e.stopPropagation(); openDrawer(r); }}
+                          >
+                            {idx + 1}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>

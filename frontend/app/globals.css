@@ -1773,6 +1773,12 @@ body.map-first-mode {
   transition: transform .1s;
 }
 .rpc-sbubble:hover { transform: translate(-50%,-50%) scale(1.2); }
+/* Burbuja sin ETA real — posición estimada */
+.rpc-sbubble-est {
+  border: 2px dashed #9ca3af !important;
+  box-shadow: none;
+  opacity: 0.7;
+}
 .rpc-tl-empty {
   display: flex;
   align-items: center;
