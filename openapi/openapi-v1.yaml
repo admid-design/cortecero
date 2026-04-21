@@ -568,6 +568,105 @@ paths:
       security:
         - bearerAuth: []
 
+  /route-templates:
+    get:
+      tags: [Route Templates]
+      summary: Listar plantillas de ruta del tenant
+      description: >
+        Devuelve las plantillas de ruta del tenant con conteo de paradas por plantilla.
+        Filtros opcionales: vehicle_id, day_of_week (1–7 ISO), season.
+        Roles permitidos: office, logistics, admin.
+      parameters:
+        - name: vehicle_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filtrar por ID de vehículo
+        - name: day_of_week
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 7
+          description: "Filtrar por día ISO (1=Lunes, 7=Domingo)"
+        - name: season
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filtrar por temporada (ej. verano, invierno)
+      responses:
+        "200":
+          description: Lista de plantillas de ruta
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RouteTemplateListItem'
+        "401":
+          description: Token inválido o ausente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+      security:
+        - bearerAuth: []
+
+  /routes/from-template:
+    post:
+      tags: [Route Templates]
+      summary: Crear ruta operativa desde una plantilla
+      description: >
+        Crea una Route en estado draft a partir de una RouteTemplate.
+        El vehículo se resuelve de body.vehicle_id (override) o template.vehicle_id;
+        si ninguno está disponible se devuelve VEHICLE_REQUIRED.
+        El driver es opcional. Los RouteStops se crean con order_id=null.
+        La ruta queda en draft sin plan_id.
+        Roles permitidos: office, logistics, admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRouteFromTemplateInput'
+      responses:
+        "201":
+          description: Ruta creada correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteOut'
+        "401":
+          description: Token inválido o ausente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "403":
+          description: Rol sin permiso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "404":
+          description: Plantilla, vehículo o conductor no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "422":
+          description: VEHICLE_REQUIRED o TEMPLATE_HAS_NO_STOPS
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+      security:
+        - bearerAuth: []
+
   /route-templates/import-xlsx:
     post:
       tags: [Route Templates]
@@ -2981,6 +3080,58 @@ components:
         reason:
           type: string
           description: Motivo del error o warning
+
+    RouteTemplateListItem:
+      type: object
+      required: [id, name, has_vehicle, stop_count, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        season:
+          type: string
+          nullable: true
+        vehicle_id:
+          type: string
+          format: uuid
+          nullable: true
+        has_vehicle:
+          type: boolean
+          description: true si vehicle_id está resuelto
+        day_of_week:
+          type: integer
+          minimum: 1
+          maximum: 7
+          nullable: true
+          description: "Día ISO (1=Lunes, 7=Domingo)"
+        stop_count:
+          type: integer
+          description: Número de paradas en la plantilla
+        created_at:
+          type: string
+          format: date-time
+
+    CreateRouteFromTemplateInput:
+      type: object
+      required: [template_id, service_date]
+      properties:
+        template_id:
+          type: string
+          format: uuid
+        service_date:
+          type: string
+          format: date
+        vehicle_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Override del vehicle_id de la plantilla
+        driver_id:
+          type: string
+          format: uuid
+          nullable: true
 
     RouteTemplateImportResult:
       type: object

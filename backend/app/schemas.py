@@ -638,7 +638,7 @@ class RouteCreateRequest(BaseModel):
 class RouteStopOut(APIModel):
     id: uuid.UUID
     route_id: uuid.UUID
-    order_id: uuid.UUID
+    order_id: uuid.UUID | None  # null para paradas creadas desde plantilla (sin pedido)
     sequence_number: int
     estimated_arrival_at: datetime | None
     recalculated_eta_at: datetime | None = None
@@ -660,9 +660,27 @@ class RouteGeometryOut(APIModel):
     transition_polylines: list[str] = Field(default_factory=list)
 
 
+class RouteTemplateListItem(APIModel):
+    id: uuid.UUID
+    name: str
+    season: str | None
+    vehicle_id: uuid.UUID | None
+    has_vehicle: bool
+    day_of_week: int | None
+    stop_count: int
+    created_at: datetime
+
+
+class CreateRouteFromTemplateInput(APIModel):
+    template_id: uuid.UUID
+    service_date: date
+    vehicle_id: uuid.UUID | None = None  # override de template.vehicle_id
+    driver_id: uuid.UUID | None = None
+
+
 class RouteOut(APIModel):
     id: uuid.UUID
-    plan_id: uuid.UUID
+    plan_id: uuid.UUID | None  # null para rutas creadas desde plantilla
     vehicle_id: uuid.UUID
     driver_id: uuid.UUID | None
     service_date: date

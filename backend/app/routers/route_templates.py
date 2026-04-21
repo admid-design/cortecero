@@ -1,40 +1,60 @@
-"""Router — Route Templates XLSX import (XLSX-TEMPLATES-001).
+"""Router — Route Templates: XLSX import + list + from-template.
 
-Endpoint:
-    POST /route-templates/import-xlsx
+Endpoints:
+    POST /route-templates/import-xlsx      — XLSX-TEMPLATES-001
+    GET  /route-templates                  — ROUTE-FROM-TEMPLATE-001
+    POST /routes/from-template             — ROUTE-FROM-TEMPLATE-001
 
-Formato de fichero: una fila por parada, agrupadas por vehicle_plate + day_of_week.
-Ejemplo de cabeceras aceptadas:
-    Matrícula | Día | Orden | Cliente | Dirección | Duración
+XLSX import:
+    Formato de fichero: una fila por parada, agrupadas por vehicle_plate + day_of_week.
+    Ejemplo de cabeceras aceptadas:
+        Matrícula | Día | Orden | Cliente | Dirección | Duración
 
-Reglas de matching:
-- Vehículo: exact match en Vehicle.code (case-insensitive) → vehicle_id nullable + warning
-- Cliente:  exact CI → partial único → customer_id null + warning
-            sin creación automática (a diferencia del import de pedidos)
-- Anti-duplicado por grupo:
-    si vehicle_id resuelto: tenant+vehicle_id+day_of_week+season → skip + warning
-    si vehicle_id null:     tenant+template_name+day_of_week+season → skip + warning
+    Reglas de matching:
+    - Vehículo: exact match en Vehicle.code (case-insensitive) → vehicle_id nullable + warning
+    - Cliente:  exact CI → partial único → customer_id null + warning
+                sin creación automática (a diferencia del import de pedidos)
+    - Anti-duplicado por grupo:
+        si vehicle_id resuelto: tenant+vehicle_id+day_of_week+season → skip + warning
+        si vehicle_id null:     tenant+template_name+day_of_week+season → skip + warning
+
+from-template:
+    - Resuelve vehículo: body.vehicle_id > template.vehicle_id → VEHICLE_REQUIRED si ninguno
+    - Driver opcional; ambos validados contra tenant
+    - Crea Route(draft, plan_id=null) + RouteStop(order_id=null) por cada parada de plantilla
+    - order_id nullable desde migration 029
 """
 
 import uuid
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import CurrentUser, require_roles
-from app.errors import unprocessable
+from app.errors import not_found, unprocessable
 from app.models import (
     Customer,
+    Driver,
+    Route,
+    RouteStatus,
+    RouteStop,
+    RouteStopStatus,
     RouteTemplate,
     RouteTemplateStop,
     Tenant,
     Vehicle,
 )
-from app.schemas import RouteTemplateImportResult
+from app.routers.routing import _serialize_route
+from app.schemas import (
+    CreateRouteFromTemplateInput,
+    RouteOut,
+    RouteTemplateImportResult,
+    RouteTemplateListItem,
+)
 from app.utils.xlsx_parser import (
     TEMPLATE_FIELD_ALIASES,
     auto_map_columns,
@@ -308,3 +328,177 @@ def import_route_templates(
         errors=errors,
         warnings=warnings,
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /route-templates — ROUTE-FROM-TEMPLATE-001
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/route-templates",
+    response_model=list[RouteTemplateListItem],
+    summary="Listar plantillas de ruta del tenant",
+)
+def list_route_templates(
+    vehicle_id: uuid.UUID | None = Query(None, description="Filtrar por vehículo"),
+    day_of_week: int | None = Query(None, ge=1, le=7, description="Filtrar por día ISO (1=Lunes, 7=Domingo)"),
+    season: str | None = Query(None, description="Filtrar por temporada"),
+    current: CurrentUser = Depends(require_roles("office", "logistics", "admin")),
+    db: Session = Depends(get_db),
+) -> list[RouteTemplateListItem]:
+    """Devuelve las plantillas de ruta del tenant, con conteo de paradas por plantilla.
+
+    Filtros opcionales: vehicle_id, day_of_week (1–7 ISO), season.
+    Ordenado por created_at DESC.
+    """
+    q = (
+        select(RouteTemplate, func.count(RouteTemplateStop.id).label("stop_count"))
+        .outerjoin(RouteTemplateStop, RouteTemplateStop.template_id == RouteTemplate.id)
+        .where(RouteTemplate.tenant_id == current.tenant_id)
+        .group_by(RouteTemplate.id)
+        .order_by(RouteTemplate.created_at.desc())
+    )
+
+    if vehicle_id is not None:
+        q = q.where(RouteTemplate.vehicle_id == vehicle_id)
+    if day_of_week is not None:
+        q = q.where(RouteTemplate.day_of_week == day_of_week)
+    if season is not None:
+        q = q.where(RouteTemplate.season == season)
+
+    rows = db.execute(q).all()
+    return [
+        RouteTemplateListItem(
+            id=template.id,
+            name=template.name,
+            season=template.season,
+            vehicle_id=template.vehicle_id,
+            has_vehicle=template.vehicle_id is not None,
+            day_of_week=template.day_of_week,
+            stop_count=stop_count,
+            created_at=template.created_at,
+        )
+        for template, stop_count in rows
+    ]
+
+
+# ---------------------------------------------------------------------------
+# POST /routes/from-template — ROUTE-FROM-TEMPLATE-001
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/routes/from-template",
+    response_model=RouteOut,
+    status_code=201,
+    summary="Crear ruta operativa desde una plantilla",
+)
+def create_route_from_template(
+    payload: CreateRouteFromTemplateInput,
+    current: CurrentUser = Depends(require_roles("office", "logistics", "admin")),
+    db: Session = Depends(get_db),
+) -> RouteOut:
+    """Crea una Route (draft) a partir de una RouteTemplate.
+
+    - Resuelve vehículo: body.vehicle_id > template.vehicle_id; error VEHICLE_REQUIRED si ninguno.
+    - Driver opcional, validado contra tenant.
+    - Crea RouteStops con order_id=null (migration 029).
+    - La ruta queda en estado draft; plan_id=null.
+    """
+    now = datetime.now(UTC)
+    tenant_id = current.tenant_id
+
+    # 1. Resolver plantilla
+    template = db.scalar(
+        select(RouteTemplate).where(
+            RouteTemplate.id == payload.template_id,
+            RouteTemplate.tenant_id == tenant_id,
+        )
+    )
+    if template is None:
+        raise not_found("TEMPLATE_NOT_FOUND", f"Plantilla {payload.template_id} no encontrada")
+
+    # 2. Resolver vehículo (body override > template)
+    vehicle_id = payload.vehicle_id or template.vehicle_id
+    if vehicle_id is None:
+        raise unprocessable(
+            code="VEHICLE_REQUIRED",
+            message="La plantilla no tiene vehículo asignado y no se proporcionó vehicle_id",
+        )
+
+    vehicle = db.scalar(
+        select(Vehicle).where(Vehicle.id == vehicle_id, Vehicle.tenant_id == tenant_id)
+    )
+    if vehicle is None:
+        raise not_found("VEHICLE_NOT_FOUND", f"Vehículo {vehicle_id} no encontrado")
+
+    # 3. Resolver conductor (opcional)
+    driver_db_id: uuid.UUID | None = None
+    if payload.driver_id is not None:
+        driver = db.scalar(
+            select(Driver).where(Driver.id == payload.driver_id, Driver.tenant_id == tenant_id)
+        )
+        if driver is None:
+            raise not_found("DRIVER_NOT_FOUND", f"Conductor {payload.driver_id} no encontrado")
+        driver_db_id = driver.id
+
+    # 4. Cargar paradas de la plantilla (orden por sequence_number)
+    template_stops = db.scalars(
+        select(RouteTemplateStop)
+        .where(
+            RouteTemplateStop.template_id == template.id,
+            RouteTemplateStop.tenant_id == tenant_id,
+        )
+        .order_by(RouteTemplateStop.sequence_number)
+    ).all()
+
+    if not template_stops:
+        raise unprocessable(
+            code="TEMPLATE_HAS_NO_STOPS",
+            message=f"La plantilla '{template.name}' no tiene paradas definidas",
+        )
+
+    # 5. Crear Route (draft, sin plan)
+    route = Route(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        plan_id=None,           # rutas de plantilla no pertenecen a un plan diario
+        vehicle_id=vehicle_id,
+        driver_id=driver_db_id,
+        service_date=payload.service_date,
+        status=RouteStatus.draft,
+        version=1,
+        trip_number=1,
+        optimization_request_id=None,
+        optimization_response_json=None,
+        dispatched_at=None,
+        completed_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(route)
+    db.flush()  # obtener route.id
+
+    # 6. Crear RouteStops desde las paradas de la plantilla
+    for tpl_stop in template_stops:
+        stop = RouteStop(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            route_id=route.id,
+            order_id=None,      # nullable desde migration 029
+            sequence_number=tpl_stop.sequence_number,
+            estimated_service_minutes=tpl_stop.duration_min if tpl_stop.duration_min is not None else 10,
+            status=RouteStopStatus.pending,
+            estimated_arrival_at=None,
+            recalculated_eta_at=None,
+            arrived_at=None,
+            completed_at=None,
+            failed_at=None,
+            failure_reason=None,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(stop)
+
+    db.commit()
+
+    return _serialize_route(db, tenant_id, route)

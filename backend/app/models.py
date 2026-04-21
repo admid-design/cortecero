@@ -10,6 +10,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
     Numeric,
     SmallInteger,
@@ -17,6 +18,7 @@ from sqlalchemy import (
     Text,
     Time,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -514,7 +516,7 @@ class Route(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
-    plan_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    plan_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     vehicle_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     driver_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     service_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -542,7 +544,7 @@ class RouteStop(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
     route_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    order_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
     estimated_arrival_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     recalculated_eta_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -556,9 +558,16 @@ class RouteStop(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("route_id", "order_id", name="uq_route_stops_route_order"),
+        # Unicidad solo cuando order_id IS NOT NULL (índice parcial — ver migration 029)
+        Index(
+            "uq_route_stops_route_order_nonnull",
+            "route_id", "order_id",
+            unique=True,
+            postgresql_where=text("order_id IS NOT NULL"),
+        ),
         UniqueConstraint("route_id", "sequence_number", name="uq_route_stops_route_sequence"),
         ForeignKeyConstraint(["route_id", "tenant_id"], ["routes.id", "routes.tenant_id"], ondelete="CASCADE"),
+        # FK nullable: PostgreSQL no comprueba la FK cuando order_id IS NULL
         ForeignKeyConstraint(["order_id", "tenant_id"], ["orders.id", "orders.tenant_id"], ondelete="RESTRICT"),
     )
 

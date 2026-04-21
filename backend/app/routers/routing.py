@@ -130,6 +130,8 @@ def _load_customer_geo_by_order_id(
     tenant_id: uuid.UUID,
     order_ids: list[uuid.UUID],
 ) -> dict[uuid.UUID, tuple[float | None, float | None]]:
+    # Filtrar None: paradas creadas desde plantilla tienen order_id=None (migration 029)
+    order_ids = [oid for oid in order_ids if oid is not None]
     if not order_ids:
         return {}
 

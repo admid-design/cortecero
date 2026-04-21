@@ -297,7 +297,7 @@ export type AvailableVehicleItem = {
 export type RoutingRouteStop = {
   id: string;
   route_id: string;
-  order_id: string;
+  order_id: string | null;  // null para paradas creadas desde plantilla (migration 029)
   sequence_number: number;
   estimated_arrival_at: string | null;
   estimated_service_minutes: number;
@@ -320,7 +320,7 @@ export type RoutingRouteGeometry = {
 
 export type RoutingRoute = {
   id: string;
-  plan_id: string;
+  plan_id: string | null;  // null para rutas creadas desde plantilla (migration 029)
   vehicle_id: string;
   driver_id: string | null;
   service_date: string;
@@ -1322,6 +1322,42 @@ export type RouteTemplateImportResult = {
   errors: string[];
   warnings: string[];
 };
+
+export type RouteTemplateListItem = {
+  id: string;
+  name: string;
+  season: string | null;
+  vehicle_id: string | null;
+  has_vehicle: boolean;
+  day_of_week: number | null;
+  stop_count: number;
+  created_at: string;
+};
+
+export type CreateRouteFromTemplateInput = {
+  template_id: string;
+  service_date: string; // YYYY-MM-DD
+  vehicle_id?: string;
+  driver_id?: string;
+};
+
+export async function listRouteTemplates(
+  token: string,
+  filters?: { vehicle_id?: string; day_of_week?: number; season?: string },
+): Promise<RouteTemplateListItem[]> {
+  const params: Record<string, QueryValue> = {};
+  if (filters?.vehicle_id) params["vehicle_id"] = filters.vehicle_id;
+  if (filters?.day_of_week != null) params["day_of_week"] = filters.day_of_week;
+  if (filters?.season) params["season"] = filters.season;
+  return request<RouteTemplateListItem[]>(token, "GET", "/route-templates", undefined, params);
+}
+
+export async function createRouteFromTemplate(
+  token: string,
+  input: CreateRouteFromTemplateInput,
+): Promise<RoutingRoute> {
+  return request<RoutingRoute>(token, "POST", "/routes/from-template", input);
+}
 
 /**
  * Importa plantillas de ruta desde un fichero .xlsx o .csv.
