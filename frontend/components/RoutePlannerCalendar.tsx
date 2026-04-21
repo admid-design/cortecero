@@ -214,7 +214,7 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
     if (!selectedOrderId) return;
     setAssigningRouteId(route.id);
     try {
-      await includeOrderInPlan(token, route.plan_id, selectedOrderId);
+      await includeOrderInPlan(token, route.plan_id ?? "", selectedOrderId);
       showToast("ok", "Pedido incluido en el plan");
       setSelectedOrderId(null);
       void loadData();
@@ -622,7 +622,7 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
                                   </span>
                                 </td>
                                 <td style={{ fontFamily: "monospace", fontSize: 11 }}>
-                                  {s.order_id.slice(0, 8)}
+                                  {s.order_id ? s.order_id.slice(0, 8) : "—"}
                                 </td>
                                 <td>
                                   {isSaving ? (

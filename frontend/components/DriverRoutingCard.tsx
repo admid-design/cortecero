@@ -265,7 +265,7 @@ function StopDetail({
 
       <dl className="mb-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600">
         <dt className="font-medium">Pedido</dt>
-        <dd className="truncate font-mono">{stop.order_id.slice(0, 8)}…</dd>
+        <dd className="truncate font-mono">{stop.order_id ? stop.order_id.slice(0, 8) + "…" : "—"}</dd>
         {stop.estimated_arrival_at && (
           <>
             <dt className="font-medium">Llegada estimada</dt>

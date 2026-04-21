@@ -332,6 +332,52 @@ Usar siempre contexto amplio (`-B10`) o un script que evalúe el contexto antes 
 
 **Aprendizaje:** CI verde no implica deployment exitoso. El canal de verificación correcto es `list_deployments` o el dashboard de Vercel — no el status del push en GitHub.
 
+### 8. Cambio de nullability en un campo = impacto 4-vías, no 3
+
+**Contexto (ROUTE-FROM-TEMPLATE-001, 2026-04-21):** `RoutingRoute.plan_id` y `RoutingRouteStop.order_id` pasaron de `string` a `string | null` en `api.ts`. El build de TypeScript falló en CI porque los componentes que consumían esos campos hacían `.slice()` directo sin null-check.
+
+**La regla de tres-vías no es suficiente.** Cuando cambia la nullability de un campo:
+
+```
+routers/*.py  ↔  openapi-v1.yaml  ↔  api.ts  ↔  componentes que usan el tipo
+```
+
+**Protocolo obligatorio antes de push:**
+
+```bash
+# 1. Encontrar todos los usos del campo en frontend
+rg -n "\bplan_id\b" frontend/components frontend/app frontend/tests frontend/lib/api.ts
+rg -n "\border_id\b" frontend/components frontend/app frontend/tests frontend/lib/api.ts
+
+# 2. Para cada uso: ¿hay null-check? Si no → añadir en el mismo commit
+#    Patrón correcto:
+#      route.plan_id ? route.plan_id.slice(0, 8) : "—"
+#      stop.order_id ? stop.order_id.slice(0, 8) + "…" : "—"
+#      route.plan_id ?? ""   (cuando se necesita string no-null para una función)
+
+# 3. Verificar build ANTES de push
+cd frontend && npm run build
+```
+
+**Regla operativa:** `npm run build` es gate de pre-push para cualquier bloque que toque `api.ts` o schemas. No push sin build limpio local. CI valida, no descubre errores de tipado obvios.
+
+### 9. `git status --short` y `git diff --name-only --cached` antes de cada push
+
+**Contexto (ROUTE-FROM-TEMPLATE-001, 2026-04-21):** Los null-guards de frontend estaban en working tree modificado pero nunca entraron en ningún commit. `dba1cc8` (fix de test) era de alcance mínimo correcto, pero los archivos frontend pendientes quedaron fuera.
+
+**Protocolo de cierre de commit:**
+
+```bash
+# Antes de hacer git add:
+git status --short          # qué archivos hay modificados (¿pertenecen al bloque?)
+
+# Después de git add, antes de git commit:
+git diff --name-only --cached   # qué entra realmente al commit
+
+# Regla: si git status muestra modificados que pertenecen al bloque activo → van en el commit
+# No dejar deuda de working tree al cerrar un bloque
+```
+
 ---
 
 ## Output contract esperado de Claude

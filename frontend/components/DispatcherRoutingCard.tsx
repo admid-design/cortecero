@@ -175,7 +175,7 @@ export function DispatcherRoutingCard({
             {routes.map((route) => (
               <tr key={route.id}>
                 <td>{route.id.slice(0, 8)}</td>
-                <td>{route.plan_id.slice(0, 8)}</td>
+                <td>{route.plan_id ? route.plan_id.slice(0, 8) : "—"}</td>
                 <td>{route.vehicle_id.slice(0, 8)}</td>
                 <td>{route.driver_id ? route.driver_id.slice(0, 8) : "—"}</td>
                 <td>
