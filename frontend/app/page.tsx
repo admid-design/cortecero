@@ -1135,6 +1135,10 @@ export default function HomePage() {
     setDispatcherPlanCreating(true);
     setError("");
     try {
+      // Primero incluir cada pedido en el plan (ready_for_planning → planned)
+      for (const orderId of orderIds) {
+        await includeOrderInPlan(token, nextPlanId, orderId);
+      }
       await planRoutes(token, {
         plan_id: nextPlanId,
         service_date: serviceDate,
