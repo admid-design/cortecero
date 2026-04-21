@@ -1727,9 +1727,9 @@ body.map-first-mode {
   font-weight: 600;
   color: #2563eb;
   opacity: 0;
-  pointer-events: none;
+  cursor: pointer;
   transition: opacity .12s;
-  z-index: 1;
+  z-index: 5;
 }
 .rpc-gantt-cell:hover .rpc-assign-hint { opacity: 1; }
 .rpc-gantt-track {

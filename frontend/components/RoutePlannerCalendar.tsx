@@ -291,8 +291,11 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
         <aside className="rpc-sidebar">
           <div className="rpc-sb-hdr">
             <div className="rpc-sb-title">
-              Pedidos por asignar
+              Pedidos sin ruta
               <span className="rpc-sb-count">{filteredOrders.length}</span>
+            </div>
+            <div style={{ fontSize: 10, color: "var(--text-3)", marginBottom: 4, lineHeight: 1.3 }}>
+              Selecciona uno y luego pásalo a una ruta
             </div>
             <input
               className="rpc-sb-search"
@@ -407,7 +410,7 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
 
               {selectedOrder && (
                 <div className="rpc-map-alert">
-                  📦 Asignando #{selectedOrder.id.slice(0, 8).toUpperCase()} — haz click en una ruta del gantt
+                  📦 Pedido #{selectedOrder.id.slice(0, 8).toUpperCase()} seleccionado — pasa el cursor sobre una ruta y haz clic en "Añadir"
                 </div>
               )}
 
@@ -539,12 +542,14 @@ export function RoutePlannerCalendar({ token, onBack, onNewRoute }: Props) {
                     </div>
 
                     <div className="rpc-gantt-cell">
-                      {/* assign hint shown on hover when order selected */}
+                      {/* assign hint: visible al hover, clickable, asigna el pedido seleccionado */}
                       {selectedOrder && (
                         <div
                           className="rpc-assign-hint"
                           onClick={(e) => { e.stopPropagation(); void assignToRoute(r); }}
-                        />
+                        >
+                          + Añadir a esta ruta
+                        </div>
                       )}
                       <div className="rpc-gantt-track">
                         <div className="rpc-gantt-grid">

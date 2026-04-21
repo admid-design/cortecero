@@ -453,58 +453,38 @@ Ver detalle completo en `docs/R8_BACKLOG.md`.
 
 ---
 
-## Fase activa actual — R10
+## R10 — CERRADO (2026-04-21)
+
+Pipeline XLSX completo + UX fixes + deploy fix. Ver detalle en `docs/R10_BACKLOG.md`.
+
+Commits clave: `f2cc690` `79e5c93` `a362568` `2a9888c` `bd7db90` `b081ff6` `4faa590` `307b66a` `f6aa23f` `815ba0a` `442be46` `1516307` `6d505ac` `7cf26e3` `09b3f03` `7a5e159`
+
+---
+
+## Fase activa actual — R11
 
 > Última actualización: 2026-04-21
-> Ver detalle completo en `docs/R10_BACKLOG.md`.
+> Objetivo: quality pass — sin crecimiento horizontal. Pulir flujos existentes.
 
-### Bloques R10 completados (PROMULGADO)
-- ROUTE-PLANNER-TW-001: `PATCH /stops/{stop_id}/scheduled-arrival` + schema + OpenAPI + api.ts — commit `7cf26e3`
-- ROUTE-PLANNER-CAL-001 v2: `RoutePlannerCalendar` — KPI strip, toggle semana/día, gantt, drawer ETA inline — commit `6d505ac`
-- TW-001-UI: input inline `type="time"` en drawer del planificador — incluido en CAL-001 v2
-- R9-MONITOR-UX-001: chip delay badge persiste tras cerrar drawer — commit `b9e9374`
-- PLANNER-AS-HOME-001: Planificador como pantalla inicial — commit `1516307`
-- UX-SHELL-002: Gestión Operativa sin mapa por defecto; search; DataTable clickable — commit `815ba0a`
-- UX-CLEANUP-001: nav "Rutas" interno + pills azules eliminados — commit `442be46`
-- FIX-DEPLOY-001: eliminado `"functions"` de `backend/vercel.json` (causa raíz de silent failures Vercel) — commit `7a5e159`
-- VISUAL-POLISH-001: token set `:root` expandido (17→45 vars), 50+ inline styles → CSS vars en 19 componentes — commit `09b3f03`
-- ROUTIFIC-ANALYSIS-001: análisis Routific Beta + comparativa + diseño XLSX import — `docs/routific-analysis-and-xlsx-import.md`
-- UX-FIXES-001: `hideSidebar` OpsMapDashboard, `<select>` inline vehículo/conductor en Gestión, `DetailPanel` Pedidos/Clientes/Conductores, `useToast`, Insights 6 KPIs, "+ Nueva ruta" → Gestión — commit `f6aa23f`
-- ROUTE-TEMPLATE-MODEL-001 + XLSX-PARSE-001: migration + models `RouteTemplate`/`RouteTemplateStop` + `xlsx_parser.py` — commit `f2cc690`
-- XLSX-ORDERS-001: `POST /orders/import-xlsx` — commit `79e5c93`
-- XLSX-UI-ORDERS-001: modal importación pedidos XLSX/CSV — commit `a362568`
-- XLSX-TEMPLATES-001: `POST /route-templates/import-xlsx` — commit `2a9888c`
-- ROUTE-FROM-TEMPLATE-001: `GET /route-templates` + `POST /routes/from-template` — commits `bd7db90`, `dba1cc8`, `048cc35`, `62f9385`
-- XLSX-UI-TEMPLATES-001: sección Plantillas con lista e importación XLSX — commit `b081ff6`
-- XLSX-UI-TEMPLATES-002: crear ruta desde plantilla en UI — commit `4faa590`
-- FIX-READY-DISPATCH: `ready-to-dispatch` filtra `ready_for_planning`, no `planned` — commit `307b66a`
+### Bloques R11 completados (PROMULGADO)
 
-### Pipeline XLSX — COMPLETADO (2026-04-21)
-```
-XLSX-PARSE-001          ✓ f2cc690
-XLSX-ORDERS-001         ✓ 79e5c93
-XLSX-UI-ORDERS-001      ✓ a362568
-ROUTE-TEMPLATE-MODEL    ✓ f2cc690
-XLSX-TEMPLATES-001      ✓ 2a9888c
-ROUTE-FROM-TEMPLATE-001 ✓ bd7db90
-XLSX-UI-TEMPLATES-001   ✓ b081ff6
-XLSX-UI-TEMPLATES-002   ✓ 4faa590
-```
+- **R11-P2 ROUTE-STOP-LABELS-001**: `customer_name` en `RouteStopOut` (schemas + routing + openapi + api.ts + OpsMapDashboard) — commit `5bd79f5`
+  - `_load_customer_geo_by_order_id` devuelve 3-tupla `(lat, lng, name)`
+  - Render: `stop.customer_name ?? shortId(stop.order_id ?? stop.id)`
+- **R11-P3 MONITOR-DRAWER-STATE-001**: shimmer skeleton (`DrawerSkeleton` + CSS `mf-skeleton-*`) reemplaza textos de carga en OpsMapDashboard — commit `f0e8030`
+- **R11-P3b PLANNER-REFRESH-001**: `plannerRefreshKey` en `page.tsx`; incrementa en cada navegación al planificador → remount limpio, elimina race POST/GET — commit `2386530`
+- **R11-P3c MAP-SELECTION-PERSISTENCE-001**: `mapRoute` derivado de `activeRouteId` persistente; `closeDrawer()` ya no limpia `activeRouteId`; mapa mantiene ruta seleccionada tras cerrar drawer — commit `2386530`
+- **R11-P3d UNASSIGNED-LIST-SCROLL-001**: `min-height: 0` en `.rpc-sidebar` → `overflow-y: auto` de `.rpc-sb-list` se activa correctamente dentro del viewport — commit `2386530`
 
-### Siguiente bloque — MONITOR-MODE-002
-Chat en `DriverRoutingCard` (conductor móvil). Lado dispatcher ya operativo.
-- Polling `GET /routes/{id}/messages` cada 10–15 s durante `dispatched`/`in_progress`
-- Input texto + botón enviar → `POST /routes/{id}/messages`
-- Solo visible durante ruta activa
+### Bloques R11 pendientes
 
-### Pendiente — baja prioridad
-- DATE-FORMAT-CONFIG-001 — setting `xlsx_date_format` en tenant + PATCH endpoint + UI
-- R9-CONTRACT-001 — Auditoría OpenAPI ↔ runtime completa + catálogo errores 4xx
+- **R11-P4 DISPATCH-CLARITY-001**: texto contextual en ruta `draft` explicando que optimizar es previo al despacho. Solo frontend.
+- **R11-P5 GPS-STATE-001**: badge "posición hace X min" en panel conductor cuando último ping supera umbral.
 
-### Huecos conocidos (no en backlog activo)
-- SSE backend usa asyncio.Queue in-process → no escala multi-worker (fix: Redis + decisión arquitectura realtime)
-- POD foto: UI + backend listos; R2 bucket real no probado (pospuesto hasta decidir storage)
-- Migration 027: aplicada en Neon prod (2026-04-19)
-- Notificaciones (D1): congeladas, pendiente proveedor email/SMS
-- GPS conductor: polling 30s — tiempo real requiere arquitectura persistente
+### Huecos conocidos (sin backlog activo)
+
+- SSE in-process no escala multi-worker → congelado hasta decisión arquitectura realtime
+- POD foto R2: bucket real no probado → pospuesto hasta decidir storage
+- GPS conductor: polling 30 s → tiempo real requiere servicio persistente
+- Chat conductor (móvil): dispatcher operativo, conductor pendiente (MONITOR-MODE-002)
 - Asistente IA: no existe en ninguna capa
