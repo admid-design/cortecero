@@ -317,14 +317,14 @@ def get_orders_ready_to_dispatch(
     current: CurrentUser = Depends(require_roles(UserRole.logistics, UserRole.admin)),
 ) -> dict:
     """
-    Retorna pedidos en estado 'planned' (listos para asignar a ruta).
+    Retorna pedidos en estado 'ready_for_planning' (listos para asignar a ruta).
     Lecturas sin side effects.
     """
     query = (
         select(Order)
         .where(
             Order.tenant_id == current.tenant_id,
-            Order.status == OrderStatus.planned,
+            Order.status == OrderStatus.ready_for_planning,
         )
         .order_by(Order.service_date, Order.created_at)
     )
