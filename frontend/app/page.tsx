@@ -114,9 +114,10 @@ import {
   CustomersSection,
   DriversSection,
   InsightsSection,
+  RouteTemplatesSection,
 } from "../components/GlobalShell";
 import type { SidebarSection } from "../components/GlobalShell";
-type ViewMode = "ops" | "admin" | "planner" | "orders" | "customers" | "drivers" | "insights";
+type ViewMode = "ops" | "admin" | "planner" | "orders" | "customers" | "drivers" | "templates" | "insights";
 type AdminSection = "zones" | "customers" | "users" | "tenant" | "products";
 type OrdersOperationalStateFilter = "all" | "eligible" | "restricted";
 
@@ -1380,6 +1381,7 @@ export default function HomePage() {
       orders:    "orders",
       customers: "customers",
       drivers:   "drivers",
+      templates: "templates",
       insights:  "insights",
       admin:     "settings",
     };
@@ -1392,6 +1394,7 @@ export default function HomePage() {
         orders:    "orders",
         customers: "customers",
         drivers:   "drivers",
+        templates: "templates",
         insights:  "insights",
         settings:  "admin",
       };
@@ -1482,10 +1485,11 @@ export default function HomePage() {
         )}
 
         {/* ── Nuevas secciones ── */}
-        {viewMode === "orders"    && <OrdersSection    token={token} />}
-        {viewMode === "customers" && <CustomersSection token={token} />}
-        {viewMode === "drivers"   && <DriversSection   token={token} />}
-        {viewMode === "insights"  && <InsightsSection  token={token} />}
+        {viewMode === "orders"     && <OrdersSection         token={token} />}
+        {viewMode === "customers"  && <CustomersSection      token={token} />}
+        {viewMode === "drivers"    && <DriversSection        token={token} />}
+        {viewMode === "templates"  && <RouteTemplatesSection token={token} />}
+        {viewMode === "insights"   && <InsightsSection       token={token} />}
 
       </GlobalShell>
     );

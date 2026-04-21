@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import type { Order, Customer, DriverOut, DashboardSummary, RoutingRoute, OrderImportResult } from "../lib/api";
+import type { Order, Customer, DriverOut, DashboardSummary, RoutingRoute, OrderImportResult, RouteTemplateListItem, RouteTemplateImportResult } from "../lib/api";
 import {
   listOrders,
   listAdminCustomers,
@@ -9,6 +9,8 @@ import {
   getDailySummary,
   listRoutes,
   importOrdersXlsx,
+  listRouteTemplates,
+  importTemplatesXlsx,
 } from "../lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -19,6 +21,7 @@ export type SidebarSection =
   | "orders"
   | "customers"
   | "drivers"
+  | "templates"
   | "insights"
   | "settings";
 
@@ -100,6 +103,13 @@ const Ico = {
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   ),
+  templates: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+      <line x1="9" y1="21" x2="9" y2="9" />
+    </svg>
+  ),
   logout: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -123,7 +133,8 @@ const NAV_ITEMS: NavItem[] = [
   { id: "planner",   label: "Planificador", icon: Ico.planner,  routingOnly: true },
   { id: "orders",    label: "Pedidos",     icon: Ico.orders    },
   { id: "customers", label: "Clientes",    icon: Ico.customers },
-  { id: "drivers",   label: "Conductores", icon: Ico.drivers   },
+  { id: "drivers",    label: "Conductores", icon: Ico.drivers   },
+  { id: "templates", label: "Plantillas",  icon: Ico.templates },
   { id: "insights",  label: "Insights",   icon: Ico.insights  },
   { id: "settings",  label: "Ajustes",    icon: Ico.settings, adminOnly: true },
 ];
@@ -1275,6 +1286,255 @@ export function InsightsSection({ token }: { token: string }) {
             </div>
           )}
         </>
+      )}
+    </SectionPage>
+  );
+}
+
+// ── TemplateImportModal ───────────────────────────────────────────────────────
+
+function TemplateImportModal({
+  token,
+  onClose,
+  onSuccess,
+}: {
+  token: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [phase, setPhase] = useState<"idle" | "loading" | "result">("idle");
+  const [result, setResult] = useState<RouteTemplateImportResult | null>(null);
+  const [importError, setImportError] = useState("");
+
+  const handleImport = async () => {
+    if (!file) return;
+    setPhase("loading");
+    setImportError("");
+    try {
+      const res = await importTemplatesXlsx(token, file);
+      setResult(res);
+      setPhase("result");
+      if (res.templates_created > 0) onSuccess();
+    } catch (e) {
+      setImportError(String(e));
+      setPhase("idle");
+    }
+  };
+
+  const overlayStyle: React.CSSProperties = {
+    position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+  };
+  const boxStyle: React.CSSProperties = {
+    background: C.surface, borderRadius: 14, padding: "28px 28px 24px",
+    width: 440, maxWidth: "92vw", boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+    display: "flex", flexDirection: "column", gap: 20,
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: 12, fontWeight: 600, color: C.muted, textTransform: "uppercase",
+    letterSpacing: "0.05em", marginBottom: 6, display: "block",
+  };
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "9px 12px", borderRadius: 8,
+    border: `1px solid ${C.border}`, fontSize: 13, color: C.text,
+    background: C.bg, outline: "none", boxSizing: "border-box",
+  };
+
+  return (
+    <div style={overlayStyle} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={boxStyle}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Importar plantillas</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: C.muted, lineHeight: 1 }} aria-label="Cerrar">×</button>
+        </div>
+
+        {phase !== "result" && (
+          <>
+            <div>
+              <label style={labelStyle}>Fichero (.xlsx o .csv)</label>
+              <input
+                type="file"
+                accept=".xlsx,.csv"
+                disabled={phase === "loading"}
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                style={{ ...inputStyle, cursor: "pointer" }}
+              />
+              {file && (
+                <div style={{ marginTop: 6, fontSize: 12, color: C.muted }}>
+                  {file.name} · {(file.size / 1024).toFixed(1)} KB
+                </div>
+              )}
+            </div>
+
+            {importError && (
+              <div style={{ padding: "10px 14px", background: "#fee2e2", borderRadius: 8, color: C.danger, fontSize: 13 }}>
+                {importError}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={onClose}
+                disabled={phase === "loading"}
+                style={{ padding: "9px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, fontSize: 13, cursor: "pointer", color: C.text }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={!file || phase === "loading"}
+                style={{
+                  padding: "9px 18px", borderRadius: 8, border: "none",
+                  background: !file || phase === "loading" ? C.border : C.accent,
+                  color: "#fff", fontSize: 13, fontWeight: 600,
+                  cursor: !file || phase === "loading" ? "not-allowed" : "pointer",
+                  display: "flex", alignItems: "center", gap: 8,
+                }}
+              >
+                {phase === "loading" ? (
+                  <><span style={{ display: "inline-block", width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />Importando…</>
+                ) : "Importar"}
+              </button>
+            </div>
+          </>
+        )}
+
+        {phase === "result" && result && (
+          <>
+            <div style={{ display: "flex", gap: 12 }}>
+              <div style={{ flex: 1, background: result.templates_created > 0 ? "#f0fdf4" : C.bg, borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: result.templates_created > 0 ? C.success : C.muted }}>{result.templates_created}</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>plantillas creadas</div>
+              </div>
+              <div style={{ flex: 1, background: result.stops_total > 0 ? "#f0f9ff" : C.bg, borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: result.stops_total > 0 ? C.accent : C.muted }}>{result.stops_total}</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>paradas totales</div>
+              </div>
+            </div>
+
+            {result.templates_created > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#f0fdf4", borderRadius: 8, fontSize: 13, color: C.success }}>
+                <span>✓</span><span>La lista de plantillas se ha actualizado</span>
+              </div>
+            )}
+
+            {result.errors.length > 0 && (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.danger, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Errores ({result.errors.length})
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 140, overflowY: "auto" }}>
+                  {result.errors.map((e, i) => (
+                    <div key={i} style={{ fontSize: 12, padding: "6px 10px", background: "#fee2e2", borderRadius: 6, color: C.danger }}>{e}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {result.warnings.length > 0 && (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.warning, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Avisos ({result.warnings.length})
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 140, overflowY: "auto" }}>
+                  {result.warnings.map((w, i) => (
+                    <div key={i} style={{ fontSize: 12, padding: "6px 10px", background: "#fffbeb", borderRadius: 6, color: C.warning }}>{w}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={onClose} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                Cerrar
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+// ── RouteTemplatesSection ─────────────────────────────────────────────────────
+
+const DAY_LABELS: Record<number, string> = {
+  1: "Lun", 2: "Mar", 3: "Mié", 4: "Jue", 5: "Vie", 6: "Sáb", 7: "Dom",
+};
+
+export function RouteTemplatesSection({ token }: { token: string }) {
+  const [templates, setTemplates] = useState<RouteTemplateListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showImportModal, setShowImportModal] = useState(false);
+  const toast = useToast();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await listRouteTemplates(token);
+      setTemplates(res);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const cols = ["Nombre", "Día", "Temporada", "Vehículo", "Paradas"];
+
+  const rows = templates.map((t) => [
+    <span style={{ fontWeight: 600, color: C.text }}>{t.name}</span>,
+    <span style={{ color: C.muted }}>{t.day_of_week != null ? DAY_LABELS[t.day_of_week] ?? String(t.day_of_week) : "—"}</span>,
+    <span style={{ color: C.muted }}>{t.season ?? "—"}</span>,
+    <span style={{ fontFamily: "monospace", fontSize: 12, color: t.has_vehicle ? C.text : C.subtle }}>
+      {t.has_vehicle && t.vehicle_id ? t.vehicle_id.slice(0, 8) : "Sin vehículo"}
+    </span>,
+    <span style={{ fontWeight: 600, color: C.accent }}>{t.stop_count}</span>,
+  ]);
+
+  return (
+    <SectionPage
+      title="Plantillas de ruta"
+      subtitle={`${templates.length} plantilla${templates.length !== 1 ? "s" : ""}`}
+      action={
+        <button
+          onClick={() => setShowImportModal(true)}
+          style={{
+            padding: "8px 14px", borderRadius: 8, border: `1px solid ${C.border}`,
+            background: C.surface, fontSize: 13, fontWeight: 600,
+            cursor: "pointer", color: C.text, display: "flex", alignItems: "center", gap: 6,
+          }}
+        >
+          ↑ Importar XLSX
+        </button>
+      }
+    >
+      {toast.el}
+      {showImportModal && (
+        <TemplateImportModal
+          token={token}
+          onClose={() => setShowImportModal(false)}
+          onSuccess={() => { void load(); }}
+        />
+      )}
+      {error && (
+        <div style={{ padding: "12px 16px", background: "#fee2e2", borderRadius: 8, color: C.danger, marginBottom: 16, fontSize: 13 }}>
+          {error}
+        </div>
+      )}
+      {loading ? (
+        <div style={{ textAlign: "center", color: C.muted, padding: "40px 0", fontSize: 14 }}>Cargando plantillas…</div>
+      ) : templates.length === 0 ? (
+        <div style={{ textAlign: "center", color: C.muted, padding: "40px 0", fontSize: 14 }}>
+          Sin plantillas. Importa un fichero XLSX para empezar.
+        </div>
+      ) : (
+        <DataTable columns={cols} rows={rows} />
       )}
     </SectionPage>
   );
