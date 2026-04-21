@@ -4480,6 +4480,10 @@ components:
           format: float
           nullable: true
           description: Longitud del cliente asociada al pedido de la parada, si existe.
+        customer_name:
+          type: string
+          nullable: true
+          description: Nombre del cliente asociado al pedido de la parada, si existe.
         created_at:
           type: string
           format: date-time

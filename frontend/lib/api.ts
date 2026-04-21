@@ -308,6 +308,7 @@ export type RoutingRouteStop = {
   failure_reason: string | null;
   customer_lat: number | null;
   customer_lng: number | null;
+  customer_name: string | null;
   created_at: string;
   updated_at: string;
 };

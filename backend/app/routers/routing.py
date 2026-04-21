@@ -117,10 +117,12 @@ def _serialize_stop_with_customer_geo(
     *,
     customer_lat: float | None,
     customer_lng: float | None,
+    customer_name: str | None = None,
 ) -> RouteStopOut:
     payload = RouteStopOut.model_validate(stop)
     payload.customer_lat = customer_lat
     payload.customer_lng = customer_lng
+    payload.customer_name = customer_name
     return payload
 
 
@@ -129,14 +131,15 @@ def _load_customer_geo_by_order_id(
     *,
     tenant_id: uuid.UUID,
     order_ids: list[uuid.UUID],
-) -> dict[uuid.UUID, tuple[float | None, float | None]]:
+) -> dict[uuid.UUID, tuple[float | None, float | None, str | None]]:
+    """Returns {order_id: (lat, lng, customer_name)} for the given order IDs."""
     # Filtrar None: paradas creadas desde plantilla tienen order_id=None (migration 029)
     order_ids = [oid for oid in order_ids if oid is not None]
     if not order_ids:
         return {}
 
     rows = db.execute(
-        select(Order.id, Customer.lat, Customer.lng)
+        select(Order.id, Customer.lat, Customer.lng, Customer.name)
         .select_from(Order)
         .join(
             Customer,
@@ -151,11 +154,12 @@ def _load_customer_geo_by_order_id(
         )
     ).all()
 
-    result: dict[uuid.UUID, tuple[float | None, float | None]] = {}
-    for order_id, lat, lng in rows:
+    result: dict[uuid.UUID, tuple[float | None, float | None, str | None]] = {}
+    for order_id, lat, lng, name in rows:
         result[order_id] = (
             float(lat) if lat is not None else None,
             float(lng) if lng is not None else None,
+            str(name) if name is not None else None,
         )
     return result
 
@@ -177,8 +181,9 @@ def _serialize_route(db: Session, tenant_id: uuid.UUID, route: Route) -> RouteOu
     data.stops = [
         _serialize_stop_with_customer_geo(
             stop,
-            customer_lat=geo_by_order_id.get(stop.order_id, (None, None))[0],
-            customer_lng=geo_by_order_id.get(stop.order_id, (None, None))[1],
+            customer_lat=geo_by_order_id.get(stop.order_id, (None, None, None))[0],
+            customer_lng=geo_by_order_id.get(stop.order_id, (None, None, None))[1],
+            customer_name=geo_by_order_id.get(stop.order_id, (None, None, None))[2],
         )
         for stop in stops
     ]
@@ -221,8 +226,9 @@ def _serialize_routes_batch(db: Session, tenant_id: uuid.UUID, routes: list[Rout
         data.stops = [
             _serialize_stop_with_customer_geo(
                 stop,
-                customer_lat=geo_by_order_id.get(stop.order_id, (None, None))[0],
-                customer_lng=geo_by_order_id.get(stop.order_id, (None, None))[1],
+                customer_lat=geo_by_order_id.get(stop.order_id, (None, None, None))[0],
+                customer_lng=geo_by_order_id.get(stop.order_id, (None, None, None))[1],
+                customer_name=geo_by_order_id.get(stop.order_id, (None, None, None))[2],
             )
             for stop in stops
         ]
@@ -1281,11 +1287,12 @@ def get_next_stop(
             tenant_id=current.tenant_id,
             order_ids=[stop.order_id],
         )
-        lat, lng = geo_by_order_id.get(stop.order_id, (None, None))
+        lat, lng, name = geo_by_order_id.get(stop.order_id, (None, None, None))
         next_stop = _serialize_stop_with_customer_geo(
             stop,
             customer_lat=lat,
             customer_lng=lng,
+            customer_name=name,
         )
     return RouteNextStopResponse(route_id=route.id, next_stop=next_stop, remaining_stops=len(remaining))
 
@@ -2717,7 +2724,8 @@ def recalculate_eta(
     reference_time = now
 
     for stop in stops:
-        lat, lng = geo_by_order_id.get(stop.order_id, (None, None))
+        _geo = geo_by_order_id.get(stop.order_id, (None, None, None))
+        lat, lng = _geo[0], _geo[1]
         if lat is None or lng is None:
             # Sin geo → no podemos calcular; saltamos sin error
             continue
